@@ -19,7 +19,10 @@ from cpg.model import (
     BinOp,
     Call,
     CallPuts,
+    ExternFunction,
     Function,
+    I32Type,
+    I8PtrType,
     If,
     IntLit,
     IntRangeClaim,
@@ -29,12 +32,22 @@ from cpg.model import (
     ReturnExpr,
     ReturnInRangeClaim,
     ReturnInt,
+    StringRef,
 )
 
 
 I8 = ir.IntType(8)
 I32 = ir.IntType(32)
 I1 = ir.IntType(1)
+
+
+def _type_to_llvm(t):
+    match t:
+        case I32Type():
+            return I32
+        case I8PtrType():
+            return I8.as_pointer()
+    raise ValueError(f"unhandled cpg.Type: {t!r}")
 
 
 # ---------- Lowering helpers ----------
@@ -77,21 +90,45 @@ def _emit_for_enforcement(builder: ir.IRBuilder, cond: ir.Value, enforcement: st
     raise ValueError(f"unknown enforcement: {enforcement!r}")
 
 
-def _lower_expr(builder: ir.IRBuilder, expr, params: dict[str, ir.Value], module: ir.Module) -> ir.Value:
+def _lower_expr(
+    builder: ir.IRBuilder, expr, params: dict[str, ir.Value], module: ir.Module,
+    *, constants: dict[str, ir.GlobalVariable], extern_sigs: dict[str, ExternFunction],
+) -> ir.Value:
     match expr:
         case IntLit(value=v):
             return ir.Constant(I32, v)
         case ParamRef(name=n):
             return params[n]
         case BinOp(op="add", lhs=l, rhs=r):
-            return builder.add(_lower_expr(builder, l, params, module), _lower_expr(builder, r, params, module))
+            return builder.add(
+                _lower_expr(builder, l, params, module, constants=constants, extern_sigs=extern_sigs),
+                _lower_expr(builder, r, params, module, constants=constants, extern_sigs=extern_sigs),
+            )
         case BinOp(op="slt", lhs=l, rhs=r):
-            return builder.icmp_signed("<", _lower_expr(builder, l, params, module), _lower_expr(builder, r, params, module))
+            return builder.icmp_signed("<",
+                _lower_expr(builder, l, params, module, constants=constants, extern_sigs=extern_sigs),
+                _lower_expr(builder, r, params, module, constants=constants, extern_sigs=extern_sigs),
+            )
+        case StringRef(name=n):
+            gv = constants[n]
+            return builder.bitcast(gv, I8.as_pointer())
         case Call(function=fname, args=args):
             callee = module.globals.get(fname)
             if callee is None:
                 raise ValueError(f"call to undeclared function {fname!r}")
-            arg_vals = [_lower_expr(builder, a, params, module) for a in args]
+            ext = extern_sigs.get(fname)
+            if ext is not None:
+                # Typed extern call: lower each arg per the extern's signature.
+                arg_vals = [
+                    _lower_expr(builder, a, params, module, constants=constants, extern_sigs=extern_sigs)
+                    for a in args
+                ]
+            else:
+                # User function call: all i32.
+                arg_vals = [
+                    _lower_expr(builder, a, params, module, constants=constants, extern_sigs=extern_sigs)
+                    for a in args
+                ]
             return builder.call(callee, arg_vals)
     raise ValueError(f"unhandled expr: {expr!r}")
 
@@ -107,6 +144,7 @@ def _lower_stmt(
     module: ir.Module,
     return_claims: tuple,
     overrides: dict[str, str],
+    extern_sigs: dict[str, ExternFunction],
 ) -> None:
     """Lower a statement. `return_claims` are emitted as llvm.assume / runtime
     check at every ret, so callers (after inlining) see the bound."""
@@ -122,14 +160,21 @@ def _lower_stmt(
             builder.ret(ret_val)
             return
         case ReturnExpr(value=expr):
-            ret_val = _lower_expr(builder, expr, params, module)
+            ret_val = _lower_expr(
+                builder, expr, params, module,
+                constants=constants, extern_sigs=extern_sigs,
+            )
             _emit_return_claims(builder, ret_val, return_claims, llvm_fn, module, overrides)
             builder.ret(ret_val)
             return
         case If(cond=cond, then_body=then_body, else_body=else_body):
             then_bb = llvm_fn.append_basic_block("then")
             else_bb = llvm_fn.append_basic_block("else")
-            builder.cbranch(_lower_expr(builder, cond, params, module), then_bb, else_bb)
+            cond_val = _lower_expr(
+                builder, cond, params, module,
+                constants=constants, extern_sigs=extern_sigs,
+            )
+            builder.cbranch(cond_val, then_bb, else_bb)
             # Both branches are required to terminate (return) in this round;
             # we'll add a merge block when we have an If whose branches fall
             # through.
@@ -139,6 +184,7 @@ def _lower_stmt(
                     builder, s, llvm_fn=llvm_fn, params=params, constants=constants,
                     puts=puts, module=module,
                     return_claims=return_claims, overrides=overrides,
+                    extern_sigs=extern_sigs,
                 )
             builder.position_at_end(else_bb)
             for s in else_body:
@@ -146,6 +192,7 @@ def _lower_stmt(
                     builder, s, llvm_fn=llvm_fn, params=params, constants=constants,
                     puts=puts, module=module,
                     return_claims=return_claims, overrides=overrides,
+                    extern_sigs=extern_sigs,
                 )
             return
     raise ValueError(f"unhandled stmt: {stmt!r}")
@@ -209,9 +256,17 @@ def _declare_function(module: ir.Module, fn: Function) -> ir.Function:
     return ir.Function(module, fn_ty, name=fn.name)
 
 
+def _declare_extern(module: ir.Module, ext: ExternFunction) -> ir.Function:
+    param_types = [_type_to_llvm(t) for t in ext.effective_param_types()]
+    return_type = _type_to_llvm(ext.return_type)
+    fn_ty = ir.FunctionType(return_type, param_types)
+    return ir.Function(module, fn_ty, name=ext.name)
+
+
 def _lower_function_body(
     module: ir.Module, fn: Function, *,
     constants: dict, puts: ir.Function, overrides: dict[str, str],
+    extern_sigs: dict[str, ExternFunction],
 ) -> None:
     llvm_fn = module.globals[fn.name]
     for arg, name in zip(llvm_fn.args, fn.params):
@@ -231,6 +286,7 @@ def _lower_function_body(
             builder, stmt,
             llvm_fn=llvm_fn, params=params, constants=constants, puts=puts, module=module,
             return_claims=return_claims, overrides=overrides,
+            extern_sigs=extern_sigs,
         )
 
 
@@ -257,13 +313,21 @@ def lower(
         gv.initializer = ir.Constant(ty, data)
         constants[c.name] = gv
 
-    # Pass 1: declare every user function so calls can resolve regardless of order.
+    # Pass 1: declare every user function and every extern so calls can
+    # resolve regardless of order or definedness.
     for fn in program.functions:
         _declare_function(module, fn)
+    for ext in program.externs:
+        _declare_extern(module, ext)
 
-    # Pass 2: lower bodies.
+    extern_sigs: dict[str, ExternFunction] = {ext.name: ext for ext in program.externs}
+
+    # Pass 2: lower bodies of user functions only (externs have no body here).
     for fn in program.functions:
-        _lower_function_body(module, fn, constants=constants, puts=puts, overrides=overrides)
+        _lower_function_body(
+            module, fn, constants=constants, puts=puts, overrides=overrides,
+            extern_sigs=extern_sigs,
+        )
 
     return module
 

@@ -43,6 +43,7 @@ from cpg.model import (
     ReturnExpr,
     ReturnInRangeClaim,
     ReturnInt,
+    StringRef,
     claim_param,
 )
 
@@ -75,6 +76,11 @@ def _expr_to_smt(expr, state: _SmtState) -> str:
             return str(v)
         case ParamRef(name=n):
             return n
+        case StringRef():
+            raise NotImplementedError(
+                "can't lower StringRef for SMT — function under proof contains "
+                "an i8* expression; SMT model is Int-only"
+            )
         case BinOp(op="add", lhs=l, rhs=r):
             return f"(+ {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
         case BinOp(op="slt", lhs=l, rhs=r):

@@ -1,0 +1,22 @@
+{
+  "constants": [
+    {"name": ".str.cmd", "value": "ls /etc/hosts /etc/os-release"}
+  ],
+  "externs": [
+    {
+      "name": "system",
+      "param_types": [{"kind": "i8_ptr"}]
+    }
+  ],
+  "functions": [
+    {
+      "name": "main",
+      "params": [],
+      "body": [
+        {"kind": "return_expr",
+         "value": {"kind": "call", "function": "system",
+                   "args": [{"kind": "string_ref", "name": ".str.cmd"}]}}
+      ]
+    }
+  ]
+}

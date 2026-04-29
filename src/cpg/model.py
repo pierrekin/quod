@@ -49,13 +49,32 @@ class BinOp(_Node):
 
 
 class Call(_Node):
-    """Call a user-defined function in the same Program. All i32 today."""
+    """Call a user function or an extern in the same Program.
+
+    User function calls are i32-in/i32-out. Extern calls follow the extern's
+    declared `param_types` / `return_type` — pass `StringRef` for i8*-typed
+    args, IntLit/ParamRef/etc. for i32 args.
+    """
     kind: Literal["call"] = "call"
-    function: str  # name of a Function in the Program
+    function: str
     args: tuple["Expr", ...] = ()
 
 
-Expr = Annotated[Union[IntLit, ParamRef, BinOp, Call], Field(discriminator="kind")]
+class StringRef(_Node):
+    """An i8* value: pointer to a `StringConstant`'s underlying bytes.
+
+    Used as an arg to externs that take `const char *` (e.g. system, getenv).
+    Compared to CallPuts (a statement that prints a fixed StringConstant),
+    StringRef is an expression you can pass anywhere an i8* is expected.
+    """
+    kind: Literal["string_ref"] = "string_ref"
+    name: str  # name of a StringConstant in the Program
+
+
+Expr = Annotated[
+    Union[IntLit, ParamRef, BinOp, Call, StringRef],
+    Field(discriminator="kind"),
+]
 
 
 # ---------- Statements ----------
@@ -264,12 +283,66 @@ class Function(_Node):
     params: tuple[str, ...] = ()      # all i32 in this round
     body: tuple[Statement, ...]
     claims: tuple[Claim, ...] = ()
+    notes: tuple[str, ...] = ()       # free-form developer/agent intent
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_notes(self, handler, info):
+        data = handler(self)
+        if not self.notes:
+            data.pop("notes", None)
+        return data
+
+
+class I32Type(_Node):
+    kind: Literal["i32"] = "i32"
+
+
+class I8PtrType(_Node):
+    kind: Literal["i8_ptr"] = "i8_ptr"
+
+
+Type = Annotated[Union[I32Type, I8PtrType], Field(discriminator="kind")]
+
+
+class ExternFunction(_Node):
+    """A libc-or-similar function declared but not defined by us.
+
+    `arity` is a convenience for all-i32 signatures: when set, it expands
+    to `param_types = (I32Type,) * arity` and `return_type = I32Type` at
+    use time. For non-i32 sigs, set `param_types` and `return_type` directly
+    and leave `arity` at 0.
+    """
+    name: str
+    arity: int = 0
+    param_types: tuple[Type, ...] = ()
+    return_type: Type = I32Type()
+
+    @model_serializer(mode="wrap")
+    def _drop_extern_defaults(self, handler, info):
+        data = handler(self)
+        # Drop arity when zero AND when unused (i.e., param_types non-empty).
+        if self.arity == 0:
+            data.pop("arity", None)
+        if not self.param_types:
+            data.pop("param_types", None)
+        # Drop return_type when default i32.
+        if isinstance(self.return_type, I32Type):
+            data.pop("return_type", None)
+        return data
+
+    def effective_param_types(self) -> tuple["Type", ...]:
+        """Resolved param types: explicit `param_types` if given, otherwise
+        `arity` copies of I32Type."""
+        if self.param_types:
+            return self.param_types
+        return tuple(I32Type() for _ in range(self.arity))
 
 
 class _ProgramBase(_Node):
     """Shared shape for Program and InputProgram."""
     constants: tuple[StringConstant, ...] = ()
     functions: tuple[Function, ...] = ()
+    externs: tuple[ExternFunction, ...] = ()
 
 
 class Program(_ProgramBase):
@@ -390,11 +463,17 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
         lines.append("  constants:")
         for c in program.constants:
             lines.append(f"    {label(c)}{c.name} = {c.value!r}")
+    if program.externs:
+        lines.append("  externs:")
+        for ext in program.externs:
+            sig = ", ".join(_format_type(t) for t in ext.effective_param_types())
+            ret = _format_type(ext.return_type)
+            lines.append(f"    {label(ext)}extern {ext.name}({sig}) -> {ret}")
     if program.functions:
         lines.append("  functions:")
         for fn in program.functions:
             lines.extend("    " + line for line in format_function(fn, label=label).splitlines())
-    if not program.constants and not program.functions:
+    if not program.constants and not program.functions and not program.externs:
         lines.append("  (empty)")
     lines.append("}")
     return "\n".join(lines)
@@ -405,8 +484,23 @@ def format_function(fn: Function, *, label: NodeLabel = _NO_LABEL) -> str:
     header = f"{label(fn)}{fn.name}({sig_params}) -> i32"
     if fn.claims:
         header += "  [claims: " + ", ".join(format_claim(c) for c in fn.claims) + "]"
-    body_lines = [_format_stmt(s, indent=2, label=label) for s in fn.body]
-    return header + " {\n" + "\n".join(body_lines) + "\n}"
+    lines: list[str] = []
+    for note in fn.notes:
+        lines.append(f"// {note}")
+    lines.append(header + " {")
+    for s in fn.body:
+        lines.append(_format_stmt(s, indent=2, label=label))
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def _format_type(t) -> str:
+    match t:
+        case I32Type():
+            return "i32"
+        case I8PtrType():
+            return "i8*"
+    raise ValueError(f"unhandled type: {t!r}")
 
 
 def format_claim(c: Claim) -> str:
@@ -483,4 +577,6 @@ def _format_expr(expr) -> str:
             return f"({_format_expr(l)} {sym} {_format_expr(r)})"
         case Call(function=fn_name, args=args):
             return f"{fn_name}({', '.join(_format_expr(a) for a in args)})"
+        case StringRef(name=n):
+            return f"&{n}"
     raise ValueError(f"unhandled expr: {expr!r}")

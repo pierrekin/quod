@@ -114,3 +114,4 @@ def _walk_calls_in_expr(expr) -> Iterator[Call]:
         case BinOp(lhs=l, rhs=r):
             yield from _walk_calls_in_expr(l)
             yield from _walk_calls_in_expr(r)
+        # IntLit, ParamRef, StringRef carry no nested Calls.

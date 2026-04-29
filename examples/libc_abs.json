@@ -1,0 +1,26 @@
+{
+  "constants": [],
+  "externs": [
+    {"name": "abs", "arity": 1}
+  ],
+  "functions": [
+    {
+      "name": "f",
+      "params": ["x"],
+      "body": [
+        {"kind": "return_expr",
+         "value": {"kind": "call", "function": "abs",
+                   "args": [{"kind": "param_ref", "name": "x"}]}}
+      ]
+    },
+    {
+      "name": "main",
+      "params": [],
+      "body": [
+        {"kind": "return_expr",
+         "value": {"kind": "call", "function": "f",
+                   "args": [{"kind": "int_lit", "value": -5}]}}
+      ]
+    }
+  ]
+}

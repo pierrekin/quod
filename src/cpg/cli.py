@@ -34,6 +34,7 @@ from cpg.model import (
     PARAM_CLAIM_KINDS,
     RETURN_CLAIM_KINDS,
     DerivedJustification,
+    ExternFunction,
     IntRangeClaim,
     Justification,
     ManualJustification,
@@ -49,6 +50,7 @@ from cpg.model import (
     function_callees,
     load_program,
     relax_claim,
+    replace_function,
     save_program,
 )
 from cpg.proof import Z3NotInstalled, goal_smt_lib, run_z3_on_file, run_z3_on_smt
@@ -265,6 +267,88 @@ def _verify_justification(j: Justification, root: Path) -> tuple[bool, str]:
     return False, f"unknown justification kind: {j!r}"
 
 
+@app.command("suggest-claims")
+def suggest_claims_cmd(
+    top_n: int = typer.Option(10, "--top-n", help="Show this many top suggestions."),
+) -> None:
+    """Speculatively compile candidate claims; surface those that shrink IR.
+
+    Heuristic suggester. For each function, generates a small set of
+    candidate claims (non_negative on params, return_in_range with a few
+    bounds) and measures the optimized-IR line count *as if* the claim were
+    proven and added. Reports candidates whose addition shrinks IR — i.e.,
+    claims worth proving for codegen reasons.
+
+    Doesn't mutate the program; doesn't require any of the candidates to
+    actually be true. The agent's job afterwards is to try `cpg prove` on
+    the suggestions that look like they'd actually hold.
+    """
+    program = _load()
+    try:
+        baseline = _ir_line_count(program)
+    except Exception as e:
+        typer.echo(f"error: baseline compile failed: {e}", err=True)
+        raise typer.Exit(1)
+
+    candidates = _generate_candidates(program)
+    typer.echo(f"baseline: {baseline} IR line(s); evaluating {len(candidates)} candidate claim(s)...")
+
+    results: list[tuple[int, str, object]] = []
+    for fn_name, candidate in candidates:
+        try:
+            modified = add_claim(program, fn_name, candidate)
+        except (KeyError, ValueError):
+            continue
+        try:
+            size = _ir_line_count(modified)
+        except Exception:
+            continue
+        delta = baseline - size
+        if delta > 0:
+            results.append((delta, fn_name, candidate))
+
+    results.sort(key=lambda t: -t[0])
+    if not results:
+        typer.echo("no candidates shrink IR — current codegen is already tight, "
+                   "or candidates were trivially redundant.")
+        return
+    typer.echo(f"\ntop suggestions (lines saved):")
+    for delta, fn_name, claim in results[:top_n]:
+        typer.echo(f"  -{delta:>3} lines  on {fn_name}: {format_claim(claim)}")
+    typer.echo("\nNext: try `cpg prove KIND -f FN [...]` for the candidates that "
+               "should actually be true.")
+
+
+def _ir_line_count(program: Program) -> int:
+    """Run derive → elaborate → lower → optimize, return # of optimized-IR lines."""
+    from cpg.analysis import elaborate
+    derived = derive_lattice_claims(program)
+    program = elaborate(program, derived)
+    module = lower_mod.lower(program)
+    target_machine = lower_mod.make_target_machine()
+    parsed = lower_mod.parse_and_verify(module)
+    lower_mod.optimize_module(parsed, target_machine, speed_level=2)
+    return len(str(parsed).splitlines())
+
+
+def _generate_candidates(program: Program) -> list[tuple[str, object]]:
+    """Generate candidate claims. Returns (function_name, claim) tuples."""
+    out: list[tuple[str, object]] = []
+    for fn in program.functions:
+        # What the function already has, by (param, kind).
+        existing = {(claim_param(c), c.kind) for c in fn.claims}
+        # Per-param candidate: non_negative.
+        for p in fn.params:
+            if (p, "non_negative") not in existing:
+                out.append((fn.name, NonNegativeClaim(param=p, regime="axiom")))
+        # Function-scoped candidate: return_in_range with a few bounds.
+        has_return_claim = any(c.kind == "return_in_range" for c in fn.claims)
+        if not has_return_claim:
+            for lo in (-1, 0):
+                out.append((fn.name, ReturnInRangeClaim(min=lo, regime="axiom")))
+    return out
+
+
 @app.command("derive-claims")
 def derive_claims_cmd() -> None:
     """Run the lattice analysis and print derived (regime=lattice) claims.
@@ -282,6 +366,81 @@ def derive_claims_cmd() -> None:
             typer.echo(f"{fn.name}: {format_claim(c)}")
 
 
+@app.command("find-callers")
+def find_callers_cmd(
+    target: str = typer.Argument(..., help="Name of the function whose callers we want."),
+) -> None:
+    """List every call site to `target` across the program (reverse call graph for one fn)."""
+    from cpg.analysis import _walk_calls_in_stmt
+    program = _load()
+    found = False
+    for caller in program.functions:
+        for i, stmt in enumerate(caller.body):
+            # Dedupe on call hash within a single statement: content-equivalent
+            # calls in if/else branches collapse to one entry (they're the same
+            # node in the content-addressed graph).
+            seen: set[str] = set()
+            for call in _walk_calls_in_stmt(stmt):
+                if call.function != target:
+                    continue
+                h = node_hash(call)
+                if h in seen:
+                    continue
+                seen.add(h)
+                found = True
+                typer.echo(
+                    f"{caller.name}.body[{i}] [{short_hash(stmt)}] → "
+                    f"{target}/{len(call.args)} [{h[:HASH_DISPLAY_LEN]}]"
+                )
+    if not found:
+        defined = {fn.name for fn in program.functions}
+        extern = {ext.name for ext in program.externs}
+        if target not in defined and target not in extern:
+            typer.echo(f"warning: {target!r} is not declared in this program", err=True)
+        typer.echo(f"(no callers of {target!r})")
+
+
+@app.command("show-data-flow")
+def show_data_flow_cmd(
+    param: str = typer.Argument(..., help="Parameter name."),
+    function: str = typer.Option(..., "--function", "-f", help="Function name or hash prefix."),
+) -> None:
+    """Show every statement in `function` that reads `param` (param-flow view)."""
+    program = _load()
+    try:
+        fn = find_function_ref(program, function)
+    except (KeyError, ValueError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+    if param not in fn.params:
+        typer.echo(f"error: {fn.name!r} has no parameter {param!r}", err=True)
+        raise typer.Exit(1)
+    any_read = False
+    for i, stmt in enumerate(fn.body):
+        n = _count_paramrefs(stmt, param)
+        if n:
+            any_read = True
+            typer.echo(f"  body[{i}] [{short_hash(stmt)}]: {n} read(s)")
+    if not any_read:
+        typer.echo(f"({param!r} is unused in {fn.name})")
+
+
+def _count_paramrefs(node, name: str) -> int:
+    """Count ParamRef(name=name) occurrences anywhere inside node."""
+    from cpg.model import ParamRef, _Node
+    total = 0
+    if isinstance(node, ParamRef) and node.name == name:
+        total += 1
+    for _, value in node:
+        if isinstance(value, _Node):
+            total += _count_paramrefs(value, name)
+        elif isinstance(value, tuple):
+            for v in value:
+                if isinstance(v, _Node):
+                    total += _count_paramrefs(v, name)
+    return total
+
+
 @app.command("show-call-graph")
 def show_call_graph() -> None:
     """Print the static call graph: caller -> callees, plus orphan callers and roots.
@@ -295,6 +454,7 @@ def show_call_graph() -> None:
         return
 
     defined = {fn.name for fn in program.functions}
+    extern_names = {ext.name for ext in program.externs}
     edges: dict[str, tuple[str, ...]] = {fn.name: function_callees(fn) for fn in program.functions}
 
     called: set[str] = set()
@@ -303,20 +463,75 @@ def show_call_graph() -> None:
     roots = [name for name in edges if name not in called]
     leaves = [name for name, cs in edges.items() if not cs]
 
+    def _decorate(c: str) -> str:
+        if c in defined:
+            return c
+        if c in extern_names:
+            return f"{c}@extern"
+        return f"{c}!"
+
     for fn in program.functions:
         callees = edges[fn.name]
         if not callees:
             typer.echo(f"{fn.name} -> (leaf)")
             continue
-        rendered = ", ".join(c if c in defined else f"{c}!" for c in callees)
+        rendered = ", ".join(_decorate(c) for c in callees)
         typer.echo(f"{fn.name} -> {rendered}")
 
     if roots or leaves:
         typer.echo("")
         typer.echo(f"roots:  {', '.join(roots) if roots else '(none)'}")
         typer.echo(f"leaves: {', '.join(leaves) if leaves else '(none)'}")
-    if any(c not in defined for cs in edges.values() for c in cs):
+    has_dangling = any(c not in defined and c not in extern_names for cs in edges.values() for c in cs)
+    has_extern = any(c in extern_names for cs in edges.values() for c in cs)
+    if has_dangling:
         typer.echo("(! marks a callee not defined in this Program)")
+    if has_extern:
+        typer.echo("(@extern marks a callee declared as an extern, e.g. libc)")
+
+
+@app.command("add-note")
+def add_note_cmd(
+    text: str = typer.Argument(..., help="Note content (free-form intent / TODO / rationale)."),
+    function: str = typer.Option(..., "--function", "-f", help="Function name or hash prefix."),
+) -> None:
+    """Attach a free-form note to a function.
+
+    Notes are non-enforced metadata: agents and humans use them for intent,
+    rationale, TODOs, perf hints. They don't affect codegen or proofs.
+    """
+    program = _load()
+    try:
+        fn = find_function_ref(program, function)
+    except (KeyError, ValueError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+    new_fn = fn.model_copy(update={"notes": fn.notes + (text,)})
+    program = replace_function(program, new_fn)
+    _save(program)
+    typer.echo(f"noted on {fn.name}: {text}")
+
+
+@app.command("remove-note")
+def remove_note_cmd(
+    function: str = typer.Option(..., "--function", "-f", help="Function name or hash prefix."),
+    index: int = typer.Option(..., "--index", "-i", help="0-based index of the note to remove."),
+) -> None:
+    """Remove a note by index from a function."""
+    program = _load()
+    try:
+        fn = find_function_ref(program, function)
+    except (KeyError, ValueError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+    if not 0 <= index < len(fn.notes):
+        typer.echo(f"error: index {index} out of range (function has {len(fn.notes)} note(s))", err=True)
+        raise typer.Exit(1)
+    new_notes = fn.notes[:index] + fn.notes[index + 1:]
+    new_fn = fn.model_copy(update={"notes": new_notes})
+    program = replace_function(program, new_fn)
+    _save(program)
+    typer.echo(f"removed note {index} from {fn.name}")
 
 
 @app.command("find-unconstrained-params")
@@ -591,6 +806,25 @@ def prove_cmd(
 
 
 # ---------- Mutation: construction ----------
+
+@app.command("add-extern")
+def add_extern_cmd(
+    name: str = typer.Argument(..., help="Extern function name (must match the libc/library symbol)."),
+    arity: int = typer.Option(0, "--arity", min=0, help="Number of i32 parameters (i32-only signatures in this round)."),
+) -> None:
+    """Declare an extern (libc-or-similar) function. All-i32 signatures today."""
+    program = _load()
+    if any(ext.name == name for ext in program.externs):
+        typer.echo(f"error: extern {name!r} already declared", err=True)
+        raise typer.Exit(1)
+    if any(fn.name == name for fn in program.functions):
+        typer.echo(f"error: {name!r} already exists as a user function", err=True)
+        raise typer.Exit(1)
+    new_externs = program.externs + (ExternFunction(name=name, arity=arity),)
+    program = program.model_copy(update={"externs": new_externs})
+    _save(program)
+    typer.echo(f"declared extern {name}/{arity}")
+
 
 @app.command("add-function")
 def add_function_cmd(
