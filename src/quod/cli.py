@@ -83,7 +83,13 @@ from quod.model import (
     replace_function,
     save_program,
 )
-from quod.proof import Z3NotInstalled, goal_smt_lib, run_z3_on_file, run_z3_on_smt
+from quod.proof import Z3NotInstalled, run_z3_on_file
+from quod.providers import (
+    ClaimRequest,
+    all_providers,
+    default_for,
+    get_provider,
+)
 from quod.schema import render_categories, render_category, render_kind
 from quod.templates import TEMPLATES
 
@@ -106,6 +112,7 @@ stmt_app = typer.Typer(no_args_is_help=True, help="Operations on statements.")
 extern_app = typer.Typer(no_args_is_help=True, help="Operations on externs.")
 note_app = typer.Typer(no_args_is_help=True, help="Operations on notes.")
 const_app = typer.Typer(no_args_is_help=True, help="Operations on string constants.")
+provider_app = typer.Typer(no_args_is_help=True, help="Inspect registered claim providers.")
 
 app.add_typer(fn_app, name="fn")
 app.add_typer(claim_app, name="claim")
@@ -113,6 +120,7 @@ app.add_typer(stmt_app, name="stmt")
 app.add_typer(extern_app, name="extern")
 app.add_typer(note_app, name="note")
 app.add_typer(const_app, name="const")
+app.add_typer(provider_app, name="provider")
 
 
 # ---------- Shared state ----------
@@ -936,12 +944,24 @@ def _generate_candidates(program: Program) -> list[tuple[str, object]]:
 
 
 @claim_app.command("derive")
-def claim_derive() -> None:
-    """Run the lattice analysis and print derived (regime=lattice) claims."""
+def claim_derive(
+    provider: str | None = typer.Option(
+        None, "--provider", help="Provider name (defaults to the first lattice/derive provider)."
+    ),
+) -> None:
+    """Run a lattice provider and print derived (regime=lattice) claims."""
     program = _load()
-    derived = derive_lattice_claims(program)
+    try:
+        prov = get_provider(provider) if provider else default_for(regime="lattice", mode="derive")
+    except KeyError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+    if prov.derive is None:
+        typer.echo(f"error: provider {prov.name!r} does not support derive mode", err=True)
+        raise typer.Exit(1)
+    derived = prov.derive(program)
     if not derived:
-        typer.echo("(no derived claims)")
+        typer.echo(f"(no derived claims from {prov.name})")
         return
     for fn in program.functions:
         for c in derived.get(fn.name, ()):
@@ -956,12 +976,30 @@ def claim_prove(
     lo: int | None = typer.Option(None, "--min"),
     hi: int | None = typer.Option(None, "--max"),
     enforcement: str = typer.Option("trust", "--enforcement"),
+    provider: str | None = typer.Option(
+        None, "--provider", help="Provider name (defaults to the first witness/prove provider)."
+    ),
 ) -> None:
-    """Synthesize a proof of a claim, attach it as a witness."""
+    """Synthesize a proof of a claim via a provider, attach as a witness."""
     cfg = _cfg()
     proofs_dir = cfg.resolve(cfg.proofs_dir)
+    try:
+        prov = get_provider(provider) if provider else default_for(regime="witness", mode="prove")
+    except KeyError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+    if prov.prove is None:
+        typer.echo(f"error: provider {prov.name!r} does not support prove mode", err=True)
+        raise typer.Exit(1)
+    if kind not in CLAIM_KINDS:
+        typer.echo(f"error: unknown claim kind {kind!r}; one of: {', '.join(CLAIM_KINDS)}", err=True)
+        raise typer.Exit(2)
+    if enforcement not in ENFORCEMENTS:
+        typer.echo(f"error: --enforcement must be one of {ENFORCEMENTS}", err=True)
+        raise typer.Exit(2)
+
     # Hold the lock end-to-end: the proof's correctness depends on fn.body
-    # not changing between load and save. Z3 typically returns in seconds.
+    # not changing between load and save.
     with _exclusive_lock():
         program = _load()
         try:
@@ -970,54 +1008,30 @@ def claim_prove(
             typer.echo(f"error: {e}", err=True)
             raise typer.Exit(1)
 
-        try:
-            goal = _build_claim(
-                kind, target, lo=lo, hi=hi,
-                regime="witness", enforcement=enforcement, justification=None,
-            )
-        except typer.BadParameter as e:
-            typer.echo(f"error: {e.message}", err=True)
-            raise typer.Exit(2)
-
-        try:
-            smt = goal_smt_lib(fn, goal, hypotheses=fn.claims, program=program)
-        except NotImplementedError as e:
-            typer.echo(f"error: cannot synthesize proof: {e}", err=True)
+        request = ClaimRequest(
+            function=fn.name, kind=kind, target=target,
+            min=lo, max=hi, enforcement=enforcement,
+        )
+        result = prov.prove(program, request, proofs_dir)
+        if result.status != "proven":
+            tag = result.status
+            typer.echo(f"could not prove {kind}: {prov.name} reported {tag} ({result.detail})", err=True)
+            if tag == "refuted":
+                typer.echo("(provider found a counterexample; the claim does not hold)", err=True)
             raise typer.Exit(1)
 
+        assert result.claim is not None
         try:
-            result = run_z3_on_smt(smt)
-        except Z3NotInstalled as e:
-            typer.echo(f"error: {e}", err=True)
-            raise typer.Exit(1)
-        if result.status != "unsat":
-            typer.echo(f"could not prove {kind}: z3 returned {result.status!r}", err=True)
-            if result.status == "sat":
-                typer.echo("(z3 found a counterexample; the claim does not hold)", err=True)
-            raise typer.Exit(1)
-
-        proofs_dir.mkdir(parents=True, exist_ok=True)
-        target_part = target or "return"
-        artifact_hash = hashlib.sha256(smt.encode("utf-8")).hexdigest()
-        artifact_path = proofs_dir / f"{fn.name}_{kind}_{target_part}_{artifact_hash[:12]}.smt2"
-        artifact_path.write_text(smt)
-
-        proven = goal.model_copy(update={
-            "justification": Z3Justification(
-                artifact_path=str(artifact_path),
-                artifact_hash=artifact_hash,
-            ),
-        })
-        try:
-            program = add_claim(program, fn.name, proven)
+            program = add_claim(program, fn.name, result.claim)
         except (KeyError, ValueError) as e:
             typer.echo(f"error: {e}", err=True)
             raise typer.Exit(1)
         _save(program)
-    typer.echo(
-        f"proved {format_claim(proven)}\n"
-        f"  artifact: {artifact_path} (sha256={artifact_hash[:12]})"
-    )
+
+    msg = f"proved {format_claim(result.claim)} via {prov.name}"
+    if result.artifact_path is not None and result.artifact_hash is not None:
+        msg += f"\n  artifact: {result.artifact_path} (sha256={result.artifact_hash[:12]})"
+    typer.echo(msg)
 
 
 # ---------- stmt sub-app ----------
@@ -1277,6 +1291,23 @@ def note_rm(
         program = replace_function(program, new_fn)
         _save(program)
     typer.echo(f"removed note {index} from {fn.name}")
+
+
+# ---------- provider sub-app ----------
+
+@provider_app.command("ls")
+def provider_ls() -> None:
+    """List registered claim providers (regimes + supported modes)."""
+    providers = all_providers()
+    if not providers:
+        typer.echo("(no providers registered)")
+        return
+    name_w = max(len(p.name) for p in providers.values())
+    regime_w = max(len(p.regime) for p in providers.values())
+    for p in providers.values():
+        modes = "+".join(p.modes) if p.modes else "(none)"
+        typer.echo(f"{p.name:<{name_w}}  regime={p.regime:<{regime_w}}  modes={modes}")
+        typer.echo(f"  {p.description}")
 
 
 if __name__ == "__main__":
