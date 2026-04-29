@@ -4,7 +4,12 @@
     {
       "name": "f",
       "params": [
-        "x"
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
       ],
       "body": [
         {
@@ -18,7 +23,10 @@
             },
             "rhs": {
               "kind": "llvm.const_int",
-              "value": 0
+              "value": 0,
+              "type": {
+                "kind": "llvm.i32"
+              }
             }
           },
           "then_body": [
@@ -26,7 +34,10 @@
               "kind": "quod.return_expr",
               "value": {
                 "kind": "llvm.const_int",
-                "value": -1
+                "value": -1,
+                "type": {
+                  "kind": "llvm.i32"
+                }
               }
             }
           ],
@@ -42,18 +53,29 @@
                 },
                 "rhs": {
                   "kind": "llvm.const_int",
-                  "value": 1
+                  "value": 1,
+                  "type": {
+                    "kind": "llvm.i32"
+                  }
                 }
               }
             }
           ]
         }
-      ]
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
     },
     {
       "name": "g",
       "params": [
-        "y"
+        {
+          "name": "y",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
       ],
       "body": [
         {
@@ -73,7 +95,10 @@
             },
             "rhs": {
               "kind": "llvm.const_int",
-              "value": -100
+              "value": -100,
+              "type": {
+                "kind": "llvm.i32"
+              }
             }
           },
           "then_body": [
@@ -81,7 +106,10 @@
               "kind": "quod.return_expr",
               "value": {
                 "kind": "llvm.const_int",
-                "value": 999
+                "value": 999,
+                "type": {
+                  "kind": "llvm.i32"
+                }
               }
             }
           ],
@@ -101,7 +129,10 @@
             }
           ]
         }
-      ]
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
     }
   ]
 }

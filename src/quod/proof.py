@@ -36,9 +36,15 @@ from quod.model import (
     ExprStmt,
     For,
     Function,
+    I1Type,
+    I8Type,
+    I16Type,
+    I32Type,
+    I64Type,
     If,
     IntLit,
     IntRangeClaim,
+    IntType,
     Let,
     LocalRef,
     NonNegativeClaim,
@@ -55,9 +61,27 @@ from quod.model import (
 )
 
 
-# i32 bounds — used as the universe for parameters when no claim narrows them.
-I32_MIN = -2**31
-I32_MAX = 2**31 - 1
+def _type_universe(t: IntType) -> tuple[int, int]:
+    """Inclusive [min, max] for the SMT Int sort modeling a quod int type.
+
+    LLVM int types carry no signedness — quod's signed/unsigned op variants
+    decide interpretation. SMT's Int is unbounded; the universe constraint
+    keeps Z3 honest about widths instead of finding counterexamples that
+    couldn't appear in our actual codegen. Signed two's-complement bounds
+    apply for i8..i64; i1 is treated as the unsigned boolean {0, 1}.
+    """
+    match t:
+        case I1Type():
+            return (0, 1)
+        case I8Type():
+            return (-(2**7), 2**7 - 1)
+        case I16Type():
+            return (-(2**15), 2**15 - 1)
+        case I32Type():
+            return (-(2**31), 2**31 - 1)
+        case I64Type():
+            return (-(2**63), 2**63 - 1)
+    raise ValueError(f"not an int type: {t!r}")
 
 
 # Map quod.BinOp.op -> SMT-LIB operator. `ne` is special-cased (distinct).
@@ -253,11 +277,12 @@ def goal_smt_lib(
     lines.append("")
 
     for p in fn.params:
-        lines.append(f"(declare-const {p} Int)")
-        # Bound params to the i32 universe; otherwise Z3 finds counterexamples
+        lo, hi = _type_universe(p.type)
+        lines.append(f"(declare-const {p.name} Int)  ; {p.type.kind}")
+        # Bound params to the type's universe; otherwise Z3 finds counterexamples
         # in the unbounded integers that don't apply to our actual codegen.
-        lines.append(f"(assert (>= {p} {I32_MIN}))")
-        lines.append(f"(assert (<= {p} {I32_MAX}))")
+        lines.append(f"(assert (>= {p.name} {lo}))")
+        lines.append(f"(assert (<= {p.name} {hi}))")
 
     if state.extra_decls:
         lines.append("")

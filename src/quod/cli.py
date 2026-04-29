@@ -55,8 +55,12 @@ from quod.model import (
     RETURN_CLAIM_KINDS,
     DerivedJustification,
     ExternFunction,
-    I32Type,
+    I1Type,
     I8PtrType,
+    I8Type,
+    I16Type,
+    I32Type,
+    I64Type,
     IntRangeClaim,
     Justification,
     ManualJustification,
@@ -357,8 +361,8 @@ def run(
         quod run -- ARG ...                 # forward ARGs as argv to the binary
         quod run --bin NAME -- ARG ...      # both
 
-    If the entry function declares i32 params, the synthesized main wrapper
-    parses each argv slot via atoi.
+    If the entry function declares int params, the synthesized main wrapper
+    parses each argv slot via atoll, then trunc/sext's to the param's width.
     """
     # Click eats `--` and folds args into typer's parameter parsing, so we
     # read sys.argv directly to recover whatever was passed after `--`.
@@ -470,9 +474,10 @@ def fn_ls() -> None:
         typer.echo("(no functions)")
         return
     for fn in program.functions:
-        sig = ", ".join(f"{p}: i32" for p in fn.params)
+        sig = ", ".join(f"{p.name}: {_format_type(p.type)}" for p in fn.params)
+        ret = _format_type(fn.return_type)
         suffix = f"  [{len(fn.claims)} claim(s)]" if fn.claims else ""
-        typer.echo(f"[{short_hash(fn)}] {fn.name}({sig}) -> i32{suffix}")
+        typer.echo(f"[{short_hash(fn)}] {fn.name}({sig}) -> {ret}{suffix}")
 
 
 @fn_app.command("show")
@@ -571,7 +576,7 @@ def fn_data_flow(
     except (KeyError, ValueError) as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
-    if param not in fn.params:
+    if fn.param(param) is None:
         typer.echo(f"error: {fn.name!r} has no parameter {param!r}", err=True)
         raise typer.Exit(1)
     any_read = False
@@ -652,9 +657,9 @@ def fn_unconstrained() -> None:
     for fn in program.functions:
         constrained = {claim_param(c) for c in fn.claims if claim_param(c) is not None}
         for p in fn.params:
-            if p not in constrained:
+            if p.name not in constrained:
                 found = True
-                typer.echo(f"{fn.name}.{p}")
+                typer.echo(f"{fn.name}.{p.name}")
     if not found:
         typer.echo("(none)")
 
@@ -919,8 +924,8 @@ def _generate_candidates(program: Program) -> list[tuple[str, object]]:
     for fn in program.functions:
         existing = {(claim_param(c), c.kind) for c in fn.claims}
         for p in fn.params:
-            if (p, "non_negative") not in existing:
-                out.append((fn.name, NonNegativeClaim(param=p, regime="axiom")))
+            if (p.name, "non_negative") not in existing:
+                out.append((fn.name, NonNegativeClaim(param=p.name, regime="axiom")))
         has_return_claim = any(c.kind == "return_in_range" for c in fn.claims)
         if not has_return_claim:
             for lo in (-1, 0):
@@ -1110,7 +1115,10 @@ def const_add(
 
 # ---------- extern sub-app ----------
 
-_TYPE_NAMES = {"i32": I32Type, "i8_ptr": I8PtrType}
+_TYPE_NAMES = {
+    "i1": I1Type, "i8": I8Type, "i16": I16Type, "i32": I32Type, "i64": I64Type,
+    "i8_ptr": I8PtrType,
+}
 
 
 def _parse_type_name(s: str):
@@ -1120,8 +1128,11 @@ def _parse_type_name(s: str):
     return cls()
 
 
+_TYPE_LABELS = {v: k for k, v in _TYPE_NAMES.items()}
+
+
 def _format_type(t) -> str:
-    return {I32Type: "i32", I8PtrType: "i8_ptr"}.get(type(t), type(t).__name__)
+    return _TYPE_LABELS.get(type(t), type(t).__name__)
 
 
 @extern_app.command("ls")

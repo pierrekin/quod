@@ -4,7 +4,12 @@
     {
       "name": "f",
       "params": [
-        "x"
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
       ],
       "body": [
         {
@@ -18,7 +23,10 @@
             },
             "rhs": {
               "kind": "llvm.const_int",
-              "value": 0
+              "value": 0,
+              "type": {
+                "kind": "llvm.i32"
+              }
             }
           },
           "then_body": [
@@ -26,7 +34,10 @@
               "kind": "quod.return_expr",
               "value": {
                 "kind": "llvm.const_int",
-                "value": -1
+                "value": -1,
+                "type": {
+                  "kind": "llvm.i32"
+                }
               }
             }
           ],
@@ -42,7 +53,10 @@
                 },
                 "rhs": {
                   "kind": "llvm.const_int",
-                  "value": 1
+                  "value": 1,
+                  "type": {
+                    "kind": "llvm.i32"
+                  }
                 }
               }
             }
@@ -62,7 +76,10 @@
           "min": 0,
           "max": 100
         }
-      ]
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
     }
   ]
 }

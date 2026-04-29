@@ -27,8 +27,12 @@ from quod.model import (
     ExternFunction,
     For,
     Function,
-    I32Type,
+    I1Type,
     I8PtrType,
+    I8Type,
+    I16Type,
+    I32Type,
+    I64Type,
     If,
     IntLit,
     IntRangeClaim,
@@ -47,15 +51,25 @@ from quod.model import (
 )
 
 
-I8 = ir.IntType(8)
-I32 = ir.IntType(32)
 I1 = ir.IntType(1)
+I8 = ir.IntType(8)
+I16 = ir.IntType(16)
+I32 = ir.IntType(32)
+I64 = ir.IntType(64)
 
 
 def _type_to_llvm(t):
     match t:
+        case I1Type():
+            return I1
+        case I8Type():
+            return I8
+        case I16Type():
+            return I16
         case I32Type():
             return I32
+        case I64Type():
+            return I64
         case I8PtrType():
             return I8.as_pointer()
     raise ValueError(f"unhandled quod.Type: {t!r}")
@@ -78,12 +92,13 @@ def _get_or_declare_abort(module: ir.Module) -> ir.Function:
     return fn
 
 
-def _get_or_declare_atoi(module: ir.Module) -> ir.Function:
-    """libc atoi(const char*) -> int. Used by the argv-parsing main wrapper
-    when the entry function declares i32 params."""
-    if "atoi" in module.globals:
-        return module.globals["atoi"]
-    return ir.Function(module, ir.FunctionType(I32, [I8.as_pointer()]), name="atoi")
+def _get_or_declare_atoll(module: ir.Module) -> ir.Function:
+    """libc atoll(const char*) -> long long. Used by the argv-parsing main
+    wrapper to decode each argv slot to i64; the wrapper then trunc/sext's
+    to whichever integer width the entry function's param actually takes."""
+    if "atoll" in module.globals:
+        return module.globals["atoll"]
+    return ir.Function(module, ir.FunctionType(I64, [I8.as_pointer()]), name="atoll")
 
 
 def _emit_for_enforcement(builder: ir.IRBuilder, cond: ir.Value, enforcement: str, llvm_fn: ir.Function, module: ir.Module) -> None:
@@ -131,8 +146,8 @@ def _lower_expr(
         )
 
     match expr:
-        case IntLit(value=v):
-            return ir.Constant(I32, v)
+        case IntLit(type=t, value=v):
+            return ir.Constant(_type_to_llvm(t), v)
         case ParamRef(name=n):
             return params[n]
         case LocalRef(name=n):
@@ -220,11 +235,11 @@ def _collect_local_bindings(stmts) -> list[tuple[str, "ir.Type"]]:
                         raise ValueError(f"local {name!r} declared twice in the same function")
                     seen.add(name)
                     out.append((name, _type_to_llvm(ty)))
-                case For(var=var, body=for_body):
+                case For(var=var, type=ty, body=for_body):
                     if var in seen:
                         raise ValueError(f"for-loop var {var!r} conflicts with another local")
                     seen.add(var)
-                    out.append((var, I32))
+                    out.append((var, _type_to_llvm(ty)))
                     visit(for_body)
                 case If(then_body=t, else_body=e):
                     visit(t); visit(e)
@@ -267,7 +282,7 @@ def _lower_stmt(
 
     match stmt:
         case ReturnInt(value=v):
-            ret_val = ir.Constant(I32, v)
+            ret_val = ir.Constant(llvm_fn.function_type.return_type, v)
             _emit_return_claims(builder, ret_val, return_claims, llvm_fn, module, overrides)
             builder.ret(ret_val)
             return
@@ -352,6 +367,7 @@ def _lower_stmt(
             lo_val = lower_expr(lo)
             hi_val = lower_expr(hi)
             alloca = locals_[var]
+            var_ty = alloca.type.pointee  # the loop var's iN type
             builder.store(lo_val, alloca)
 
             header_bb = llvm_fn.append_basic_block("for.header")
@@ -367,9 +383,9 @@ def _lower_stmt(
             builder.position_at_end(body_bb)
             lower_body(body)
             if not builder.block.is_terminated:
-                # increment + back-edge
+                # increment + back-edge — step constant matches the var's width
                 cur2 = builder.load(alloca)
-                nxt = builder.add(cur2, ir.Constant(I32, 1))
+                nxt = builder.add(cur2, ir.Constant(var_ty, 1))
                 builder.store(nxt, alloca)
                 builder.branch(header_bb)
 
@@ -385,15 +401,16 @@ def _emit_return_claims(
     """Emit llvm.assume / runtime-check predicates against the return value
     just before `ret`. The optimizer learns the bound; after inlining, callers
     learn it too."""
+    ret_ty = ret_val.type
     for claim in return_claims:
         if not isinstance(claim, ReturnInRangeClaim):
             continue
         enforcement = overrides.get(claim.regime, claim.enforcement)
         if claim.min is not None:
-            cmp = builder.icmp_signed(">=", ret_val, ir.Constant(I32, claim.min))
+            cmp = builder.icmp_signed(">=", ret_val, ir.Constant(ret_ty, claim.min))
             _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
         if claim.max is not None:
-            cmp = builder.icmp_signed("<=", ret_val, ir.Constant(I32, claim.max))
+            cmp = builder.icmp_signed("<=", ret_val, ir.Constant(ret_ty, claim.max))
             _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
 
 
@@ -411,16 +428,17 @@ def _lower_claim(
     enforcement = overrides.get(claim.regime, claim.enforcement)
     match claim:
         case NonNegativeClaim(param=name):
-            cmp = builder.icmp_signed(">=", params[name], ir.Constant(I32, 0))
+            val = params[name]
+            cmp = builder.icmp_signed(">=", val, ir.Constant(val.type, 0))
             _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
             return
         case IntRangeClaim(param=name, min=lo, max=hi):
             val = params[name]
             if lo is not None:
-                cmp = builder.icmp_signed(">=", val, ir.Constant(I32, lo))
+                cmp = builder.icmp_signed(">=", val, ir.Constant(val.type, lo))
                 _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
             if hi is not None:
-                cmp = builder.icmp_signed("<=", val, ir.Constant(I32, hi))
+                cmp = builder.icmp_signed("<=", val, ir.Constant(val.type, hi))
                 _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
             return
         case ReturnInRangeClaim():
@@ -432,7 +450,9 @@ def _lower_claim(
 
 
 def _declare_function(module: ir.Module, fn: Function) -> ir.Function:
-    fn_ty = ir.FunctionType(I32, [I32] * len(fn.params))
+    param_tys = [_type_to_llvm(p.type) for p in fn.params]
+    ret_ty = _type_to_llvm(fn.return_type)
+    fn_ty = ir.FunctionType(ret_ty, param_tys)
     return ir.Function(module, fn_ty, name=fn.name)
 
 
@@ -449,9 +469,9 @@ def _lower_function_body(
     extern_sigs: dict[str, ExternFunction],
 ) -> None:
     llvm_fn = module.globals[fn.name]
-    for arg, name in zip(llvm_fn.args, fn.params):
-        arg.name = name
-    params = {name: arg for name, arg in zip(fn.params, llvm_fn.args)}
+    for arg, p in zip(llvm_fn.args, fn.params):
+        arg.name = p.name
+    params = {p.name: arg for p, arg in zip(fn.params, llvm_fn.args)}
 
     # Split claims by scope: param-scoped at function entry, return-scoped
     # at every ret site (so callers benefit after inlining).
@@ -536,10 +556,12 @@ def _emit_main_wrapper(module: ir.Module, program: Program, entry: str) -> None:
 
     Three cases:
       - entry is 'main' and nullary: nothing to do — user's main IS the C main.
-      - entry is nullary (any name): emit `i32 main() { return entry(); }`.
-      - entry has params (i32, all of them today): emit
-        `i32 main(i32 argc, i8** argv)` that bounds-checks argc, atoi-parses
-        argv[1..N+1], and forwards. Auto-declares atoi/abort if absent.
+      - entry is nullary (any name): emit `i32 main() { return ext(entry()); }`,
+        where `ext` is sext/trunc as needed to match i32.
+      - entry has params: emit `i32 main(i32 argc, i8** argv)` that
+        bounds-checks argc, calls atoll on each argv slot, trunc/sext's to
+        each param's type, and forwards. The result is similarly converted
+        to i32. Auto-declares atoll / abort if absent.
     """
     fn = next((f for f in program.functions if f.name == entry), None)
     if fn is None:
@@ -569,11 +591,10 @@ def _emit_main_wrapper(module: ir.Module, program: Program, entry: str) -> None:
         bb = main_fn.append_basic_block("entry")
         builder = ir.IRBuilder(bb)
         result = builder.call(target_fn, [])
-        builder.ret(result)
+        builder.ret(_resize_int(builder, result, I32))
         return
 
-    # Entry has params (all i32 today): emit argv-parsing wrapper.
-    atoi = _get_or_declare_atoi(module)
+    atoll = _get_or_declare_atoll(module)
     abort = _get_or_declare_abort(module)
     n = len(fn.params)
 
@@ -598,17 +619,28 @@ def _emit_main_wrapper(module: ir.Module, program: Program, entry: str) -> None:
 
     builder.position_at_end(parse_bb)
     parsed_args = []
-    i64 = ir.IntType(64)
-    for i in range(n):
+    for i, p in enumerate(fn.params):
         # argv[i+1]: GEP on i8** then load to get i8*
-        idx = ir.Constant(i64, i + 1)
+        idx = ir.Constant(I64, i + 1)
         arg_slot = builder.gep(argv, [idx])         # i8**
         arg_ptr = builder.load(arg_slot)            # i8*
-        parsed = builder.call(atoi, [arg_ptr])      # i32
-        parsed_args.append(parsed)
+        parsed_i64 = builder.call(atoll, [arg_ptr]) # i64
+        target_ty = _type_to_llvm(p.type)
+        parsed_args.append(_resize_int(builder, parsed_i64, target_ty))
 
     result = builder.call(target_fn, parsed_args)
-    builder.ret(result)
+    builder.ret(_resize_int(builder, result, I32))
+
+
+def _resize_int(builder: ir.IRBuilder, val: ir.Value, target_ty: ir.IntType) -> ir.Value:
+    """Sign-extend, truncate, or no-op a value to match `target_ty`."""
+    src_w = val.type.width
+    dst_w = target_ty.width
+    if src_w == dst_w:
+        return val
+    if src_w < dst_w:
+        return builder.sext(val, target_ty)
+    return builder.trunc(val, target_ty)
 
 
 # ---------- Backend pipeline ----------

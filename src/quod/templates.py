@@ -7,8 +7,10 @@ from quod.model import (
     ExternFunction,
     Function,
     I8PtrType,
+    I32Type,
     If,
     IntLit,
+    Param,
     ParamRef,
     Program,
     ReturnExpr,
@@ -18,12 +20,16 @@ from quod.model import (
 )
 
 
+_I32 = I32Type()
+
+
 HELLO_WORLD = Program(
     constants=(StringConstant(name=".str.greeting", value="hello, world"),),
     externs=(ExternFunction(name="puts", param_types=(I8PtrType(),)),),
     functions=(
         Function(
             name="main",
+            return_type=_I32,
             body=(
                 ExprStmt(value=Call(function="puts", args=(StringRef(name=".str.greeting"),))),
                 ReturnInt(value=0),
@@ -40,17 +46,22 @@ GUARDED_INC = Program(
     functions=(
         Function(
             name="f",
-            params=("x",),
+            params=(Param(name="x", type=_I32),),
+            return_type=_I32,
             body=(
                 If(
-                    cond=BinOp(op="slt", lhs=ParamRef(name="x"), rhs=IntLit(value=0)),
-                    then_body=(ReturnExpr(value=IntLit(value=-1)),),
+                    cond=BinOp(
+                        op="slt",
+                        lhs=ParamRef(name="x"),
+                        rhs=IntLit(type=_I32, value=0),
+                    ),
+                    then_body=(ReturnExpr(value=IntLit(type=_I32, value=-1)),),
                     else_body=(
                         ReturnExpr(
                             value=BinOp(
                                 op="add",
                                 lhs=ParamRef(name="x"),
-                                rhs=IntLit(value=1),
+                                rhs=IntLit(type=_I32, value=1),
                             ),
                         ),
                     ),

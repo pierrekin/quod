@@ -4,7 +4,12 @@
     {
       "name": "helper",
       "params": [
-        "x"
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
       ],
       "body": [
         {
@@ -18,11 +23,17 @@
             },
             "rhs": {
               "kind": "llvm.const_int",
-              "value": 1
+              "value": 1,
+              "type": {
+                "kind": "llvm.i32"
+              }
             }
           }
         }
-      ]
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
     },
     {
       "name": "main",
@@ -39,7 +50,10 @@
               "args": [
                 {
                   "kind": "llvm.const_int",
-                  "value": 5
+                  "value": 5,
+                  "type": {
+                    "kind": "llvm.i32"
+                  }
                 }
               ]
             },
@@ -49,13 +63,19 @@
               "args": [
                 {
                   "kind": "llvm.const_int",
-                  "value": 10
+                  "value": 10,
+                  "type": {
+                    "kind": "llvm.i32"
+                  }
                 }
               ]
             }
           }
         }
-      ]
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
     }
   ]
 }

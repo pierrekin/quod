@@ -78,6 +78,7 @@ The `program.json` itself:
         {
             "name": "main",
             "params": [],
+            "return_type": {"kind": "llvm.i32"},
             "body": [
                 {
                     "kind": "quod.expr_stmt",
@@ -99,8 +100,10 @@ The `program.json` itself:
 ```
 
 That's the whole language: a `Program` with `constants`, `externs`, and
-`functions`. Each function has `params`, a `body` (list of statements),
-and `claims`. Every node has a `kind` discriminator.
+`functions`. Each function declares typed `params` (each a `{name, type}`
+node) and a `return_type` chosen from `llvm.i1` / `i8` / `i16` / `i32` /
+`i64`. The `body` is a list of statements; `claims` are optional. Every
+node has a `kind` discriminator.
 
 ## 2. Inspect
 

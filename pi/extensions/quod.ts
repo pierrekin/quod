@@ -134,7 +134,7 @@ export default function (pi: ExtensionAPI): void {
     name: "quod_run",
     label: "Build and run",
     description:
-      "Build the project and execute one of its [[bin]] entries. Captures stdout, stderr, and exit code. If the entry function declares i32 params, pass them via `program_args`; the synthesized main wrapper parses each via atoi.",
+      "Build the project and execute one of its [[bin]] entries. Captures stdout, stderr, and exit code. If the entry function declares int params, pass them via `program_args`; the synthesized main wrapper parses each via atoll then trunc/sext's to the param's width.",
     parameters: Type.Object({
       ...cwdField,
       bin: Type.Optional(
@@ -146,7 +146,7 @@ export default function (pi: ExtensionAPI): void {
       program_args: Type.Optional(
         Type.Array(Type.String(), {
           description:
-            "Args forwarded to the spawned binary as argv. For an entry with N i32 params, pass N integer-shaped strings (atoi-parsed at the wrapper).",
+            "Args forwarded to the spawned binary as argv. For an entry with N int params, pass N integer-shaped strings (atoll-parsed at the wrapper, then trunc/sext'd to each param's width).",
         }),
       ),
     }),
@@ -607,9 +607,9 @@ export default function (pi: ExtensionAPI): void {
         }),
       ),
       param_types: Type.Optional(
-        Type.Array(StringEnum(["i32", "i8_ptr"] as const)),
+        Type.Array(StringEnum(["i1", "i8", "i16", "i32", "i64", "i8_ptr"] as const)),
       ),
-      return_type: Type.Optional(StringEnum(["i32", "i8_ptr"] as const)),
+      return_type: Type.Optional(StringEnum(["i1", "i8", "i16", "i32", "i64", "i8_ptr"] as const)),
       varargs: Type.Optional(Type.Boolean()),
     }),
     async execute(_id, p, signal) {

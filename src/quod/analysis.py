@@ -41,8 +41,8 @@ _ANALYSIS_NAME = "literal_range_propagation"
 def derive_lattice_claims(program: Program) -> dict[str, tuple[Claim, ...]]:
     """Return derived (regime=lattice) claims keyed by function name."""
     # arg_buckets[fn_name][param_index]: list of (literal_value, source_call_hash),
-    # or None once poisoned by a non-literal arg.
-    defined = {fn.name for fn in program.functions}
+    # or None once poisoned by a non-literal arg or a type-mismatching literal.
+    defined_fns = {fn.name: fn for fn in program.functions}
     arg_buckets: dict[str, list[list[tuple[int, str]] | None]] = {
         fn.name: [[] for _ in fn.params] for fn in program.functions
     }
@@ -50,23 +50,27 @@ def derive_lattice_claims(program: Program) -> dict[str, tuple[Claim, ...]]:
     for caller in program.functions:
         for stmt in caller.body:
             for call in _walk_calls_in_stmt(stmt):
-                if call.function not in defined:
+                callee = defined_fns.get(call.function)
+                if callee is None:
                     continue  # extern or dangling; lower-time error
-                buckets = arg_buckets[call.function]
+                buckets = arg_buckets[callee.name]
                 call_h = node_hash(call)
                 for i, arg in enumerate(call.args):
                     if i >= len(buckets) or buckets[i] is None:
                         continue
-                    if isinstance(arg, IntLit):
+                    # Only literals of the matching param type contribute. A
+                    # type-mismatching call would fail to lower anyway, but
+                    # poisoning here keeps the derived bound honest.
+                    if isinstance(arg, IntLit) and arg.type == callee.params[i].type:
                         buckets[i].append((arg.value, call_h))
                     else:
-                        buckets[i] = None  # poison: non-literal arg
+                        buckets[i] = None
 
     result: dict[str, tuple[Claim, ...]] = {}
     for fn in program.functions:
         derived: list[Claim] = []
         buckets = arg_buckets[fn.name]
-        for i, p_name in enumerate(fn.params):
+        for i, p in enumerate(fn.params):
             entries = buckets[i]
             if entries is None or not entries:
                 continue
@@ -75,7 +79,7 @@ def derive_lattice_claims(program: Program) -> dict[str, tuple[Claim, ...]]:
             lo, hi = min(literals), max(literals)
             derived.append(IntRangeClaim(
                 regime="lattice",
-                param=p_name,
+                param=p.name,
                 min=lo,
                 max=hi,
                 justification=DerivedJustification(

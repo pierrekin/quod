@@ -32,8 +32,12 @@ from quod.model import (
     ExternFunction,
     For,
     Function,
+    I1Type,
     I8PtrType,
+    I8Type,
+    I16Type,
     I32Type,
+    I64Type,
     If,
     IntLit,
     IntRangeClaim,
@@ -41,6 +45,7 @@ from quod.model import (
     LocalRef,
     ManualJustification,
     NonNegativeClaim,
+    Param,
     ParamRef,
     ReturnExpr,
     ReturnInRangeClaim,
@@ -61,6 +66,7 @@ _ALIASES = [
     (lambda: model.Expr, "Expr"),
     (lambda: model.Statement, "Statement"),
     (lambda: model.Type, "Type"),
+    (lambda: model.IntType, "IntType"),
     (lambda: model.Justification, "Justification"),
     (lambda: model.Claim, "Claim"),
 ]
@@ -105,8 +111,8 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     # ---------- expression ----------
     "llvm.const_int": {
         "class": IntLit,
-        "summary": "Literal i32 integer.",
-        "example": {"kind": "llvm.const_int", "value": 42},
+        "summary": "Literal integer of an explicit width. The `type` field decides which iN constant is emitted.",
+        "example": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42},
     },
     "llvm.param_ref": {
         "class": ParamRef,
@@ -121,19 +127,19 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     },
     "llvm.binop": {
         "class": BinOp,
-        "summary": "Binary operation. The op determines the result type.",
+        "summary": "Binary operation. Operands must agree in type; the op determines the result type.",
         "field_descriptions": {
             "op": (
-                "one of: add, sub, mul, srem (i32→i32); "
-                "slt, sle, sgt, sge, eq, ne (signed cmp, i32→i1); "
-                "ult, ule, ugt, uge (unsigned cmp, i32→i1); "
-                "or, and (i1→i1, eager). Use quod.sc_or/sc_and for short-circuit."
+                "one of: add, sub, mul, srem (iN→iN); "
+                "slt, sle, sgt, sge, eq, ne (signed cmp, iN→i1); "
+                "ult, ule, ugt, uge (unsigned cmp, iN→i1); "
+                "or, and (iN→iN, bitwise). Use quod.sc_or/sc_and for short-circuit booleans."
             ),
         },
         "example": {
             "kind": "llvm.binop", "op": "add",
-            "lhs": {"kind": "llvm.const_int", "value": 1},
-            "rhs": {"kind": "llvm.const_int", "value": 2},
+            "lhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 2},
         },
         "see_also": ["quod.sc_or", "quod.sc_and"],
     },
@@ -144,10 +150,10 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "kind": "quod.sc_or",
             "lhs": {"kind": "llvm.binop", "op": "slt",
                     "lhs": {"kind": "llvm.param_ref", "name": "x"},
-                    "rhs": {"kind": "llvm.const_int", "value": 0}},
+                    "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}},
             "rhs": {"kind": "llvm.binop", "op": "sgt",
                     "lhs": {"kind": "llvm.param_ref", "name": "x"},
-                    "rhs": {"kind": "llvm.const_int", "value": 100}},
+                    "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 100}},
         },
         "see_also": ["llvm.binop", "quod.sc_and"],
     },
@@ -158,10 +164,10 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "kind": "quod.sc_and",
             "lhs": {"kind": "llvm.binop", "op": "sge",
                     "lhs": {"kind": "llvm.param_ref", "name": "x"},
-                    "rhs": {"kind": "llvm.const_int", "value": 0}},
+                    "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}},
             "rhs": {"kind": "llvm.binop", "op": "slt",
                     "lhs": {"kind": "llvm.param_ref", "name": "x"},
-                    "rhs": {"kind": "llvm.const_int", "value": 100}},
+                    "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 100}},
         },
         "see_also": ["llvm.binop", "quod.sc_or"],
     },
@@ -184,18 +190,18 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     # ---------- statement ----------
     "quod.return_int": {
         "class": ReturnInt,
-        "summary": "Return a constant integer. Shorthand for `return_expr` with a const_int value.",
+        "summary": "Return a constant integer. Shorthand for `return_expr` with a const_int value; the constant takes the function's declared return_type.",
         "example": {"kind": "quod.return_int", "value": 0},
         "see_also": ["quod.return_expr"],
     },
     "quod.return_expr": {
         "class": ReturnExpr,
-        "summary": "Return the value of an expression.",
+        "summary": "Return the value of an expression. The expression's type must match the function's return_type.",
         "example": {
             "kind": "quod.return_expr",
             "value": {"kind": "llvm.binop", "op": "add",
                       "lhs": {"kind": "llvm.param_ref", "name": "x"},
-                      "rhs": {"kind": "llvm.const_int", "value": 1}},
+                      "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}},
         },
     },
     "quod.if": {
@@ -205,29 +211,29 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "kind": "quod.if",
             "cond": {"kind": "llvm.binop", "op": "slt",
                      "lhs": {"kind": "llvm.param_ref", "name": "x"},
-                     "rhs": {"kind": "llvm.const_int", "value": 0}},
+                     "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}},
             "then_body": [{"kind": "quod.return_int", "value": -1}],
             "else_body": [{"kind": "quod.return_int", "value": 1}],
         },
     },
     "quod.let": {
         "class": Let,
-        "summary": "Introduce a mutable local. Lowered to alloca-at-entry + store. Field is `init`, NOT `value`.",
+        "summary": "Introduce a mutable local. Lowered to alloca-at-entry + store. Field is `init`, NOT `value`. The init's type must match `type`.",
         "example": {
             "kind": "quod.let", "name": "sum",
             "type": {"kind": "llvm.i32"},
-            "init": {"kind": "llvm.const_int", "value": 0},
+            "init": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0},
         },
         "see_also": ["quod.assign", "quod.local_ref"],
     },
     "quod.assign": {
         "class": Assign,
-        "summary": "Mutate an existing local. The local must have been declared by quod.let or be a quod.for loop var.",
+        "summary": "Mutate an existing local. The local must have been declared by quod.let or be a quod.for loop var. The value's type must match the local's declared type.",
         "example": {
             "kind": "quod.assign", "name": "sum",
             "value": {"kind": "llvm.binop", "op": "add",
                       "lhs": {"kind": "quod.local_ref", "name": "sum"},
-                      "rhs": {"kind": "llvm.const_int", "value": 1}},
+                      "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}},
         },
         "see_also": ["quod.let", "quod.local_ref"],
     },
@@ -238,21 +244,21 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "kind": "quod.while",
             "cond": {"kind": "llvm.binop", "op": "slt",
                      "lhs": {"kind": "quod.local_ref", "name": "i"},
-                     "rhs": {"kind": "llvm.const_int", "value": 10}},
+                     "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 10}},
             "body": [{"kind": "quod.assign", "name": "i",
                       "value": {"kind": "llvm.binop", "op": "add",
                                 "lhs": {"kind": "quod.local_ref", "name": "i"},
-                                "rhs": {"kind": "llvm.const_int", "value": 1}}}],
+                                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}}],
         },
         "see_also": ["quod.for"],
     },
     "quod.for": {
         "class": For,
-        "summary": "Bounded iteration: var runs from lo (inclusive) to hi (exclusive). Bounds evaluated once (snapshot).",
+        "summary": "Bounded iteration: var (of type `type`) runs from lo (inclusive) to hi (exclusive). lo/hi must match `type`. Bounds evaluated once (snapshot).",
         "example": {
-            "kind": "quod.for", "var": "i",
-            "lo": {"kind": "llvm.const_int", "value": 0},
-            "hi": {"kind": "llvm.const_int", "value": 10},
+            "kind": "quod.for", "var": "i", "type": {"kind": "llvm.i32"},
+            "lo": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0},
+            "hi": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 10},
             "body": [{"kind": "quod.expr_stmt",
                       "value": {"kind": "llvm.call", "function": "putchar",
                                 "args": [{"kind": "quod.local_ref", "name": "i"}]}}],
@@ -270,10 +276,30 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     },
 
     # ---------- type ----------
+    "llvm.i1": {
+        "class": I1Type,
+        "summary": "1-bit integer. Boolean values: cmp results, short-circuit results, explicit booleans.",
+        "example": {"kind": "llvm.i1"},
+    },
+    "llvm.i8": {
+        "class": I8Type,
+        "summary": "8-bit integer. Byte-sized values; commonly used with truncation from wider widths.",
+        "example": {"kind": "llvm.i8"},
+    },
+    "llvm.i16": {
+        "class": I16Type,
+        "summary": "16-bit integer.",
+        "example": {"kind": "llvm.i16"},
+    },
     "llvm.i32": {
         "class": I32Type,
-        "summary": "32-bit signed integer. The default type for params, locals, and returns.",
+        "summary": "32-bit integer. The conventional 'int' for most quod programs.",
         "example": {"kind": "llvm.i32"},
+    },
+    "llvm.i64": {
+        "class": I64Type,
+        "summary": "64-bit integer. Wide values; the type the argv wrapper parses argv slots into.",
+        "example": {"kind": "llvm.i64"},
     },
     "llvm.i8_ptr": {
         "class": I8PtrType,
@@ -333,11 +359,17 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     },
     "Function": {
         "class": Function,
-        "summary": "A user function. params are i32 names; body is a list of statements; claims optional. Entry-point functions may declare params; the synthesized main wrapper parses each argv slot via atoi (so `quod run -- 42 7` calls entry(42, 7)). An entry called 'main' must be nullary — rename it if you want params.",
+        "summary": "A user function. params is a list of typed Params; return_type is required; body is a list of statements; claims optional. Entry-point functions may declare params; the synthesized main wrapper parses each argv slot via atoll then trunc/sext's to the param's type (so `quod run -- 42 7` calls entry(42, 7)). An entry called 'main' must be nullary — rename it if you want params.",
         "example": {
             "name": "main", "params": [],
+            "return_type": {"kind": "llvm.i32"},
             "body": [{"kind": "quod.return_int", "value": 0}],
         },
+    },
+    "Param": {
+        "class": Param,
+        "summary": "A typed function parameter. `type` is one of the IntType members (i1, i8, i16, i32, i64). Pointer params are not supported on user functions — use ExternFunction for those.",
+        "example": {"name": "x", "type": {"kind": "llvm.i32"}},
     },
 }
 
@@ -351,10 +383,10 @@ _CATEGORIES: dict[str, list[str]] = {
         "quod.return_int", "quod.return_expr", "quod.if",
         "quod.let", "quod.assign", "quod.while", "quod.for", "quod.expr_stmt",
     ],
-    "type": ["llvm.i32", "llvm.i8_ptr"],
+    "type": ["llvm.i1", "llvm.i8", "llvm.i16", "llvm.i32", "llvm.i64", "llvm.i8_ptr"],
     "claim": ["non_negative", "int_range", "return_in_range"],
     "justification": ["z3", "manual", "derived"],
-    "program": ["StringConstant", "ExternFunction", "Function"],
+    "program": ["StringConstant", "ExternFunction", "Function", "Param"],
 }
 
 

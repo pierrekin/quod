@@ -33,7 +33,10 @@
             ]
           }
         }
-      ]
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
     }
   ]
 }

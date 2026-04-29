@@ -28,7 +28,10 @@
           "value": 0
         }
       ],
-      "claims": []
+      "claims": [],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
     }
   ],
   "externs": [

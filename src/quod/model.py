@@ -33,6 +33,7 @@ class StringConstant(_Node):
 
 class IntLit(_Node):
     kind: Literal["llvm.const_int"] = "llvm.const_int"
+    type: "IntType"
     value: int
 
 
@@ -44,17 +45,18 @@ class ParamRef(_Node):
 class BinOp(_Node):
     """Binary operation. The operator determines the result type:
 
-      arith    — add, sub, mul, srem               : i32 in / i32 out
-      cmp (s)  — slt, sle, sgt, sge, eq, ne        : i32 in / i1 out (signed)
-      cmp (u)  — ult, ule, ugt, uge                : i32 in / i1 out (unsigned)
-      logical  — or, and                           : i1 in / i1 out (eager)
+      arith    — add, sub, mul, srem               : iN in / iN out (operands agree)
+      cmp (s)  — slt, sle, sgt, sge, eq, ne        : iN in / i1 out (signed)
+      cmp (u)  — ult, ule, ugt, uge                : iN in / i1 out (unsigned)
+      bitwise  — or, and                           : iN in / iN out (operands agree)
 
-    The signed/unsigned distinction matches LLVM IR icmp predicates. quod's
-    int type is i32 (signed) so signed comparisons are the common case;
-    unsigned ones exist for low-level needs (pointer-as-int, bit hacks).
+    Operands of arith/bitwise/cmp must have the same type; LLVM's verifier
+    enforces this at lower time. The signed/unsigned distinction matches
+    LLVM IR icmp predicates — signedness lives on the op, not the type.
 
     For short-circuit boolean combinators (correct in the presence of
-    side-effecting operands), use `ShortCircuitOr` / `ShortCircuitAnd`.
+    side-effecting operands), use `ShortCircuitOr` / `ShortCircuitAnd` —
+    those are i1-only and synthesise branches.
     """
     kind: Literal["llvm.binop"] = "llvm.binop"
     op: Literal[
@@ -117,17 +119,66 @@ Expr = Annotated[
 ]
 
 
-# ---------- Types (referenced from Let; full union defined below) ----------
+# ---------- Types ----------
+#
+# Width-per-class follows LLVM's "type carries no signedness" convention —
+# signedness lives on the operation (e.g. BinOp.slt vs ult). i1 is a
+# first-class type used for boolean values (cmp results, short-circuits,
+# explicit booleans).
+
+class I1Type(_Node):
+    kind: Literal["llvm.i1"] = "llvm.i1"
+
+
+class I8Type(_Node):
+    kind: Literal["llvm.i8"] = "llvm.i8"
+
+
+class I16Type(_Node):
+    kind: Literal["llvm.i16"] = "llvm.i16"
+
 
 class I32Type(_Node):
     kind: Literal["llvm.i32"] = "llvm.i32"
+
+
+class I64Type(_Node):
+    kind: Literal["llvm.i64"] = "llvm.i64"
 
 
 class I8PtrType(_Node):
     kind: Literal["llvm.i8_ptr"] = "llvm.i8_ptr"
 
 
-Type = Annotated[Union[I32Type, I8PtrType], Field(discriminator="kind")]
+# Integer-only sub-union: usable wherever a pointer would be nonsense
+# (IntLit, function params/return, For loop var, claim-bearing locals).
+IntType = Annotated[
+    Union[I1Type, I8Type, I16Type, I32Type, I64Type],
+    Field(discriminator="kind"),
+]
+
+# Full type union, including pointer types — only meaningful for ExternFunction
+# signatures and Let bindings that hold non-int values.
+Type = Annotated[
+    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType],
+    Field(discriminator="kind"),
+]
+
+
+def int_type_width(t: "IntType") -> int:
+    """Bit width of an int type."""
+    match t:
+        case I1Type():
+            return 1
+        case I8Type():
+            return 8
+        case I16Type():
+            return 16
+        case I32Type():
+            return 32
+        case I64Type():
+            return 64
+    raise ValueError(f"not an int type: {t!r}")
 
 
 # ---------- Statements ----------
@@ -181,9 +232,11 @@ class For(_Node):
     """Bounded iteration: `var` runs from `lo` (inclusive) to `hi` (exclusive),
     incrementing by 1 each iteration. `lo` and `hi` are evaluated once before
     the loop (snapshot semantics, not C-style re-evaluation). `var` is a local
-    scoped to `body` only."""
+    of type `type`, scoped to `body` only. `lo` and `hi` must produce values
+    of the same type as `var`."""
     kind: Literal["quod.for"] = "quod.for"
     var: str
+    type: IntType
     lo: Expr
     hi: Expr
     body: tuple["Statement", ...]
@@ -380,9 +433,17 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
 
 # ---------- Top-level ----------
 
+class Param(_Node):
+    """A typed function parameter. Pointer params are out of scope for user
+    functions; use `ExternFunction.param_types` for those."""
+    name: str
+    type: IntType
+
+
 class Function(_Node):
     name: str
-    params: tuple[str, ...] = ()      # all i32 in this round
+    params: tuple[Param, ...] = ()
+    return_type: IntType
     body: tuple[Statement, ...]
     claims: tuple[Claim, ...] = ()
     notes: tuple[str, ...] = ()       # free-form developer/agent intent
@@ -393,6 +454,12 @@ class Function(_Node):
         if not self.notes:
             data.pop("notes", None)
         return data
+
+    def param(self, name: str) -> Param | None:
+        for p in self.params:
+            if p.name == name:
+                return p
+        return None
 
 
 class ExternFunction(_Node):
@@ -536,7 +603,7 @@ def remove_function(program: Program, function_name: str) -> Program:
 def add_claim(program: Program, function: str, claim: Claim) -> Program:
     fn = require_function(program, function)
     target = claim_param(claim)
-    if target is not None and target not in fn.params:
+    if target is not None and fn.param(target) is None:
         raise KeyError(f"function {function!r} has no parameter {target!r}")
     for existing in fn.claims:
         if existing.kind == claim.kind and claim_param(existing) == target:
@@ -600,8 +667,8 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
 
 
 def format_function(fn: Function, *, label: NodeLabel = _NO_LABEL) -> str:
-    sig_params = ", ".join(f"{p}: i32" for p in fn.params)
-    header = f"{label(fn)}{fn.name}({sig_params}) -> i32"
+    sig_params = ", ".join(f"{p.name}: {_format_type(p.type)}" for p in fn.params)
+    header = f"{label(fn)}{fn.name}({sig_params}) -> {_format_type(fn.return_type)}"
     if fn.claims:
         header += "  [claims: " + ", ".join(format_claim(c) for c in fn.claims) + "]"
     lines: list[str] = []
@@ -616,8 +683,16 @@ def format_function(fn: Function, *, label: NodeLabel = _NO_LABEL) -> str:
 
 def _format_type(t) -> str:
     match t:
+        case I1Type():
+            return "i1"
+        case I8Type():
+            return "i8"
+        case I16Type():
+            return "i16"
         case I32Type():
             return "i32"
+        case I64Type():
+            return "i64"
         case I8PtrType():
             return "i8*"
     raise ValueError(f"unhandled type: {t!r}")
@@ -685,10 +760,11 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
         case While(cond=cond, body=body):
             body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body)
             return f"{pad}{prefix}while ({_format_expr(cond)}) {{\n{body_lines}\n{pad}}}"
-        case For(var=var, lo=lo, hi=hi, body=body):
+        case For(var=var, type=ty, lo=lo, hi=hi, body=body):
             body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body)
             return (
-                f"{pad}{prefix}for {var} in {_format_expr(lo)}..{_format_expr(hi)} {{\n"
+                f"{pad}{prefix}for {var}: {_format_type(ty)} in "
+                f"{_format_expr(lo)}..{_format_expr(hi)} {{\n"
                 f"{body_lines}\n{pad}}}"
             )
         case ExprStmt(value=v):
