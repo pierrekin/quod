@@ -60,6 +60,15 @@ I32_MIN = -2**31
 I32_MAX = 2**31 - 1
 
 
+# Map quod.BinOp.op -> SMT-LIB operator. `ne` is special-cased (distinct).
+# Unsigned comparisons (ult/ule/ugt/uge) are intentionally absent: QF_LIA's
+# Int sort is signed, so unsigned semantics don't translate cleanly.
+_SMT_BINOP = {
+    "add": "+", "sub": "-", "mul": "*",
+    "slt": "<", "sle": "<=", "sgt": ">", "sge": ">=", "eq": "=",
+}
+
+
 # ---------- Body → SMT ----------
 
 @dataclass
@@ -99,19 +108,14 @@ def _expr_to_smt(expr, state: _SmtState) -> str:
                 "can't lower short-circuit Or/And for SMT in this round; "
                 "rewrite as nested If if you need a proof"
             )
-        case BinOp(op="add", lhs=l, rhs=r):
-            return f"(+ {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
-        case BinOp(op="sub", lhs=l, rhs=r):
-            return f"(- {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
-        case BinOp(op="mul", lhs=l, rhs=r):
-            return f"(* {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
-        case BinOp(op="slt", lhs=l, rhs=r):
-            return f"(< {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
-        case BinOp(op="eq", lhs=l, rhs=r):
-            return f"(= {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
+        case BinOp(op=op, lhs=l, rhs=r) if op in _SMT_BINOP:
+            return f"({_SMT_BINOP[op]} {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
+        case BinOp(op="ne", lhs=l, rhs=r):
+            return f"(distinct {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
         case BinOp(op=op):
-            # srem, or, and: skipped for SMT — semantic mismatch with QF_LIA
-            # (srem ≠ SMT mod) or boolean-vs-integer ambiguity (or/and).
+            # srem, or, and, ult/ule/ugt/uge: skipped for SMT — semantic
+            # mismatch with QF_LIA (srem ≠ SMT mod, signed-vs-unsigned, or
+            # boolean-vs-integer ambiguity for or/and).
             raise NotImplementedError(
                 f"can't lower BinOp(op={op!r}) for SMT in this round"
             )

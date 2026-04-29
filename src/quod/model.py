@@ -44,15 +44,25 @@ class ParamRef(_Node):
 class BinOp(_Node):
     """Binary operation. The operator determines the result type:
 
-      arith   — add, sub, mul, srem  : i32 in / i32 out
-      cmp     — slt, eq              : i32 in / i1 out (signed-less-than, equal)
-      logical — or, and              : i1 in / i1 out (eager, no short-circuit)
+      arith    — add, sub, mul, srem               : i32 in / i32 out
+      cmp (s)  — slt, sle, sgt, sge, eq, ne        : i32 in / i1 out (signed)
+      cmp (u)  — ult, ule, ugt, uge                : i32 in / i1 out (unsigned)
+      logical  — or, and                           : i1 in / i1 out (eager)
+
+    The signed/unsigned distinction matches LLVM IR icmp predicates. quod's
+    int type is i32 (signed) so signed comparisons are the common case;
+    unsigned ones exist for low-level needs (pointer-as-int, bit hacks).
 
     For short-circuit boolean combinators (correct in the presence of
     side-effecting operands), use `ShortCircuitOr` / `ShortCircuitAnd`.
     """
     kind: Literal["llvm.binop"] = "llvm.binop"
-    op: Literal["add", "sub", "mul", "srem", "slt", "eq", "or", "and"]
+    op: Literal[
+        "add", "sub", "mul", "srem",
+        "slt", "sle", "sgt", "sge", "eq", "ne",
+        "ult", "ule", "ugt", "uge",
+        "or", "and",
+    ]
     lhs: "Expr"
     rhs: "Expr"
 
@@ -666,7 +676,8 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
 
 _BINOP_SYMBOL = {
     "add": "+", "sub": "-", "mul": "*", "srem": "%",
-    "slt": "<", "eq": "==",
+    "slt": "<", "sle": "<=", "sgt": ">", "sge": ">=", "eq": "==", "ne": "!=",
+    "ult": "<u", "ule": "<=u", "ugt": ">u", "uge": ">=u",
     "or": "|", "and": "&",
 }
 

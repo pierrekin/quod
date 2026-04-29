@@ -102,7 +102,13 @@ def _emit_for_enforcement(builder: ir.IRBuilder, cond: ir.Value, enforcement: st
 
 
 # Map quod.BinOp.op -> the icmp predicate (cmp ops only).
-_ICMP_OPS = {"slt": "<", "eq": "=="}
+_ICMP_SIGNED = {
+    "slt": "<", "sle": "<=", "sgt": ">", "sge": ">=",
+    "eq": "==", "ne": "!=",
+}
+_ICMP_UNSIGNED = {
+    "ult": "<", "ule": "<=", "ugt": ">", "uge": ">=",
+}
 
 
 def _lower_expr(
@@ -133,10 +139,10 @@ def _lower_expr(
             return builder.mul(go(l), go(r))
         case BinOp(op="srem", lhs=l, rhs=r):
             return builder.srem(go(l), go(r))
-        case BinOp(op="slt", lhs=l, rhs=r):
-            return builder.icmp_signed("<", go(l), go(r))
-        case BinOp(op="eq", lhs=l, rhs=r):
-            return builder.icmp_signed("==", go(l), go(r))
+        case BinOp(op=op, lhs=l, rhs=r) if op in _ICMP_SIGNED:
+            return builder.icmp_signed(_ICMP_SIGNED[op], go(l), go(r))
+        case BinOp(op=op, lhs=l, rhs=r) if op in _ICMP_UNSIGNED:
+            return builder.icmp_unsigned(_ICMP_UNSIGNED[op], go(l), go(r))
         case BinOp(op="or", lhs=l, rhs=r):
             return builder.or_(go(l), go(r))
         case BinOp(op="and", lhs=l, rhs=r):
