@@ -11,15 +11,34 @@
       "params": [],
       "body": [
         {
-          "kind": "call_puts",
-          "target": ".str.greeting"
+          "kind": "cpg.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "puts",
+            "args": [
+              {
+                "kind": "cpg.string_ref",
+                "name": ".str.greeting"
+              }
+            ]
+          }
         },
         {
-          "kind": "return_int",
+          "kind": "cpg.return_int",
           "value": 0
         }
       ],
       "claims": []
+    }
+  ],
+  "externs": [
+    {
+      "name": "puts",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ]
     }
   ]
 }

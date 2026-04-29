@@ -3,15 +3,23 @@
   "functions": [
     {
       "name": "helper",
-      "params": ["x"],
+      "params": [
+        "x"
+      ],
       "body": [
         {
-          "kind": "return_expr",
+          "kind": "cpg.return_expr",
           "value": {
-            "kind": "binop",
+            "kind": "llvm.binop",
             "op": "add",
-            "lhs": {"kind": "param_ref", "name": "x"},
-            "rhs": {"kind": "int_lit", "value": 1}
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "value": 1
+            }
           }
         }
       ]
@@ -21,12 +29,30 @@
       "params": [],
       "body": [
         {
-          "kind": "return_expr",
+          "kind": "cpg.return_expr",
           "value": {
-            "kind": "binop",
+            "kind": "llvm.binop",
             "op": "add",
-            "lhs": {"kind": "call", "function": "helper", "args": [{"kind": "int_lit", "value": 5}]},
-            "rhs": {"kind": "call", "function": "helper", "args": [{"kind": "int_lit", "value": 10}]}
+            "lhs": {
+              "kind": "llvm.call",
+              "function": "helper",
+              "args": [
+                {
+                  "kind": "llvm.const_int",
+                  "value": 5
+                }
+              ]
+            },
+            "rhs": {
+              "kind": "llvm.call",
+              "function": "helper",
+              "args": [
+                {
+                  "kind": "llvm.const_int",
+                  "value": 10
+                }
+              ]
+            }
           }
         }
       ]

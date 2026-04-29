@@ -3,6 +3,10 @@
 Two-pass over functions: first declare every user function (so user-level
 calls in expressions resolve regardless of definition order), then lower
 each function body.
+
+Locals are alloca'd at the function's entry block (the canonical mem2reg
+shape). Loops, ExprStmt, short-circuit booleans, and fall-through Ifs
+each get their own basic-block layout.
 """
 
 from __future__ import annotations
@@ -16,23 +20,30 @@ from llvmlite import ir
 
 from cpg.analysis import derive_lattice_claims, elaborate
 from cpg.model import (
+    Assign,
     BinOp,
     Call,
-    CallPuts,
+    ExprStmt,
     ExternFunction,
+    For,
     Function,
     I32Type,
     I8PtrType,
     If,
     IntLit,
     IntRangeClaim,
+    Let,
+    LocalRef,
     NonNegativeClaim,
     ParamRef,
     Program,
     ReturnExpr,
     ReturnInRangeClaim,
     ReturnInt,
+    ShortCircuitAnd,
+    ShortCircuitOr,
     StringRef,
+    While,
 )
 
 
@@ -90,25 +101,50 @@ def _emit_for_enforcement(builder: ir.IRBuilder, cond: ir.Value, enforcement: st
     raise ValueError(f"unknown enforcement: {enforcement!r}")
 
 
+# Map cpg.BinOp.op -> the icmp predicate (cmp ops only).
+_ICMP_OPS = {"slt": "<", "eq": "=="}
+
+
 def _lower_expr(
     builder: ir.IRBuilder, expr, params: dict[str, ir.Value], module: ir.Module,
     *, constants: dict[str, ir.GlobalVariable], extern_sigs: dict[str, ExternFunction],
+    locals_: dict[str, ir.AllocaInstr],
 ) -> ir.Value:
+    def go(e):
+        return _lower_expr(
+            builder, e, params, module,
+            constants=constants, extern_sigs=extern_sigs, locals_=locals_,
+        )
+
     match expr:
         case IntLit(value=v):
             return ir.Constant(I32, v)
         case ParamRef(name=n):
             return params[n]
+        case LocalRef(name=n):
+            if n not in locals_:
+                raise ValueError(f"reference to undeclared local {n!r}")
+            return builder.load(locals_[n])
         case BinOp(op="add", lhs=l, rhs=r):
-            return builder.add(
-                _lower_expr(builder, l, params, module, constants=constants, extern_sigs=extern_sigs),
-                _lower_expr(builder, r, params, module, constants=constants, extern_sigs=extern_sigs),
-            )
+            return builder.add(go(l), go(r))
+        case BinOp(op="sub", lhs=l, rhs=r):
+            return builder.sub(go(l), go(r))
+        case BinOp(op="mul", lhs=l, rhs=r):
+            return builder.mul(go(l), go(r))
+        case BinOp(op="srem", lhs=l, rhs=r):
+            return builder.srem(go(l), go(r))
         case BinOp(op="slt", lhs=l, rhs=r):
-            return builder.icmp_signed("<",
-                _lower_expr(builder, l, params, module, constants=constants, extern_sigs=extern_sigs),
-                _lower_expr(builder, r, params, module, constants=constants, extern_sigs=extern_sigs),
-            )
+            return builder.icmp_signed("<", go(l), go(r))
+        case BinOp(op="eq", lhs=l, rhs=r):
+            return builder.icmp_signed("==", go(l), go(r))
+        case BinOp(op="or", lhs=l, rhs=r):
+            return builder.or_(go(l), go(r))
+        case BinOp(op="and", lhs=l, rhs=r):
+            return builder.and_(go(l), go(r))
+        case ShortCircuitOr(lhs=l, rhs=r):
+            return _lower_short_circuit(builder, l, r, kind="or", lower=go)
+        case ShortCircuitAnd(lhs=l, rhs=r):
+            return _lower_short_circuit(builder, l, r, kind="and", lower=go)
         case StringRef(name=n):
             gv = constants[n]
             return builder.bitcast(gv, I8.as_pointer())
@@ -116,21 +152,72 @@ def _lower_expr(
             callee = module.globals.get(fname)
             if callee is None:
                 raise ValueError(f"call to undeclared function {fname!r}")
-            ext = extern_sigs.get(fname)
-            if ext is not None:
-                # Typed extern call: lower each arg per the extern's signature.
-                arg_vals = [
-                    _lower_expr(builder, a, params, module, constants=constants, extern_sigs=extern_sigs)
-                    for a in args
-                ]
-            else:
-                # User function call: all i32.
-                arg_vals = [
-                    _lower_expr(builder, a, params, module, constants=constants, extern_sigs=extern_sigs)
-                    for a in args
-                ]
+            arg_vals = [go(a) for a in args]
             return builder.call(callee, arg_vals)
     raise ValueError(f"unhandled expr: {expr!r}")
+
+
+def _lower_short_circuit(builder: ir.IRBuilder, lhs, rhs, *, kind: str, lower) -> ir.Value:
+    """Lower `lhs || rhs` (or-style) / `lhs && rhs` (and-style) with C semantics:
+    skip evaluating `rhs` when `lhs` already determines the result. Branches are
+    appended to the current function; result is materialized via phi."""
+    fn = builder.block.parent
+    rhs_bb = fn.append_basic_block(f"sc{kind}.rhs")
+    end_bb = fn.append_basic_block(f"sc{kind}.end")
+
+    lhs_val = lower(lhs)
+    lhs_block = builder.block
+    if kind == "or":
+        # If lhs true, skip rhs.
+        builder.cbranch(lhs_val, end_bb, rhs_bb)
+        short_circuit_const = ir.Constant(I1, 1)
+    else:  # "and"
+        # If lhs false, skip rhs.
+        builder.cbranch(lhs_val, rhs_bb, end_bb)
+        short_circuit_const = ir.Constant(I1, 0)
+
+    builder.position_at_end(rhs_bb)
+    rhs_val = lower(rhs)
+    rhs_block = builder.block  # rhs eval may have spawned more blocks
+    builder.branch(end_bb)
+
+    builder.position_at_end(end_bb)
+    phi = builder.phi(I1)
+    phi.add_incoming(short_circuit_const, lhs_block)
+    phi.add_incoming(rhs_val, rhs_block)
+    return phi
+
+
+def _collect_local_bindings(stmts) -> list[tuple[str, "ir.Type"]]:
+    """Pre-walk the body and return every (name, llvm_type) pair introduced by
+    `Let` or `For`. Allocas for these are emitted at the top of the function's
+    entry block, the canonical mem2reg layout: `alloca` lives in entry; `store`
+    happens at the binding point. Names must be unique within the function
+    (no shadowing between Lets, between Fors, or across scopes); two `For`s
+    with the same loop variable name aren't supported in this round."""
+    out: list[tuple[str, ir.Type]] = []
+    seen: set[str] = set()
+
+    def visit(body) -> None:
+        for s in body:
+            match s:
+                case Let(name=name, type=ty):
+                    if name in seen:
+                        raise ValueError(f"local {name!r} declared twice in the same function")
+                    seen.add(name)
+                    out.append((name, _type_to_llvm(ty)))
+                case For(var=var, body=for_body):
+                    if var in seen:
+                        raise ValueError(f"for-loop var {var!r} conflicts with another local")
+                    seen.add(var)
+                    out.append((var, I32))
+                    visit(for_body)
+                case If(then_body=t, else_body=e):
+                    visit(t); visit(e)
+                case While(body=w_body):
+                    visit(w_body)
+    visit(stmts)
+    return out
 
 
 def _lower_stmt(
@@ -139,8 +226,9 @@ def _lower_stmt(
     *,
     llvm_fn: ir.Function,
     params: dict[str, ir.Value],
+    locals_: dict[str, ir.AllocaInstr],
+    entry_bb: ir.Block,
     constants: dict[str, ir.GlobalVariable],
-    puts: ir.Function,
     module: ir.Module,
     return_claims: tuple,
     overrides: dict[str, str],
@@ -148,52 +236,130 @@ def _lower_stmt(
 ) -> None:
     """Lower a statement. `return_claims` are emitted as llvm.assume / runtime
     check at every ret, so callers (after inlining) see the bound."""
+    def lower_expr(e):
+        return _lower_expr(
+            builder, e, params, module,
+            constants=constants, extern_sigs=extern_sigs, locals_=locals_,
+        )
+
+    def lower_body(body):
+        for s in body:
+            _lower_stmt(
+                builder, s, llvm_fn=llvm_fn, params=params, locals_=locals_,
+                entry_bb=entry_bb, constants=constants, module=module,
+                return_claims=return_claims, overrides=overrides,
+                extern_sigs=extern_sigs,
+            )
+
     match stmt:
-        case CallPuts(target=name):
-            gv = constants[name]
-            str_ptr = builder.bitcast(gv, I8.as_pointer())
-            builder.call(puts, [str_ptr])
-            return
         case ReturnInt(value=v):
             ret_val = ir.Constant(I32, v)
             _emit_return_claims(builder, ret_val, return_claims, llvm_fn, module, overrides)
             builder.ret(ret_val)
             return
         case ReturnExpr(value=expr):
-            ret_val = _lower_expr(
-                builder, expr, params, module,
-                constants=constants, extern_sigs=extern_sigs,
-            )
+            ret_val = lower_expr(expr)
             _emit_return_claims(builder, ret_val, return_claims, llvm_fn, module, overrides)
             builder.ret(ret_val)
+            return
+        case ExprStmt(value=expr):
+            lower_expr(expr)
+            return
+        case Let(name=name, init=init):
+            # Alloca was pre-emitted at the entry block; just store the init value.
+            init_val = lower_expr(init)
+            builder.store(init_val, locals_[name])
+            return
+        case Assign(name=name, value=v):
+            if name not in locals_:
+                raise ValueError(f"assign to undeclared local {name!r}")
+            val = lower_expr(v)
+            builder.store(val, locals_[name])
             return
         case If(cond=cond, then_body=then_body, else_body=else_body):
             then_bb = llvm_fn.append_basic_block("then")
             else_bb = llvm_fn.append_basic_block("else")
-            cond_val = _lower_expr(
-                builder, cond, params, module,
-                constants=constants, extern_sigs=extern_sigs,
-            )
+            cond_val = lower_expr(cond)
             builder.cbranch(cond_val, then_bb, else_bb)
-            # Both branches are required to terminate (return) in this round;
-            # we'll add a merge block when we have an If whose branches fall
-            # through.
+
+            merge_bb: ir.Block | None = None
+
+            def ensure_merge() -> ir.Block:
+                nonlocal merge_bb
+                if merge_bb is None:
+                    merge_bb = llvm_fn.append_basic_block("ifmerge")
+                return merge_bb
+
             builder.position_at_end(then_bb)
             for s in then_body:
                 _lower_stmt(
-                    builder, s, llvm_fn=llvm_fn, params=params, constants=constants,
-                    puts=puts, module=module,
+                    builder, s, llvm_fn=llvm_fn, params=params, locals_=locals_,
+                    entry_bb=entry_bb, constants=constants, module=module,
                     return_claims=return_claims, overrides=overrides,
                     extern_sigs=extern_sigs,
                 )
+            if not builder.block.is_terminated:
+                builder.branch(ensure_merge())
+
             builder.position_at_end(else_bb)
             for s in else_body:
                 _lower_stmt(
-                    builder, s, llvm_fn=llvm_fn, params=params, constants=constants,
-                    puts=puts, module=module,
+                    builder, s, llvm_fn=llvm_fn, params=params, locals_=locals_,
+                    entry_bb=entry_bb, constants=constants, module=module,
                     return_claims=return_claims, overrides=overrides,
                     extern_sigs=extern_sigs,
                 )
+            if not builder.block.is_terminated:
+                builder.branch(ensure_merge())
+
+            if merge_bb is not None:
+                builder.position_at_end(merge_bb)
+            return
+        case While(cond=cond, body=body):
+            header_bb = llvm_fn.append_basic_block("while.header")
+            body_bb = llvm_fn.append_basic_block("while.body")
+            exit_bb = llvm_fn.append_basic_block("while.exit")
+            builder.branch(header_bb)
+
+            builder.position_at_end(header_bb)
+            cond_val = lower_expr(cond)
+            builder.cbranch(cond_val, body_bb, exit_bb)
+
+            builder.position_at_end(body_bb)
+            lower_body(body)
+            if not builder.block.is_terminated:
+                builder.branch(header_bb)
+
+            builder.position_at_end(exit_bb)
+            return
+        case For(var=var, lo=lo, hi=hi, body=body):
+            # Snapshot lo/hi once before the loop. The slot for `var` was
+            # alloca'd at entry; we re-init it on each For (loop init).
+            lo_val = lower_expr(lo)
+            hi_val = lower_expr(hi)
+            alloca = locals_[var]
+            builder.store(lo_val, alloca)
+
+            header_bb = llvm_fn.append_basic_block("for.header")
+            body_bb = llvm_fn.append_basic_block("for.body")
+            exit_bb = llvm_fn.append_basic_block("for.exit")
+            builder.branch(header_bb)
+
+            builder.position_at_end(header_bb)
+            cur = builder.load(alloca)
+            cmp = builder.icmp_signed("<", cur, hi_val)
+            builder.cbranch(cmp, body_bb, exit_bb)
+
+            builder.position_at_end(body_bb)
+            lower_body(body)
+            if not builder.block.is_terminated:
+                # increment + back-edge
+                cur2 = builder.load(alloca)
+                nxt = builder.add(cur2, ir.Constant(I32, 1))
+                builder.store(nxt, alloca)
+                builder.branch(header_bb)
+
+            builder.position_at_end(exit_bb)
             return
     raise ValueError(f"unhandled stmt: {stmt!r}")
 
@@ -259,13 +425,13 @@ def _declare_function(module: ir.Module, fn: Function) -> ir.Function:
 def _declare_extern(module: ir.Module, ext: ExternFunction) -> ir.Function:
     param_types = [_type_to_llvm(t) for t in ext.effective_param_types()]
     return_type = _type_to_llvm(ext.return_type)
-    fn_ty = ir.FunctionType(return_type, param_types)
+    fn_ty = ir.FunctionType(return_type, param_types, var_arg=ext.varargs)
     return ir.Function(module, fn_ty, name=ext.name)
 
 
 def _lower_function_body(
     module: ir.Module, fn: Function, *,
-    constants: dict, puts: ir.Function, overrides: dict[str, str],
+    constants: dict, overrides: dict[str, str],
     extern_sigs: dict[str, ExternFunction],
 ) -> None:
     llvm_fn = module.globals[fn.name]
@@ -278,13 +444,25 @@ def _lower_function_body(
     entry_claims = tuple(c for c in fn.claims if not isinstance(c, ReturnInRangeClaim))
     return_claims = tuple(c for c in fn.claims if isinstance(c, ReturnInRangeClaim))
 
-    builder = ir.IRBuilder(llvm_fn.append_basic_block(name="entry"))
+    entry_bb = llvm_fn.append_basic_block(name="entry")
+    builder = ir.IRBuilder(entry_bb)
+
+    # Allocas at the very top of entry, before any other instruction. mem2reg
+    # promotes them to SSA values during the optimize pass.
+    locals_: dict[str, ir.AllocaInstr] = {}
+    for name, ty in _collect_local_bindings(fn.body):
+        if name in params:
+            raise ValueError(f"local {name!r} shadows parameter of {fn.name!r}")
+        locals_[name] = builder.alloca(ty, name=name)
+
     for claim in entry_claims:
         _lower_claim(builder, claim, params, llvm_fn, module, overrides=overrides)
+
     for stmt in fn.body:
         _lower_stmt(
             builder, stmt,
-            llvm_fn=llvm_fn, params=params, constants=constants, puts=puts, module=module,
+            llvm_fn=llvm_fn, params=params, locals_=locals_, entry_bb=entry_bb,
+            constants=constants, module=module,
             return_claims=return_claims, overrides=overrides,
             extern_sigs=extern_sigs,
         )
@@ -298,10 +476,6 @@ def lower(
     module = ir.Module(name="cpg")
     module.triple = target or llvm.get_default_triple()
     overrides = overrides or {}
-
-    # `puts` is the only extern we need today; lift it into the graph as an
-    # ExternFunction node when a second extern shows up.
-    puts = ir.Function(module, ir.FunctionType(I32, [I8.as_pointer()]), name="puts")
 
     constants: dict[str, ir.GlobalVariable] = {}
     for c in program.constants:
@@ -325,7 +499,7 @@ def lower(
     # Pass 2: lower bodies of user functions only (externs have no body here).
     for fn in program.functions:
         _lower_function_body(
-            module, fn, constants=constants, puts=puts, overrides=overrides,
+            module, fn, constants=constants, overrides=overrides,
             extern_sigs=extern_sigs,
         )
 

@@ -1,25 +1,50 @@
 {
   "constants": [],
   "externs": [
-    {"name": "abs", "arity": 1}
+    {
+      "name": "abs",
+      "arity": 1
+    }
   ],
   "functions": [
     {
       "name": "f",
-      "params": ["x"],
+      "params": [
+        "x"
+      ],
       "body": [
-        {"kind": "return_expr",
-         "value": {"kind": "call", "function": "abs",
-                   "args": [{"kind": "param_ref", "name": "x"}]}}
+        {
+          "kind": "cpg.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "abs",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            ]
+          }
+        }
       ]
     },
     {
       "name": "main",
       "params": [],
       "body": [
-        {"kind": "return_expr",
-         "value": {"kind": "call", "function": "f",
-                   "args": [{"kind": "int_lit", "value": -5}]}}
+        {
+          "kind": "cpg.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "f",
+            "args": [
+              {
+                "kind": "llvm.const_int",
+                "value": -5
+              }
+            ]
+          }
+        }
       ]
     }
   ]

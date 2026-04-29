@@ -35,6 +35,8 @@ from cpg.model import (
     RETURN_CLAIM_KINDS,
     DerivedJustification,
     ExternFunction,
+    I32Type,
+    I8PtrType,
     IntRangeClaim,
     Justification,
     ManualJustification,
@@ -807,12 +809,42 @@ def prove_cmd(
 
 # ---------- Mutation: construction ----------
 
+_TYPE_NAMES = {"i32": I32Type, "i8_ptr": I8PtrType}
+
+
+def _parse_type_name(s: str):
+    cls = _TYPE_NAMES.get(s)
+    if cls is None:
+        raise typer.BadParameter(
+            f"unknown type {s!r}; choices: {', '.join(_TYPE_NAMES)}"
+        )
+    return cls()
+
+
 @app.command("add-extern")
 def add_extern_cmd(
     name: str = typer.Argument(..., help="Extern function name (must match the libc/library symbol)."),
-    arity: int = typer.Option(0, "--arity", min=0, help="Number of i32 parameters (i32-only signatures in this round)."),
+    arity: int = typer.Option(0, "--arity", min=0, help="Number of i32 parameters (shorthand for all-i32 signatures)."),
+    param_type: list[str] = typer.Option(
+        [], "--param-type",
+        help=f"Typed parameter (repeatable). One of: {', '.join(_TYPE_NAMES)}. "
+             "If used, replaces --arity.",
+    ),
+    return_type: str = typer.Option(
+        "i32", "--return-type",
+        help=f"Return type. One of: {', '.join(_TYPE_NAMES)}.",
+    ),
+    varargs: bool = typer.Option(
+        False, "--varargs",
+        help="Variadic signature (libc printf etc.). Callers may pass any number "
+             "of args after the fixed prefix.",
+    ),
 ) -> None:
-    """Declare an extern (libc-or-similar) function. All-i32 signatures today."""
+    """Declare an extern (libc-or-similar) function.
+
+    Use --arity N for the common all-i32 case, or --param-type T (repeatable)
+    for typed signatures. --varargs marks the extern as variadic.
+    """
     program = _load()
     if any(ext.name == name for ext in program.externs):
         typer.echo(f"error: extern {name!r} already declared", err=True)
@@ -820,10 +852,24 @@ def add_extern_cmd(
     if any(fn.name == name for fn in program.functions):
         typer.echo(f"error: {name!r} already exists as a user function", err=True)
         raise typer.Exit(1)
-    new_externs = program.externs + (ExternFunction(name=name, arity=arity),)
+    if param_type and arity:
+        raise typer.BadParameter("pass either --arity or --param-type, not both")
+    param_types = tuple(_parse_type_name(t) for t in param_type)
+    ret_ty = _parse_type_name(return_type)
+    ext = ExternFunction(
+        name=name,
+        arity=arity if not param_types else 0,
+        param_types=param_types,
+        return_type=ret_ty,
+        varargs=varargs,
+    )
+    new_externs = program.externs + (ext,)
     program = program.model_copy(update={"externs": new_externs})
     _save(program)
-    typer.echo(f"declared extern {name}/{arity}")
+    sig_parts = [t for t in (param_type or [f"i32"] * arity)]
+    if varargs:
+        sig_parts.append("...")
+    typer.echo(f"declared extern {name}({', '.join(sig_parts)}) -> {return_type}")
 
 
 @app.command("add-function")
@@ -833,7 +879,7 @@ def add_function_cmd(
     """Append a new function to the program. Spec is a JSON Function object.
 
     Example spec:
-        {"name": "g", "params": ["x"], "body": [{"kind": "return_int", "value": 0}]}
+        {"name": "g", "params": ["x"], "body": [{"kind": "cpg.return_int", "value": 0}]}
     """
     program = _load()
     try:

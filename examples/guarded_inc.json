@@ -8,40 +8,40 @@
       ],
       "body": [
         {
-          "kind": "if",
+          "kind": "cpg.if",
           "cond": {
-            "kind": "binop",
+            "kind": "llvm.binop",
             "op": "slt",
             "lhs": {
-              "kind": "param_ref",
+              "kind": "llvm.param_ref",
               "name": "x"
             },
             "rhs": {
-              "kind": "int_lit",
+              "kind": "llvm.const_int",
               "value": 0
             }
           },
           "then_body": [
             {
-              "kind": "return_expr",
+              "kind": "cpg.return_expr",
               "value": {
-                "kind": "int_lit",
+                "kind": "llvm.const_int",
                 "value": -1
               }
             }
           ],
           "else_body": [
             {
-              "kind": "return_expr",
+              "kind": "cpg.return_expr",
               "value": {
-                "kind": "binop",
+                "kind": "llvm.binop",
                 "op": "add",
                 "lhs": {
-                  "kind": "param_ref",
+                  "kind": "llvm.param_ref",
                   "name": "x"
                 },
                 "rhs": {
-                  "kind": "int_lit",
+                  "kind": "llvm.const_int",
                   "value": 1
                 }
               }

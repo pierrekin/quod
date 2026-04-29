@@ -1,11 +1,18 @@
 {
   "constants": [
-    {"name": ".str.cmd", "value": "ls /etc/hosts /etc/os-release"}
+    {
+      "name": ".str.cmd",
+      "value": "ls /etc/hosts /etc/os-release"
+    }
   ],
   "externs": [
     {
       "name": "system",
-      "param_types": [{"kind": "i8_ptr"}]
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ]
     }
   ],
   "functions": [
@@ -13,9 +20,19 @@
       "name": "main",
       "params": [],
       "body": [
-        {"kind": "return_expr",
-         "value": {"kind": "call", "function": "system",
-                   "args": [{"kind": "string_ref", "name": ".str.cmd"}]}}
+        {
+          "kind": "cpg.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "system",
+            "args": [
+              {
+                "kind": "cpg.string_ref",
+                "name": ".str.cmd"
+              }
+            ]
+          }
+        }
       ]
     }
   ]

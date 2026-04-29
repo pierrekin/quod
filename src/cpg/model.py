@@ -32,18 +32,43 @@ class StringConstant(_Node):
 # ---------- Expressions ----------
 
 class IntLit(_Node):
-    kind: Literal["int_lit"] = "int_lit"
+    kind: Literal["llvm.const_int"] = "llvm.const_int"
     value: int
 
 
 class ParamRef(_Node):
-    kind: Literal["param_ref"] = "param_ref"
+    kind: Literal["llvm.param_ref"] = "llvm.param_ref"
     name: str
 
 
 class BinOp(_Node):
-    kind: Literal["binop"] = "binop"
-    op: Literal["add", "slt"]  # slt = signed less-than (yields i1)
+    """Binary operation. The operator determines the result type:
+
+      arith   — add, sub, mul, srem  : i32 in / i32 out
+      cmp     — slt, eq              : i32 in / i1 out (signed-less-than, equal)
+      logical — or, and              : i1 in / i1 out (eager, no short-circuit)
+
+    For short-circuit boolean combinators (correct in the presence of
+    side-effecting operands), use `ShortCircuitOr` / `ShortCircuitAnd`.
+    """
+    kind: Literal["llvm.binop"] = "llvm.binop"
+    op: Literal["add", "sub", "mul", "srem", "slt", "eq", "or", "and"]
+    lhs: "Expr"
+    rhs: "Expr"
+
+
+class ShortCircuitOr(_Node):
+    """`lhs || rhs` with C-style short-circuit. If `lhs` is true, `rhs` is
+    not evaluated. Lowered to branch + phi."""
+    kind: Literal["cpg.sc_or"] = "cpg.sc_or"
+    lhs: "Expr"
+    rhs: "Expr"
+
+
+class ShortCircuitAnd(_Node):
+    """`lhs && rhs` with C-style short-circuit. If `lhs` is false, `rhs` is
+    not evaluated. Lowered to branch + phi."""
+    kind: Literal["cpg.sc_and"] = "cpg.sc_and"
     lhs: "Expr"
     rhs: "Expr"
 
@@ -53,57 +78,116 @@ class Call(_Node):
 
     User function calls are i32-in/i32-out. Extern calls follow the extern's
     declared `param_types` / `return_type` — pass `StringRef` for i8*-typed
-    args, IntLit/ParamRef/etc. for i32 args.
+    args, IntLit/ParamRef/etc. for i32 args. For varargs externs (printf etc.),
+    pass any number of args beyond the fixed prefix.
     """
-    kind: Literal["call"] = "call"
+    kind: Literal["llvm.call"] = "llvm.call"
     function: str
     args: tuple["Expr", ...] = ()
 
 
 class StringRef(_Node):
-    """An i8* value: pointer to a `StringConstant`'s underlying bytes.
-
-    Used as an arg to externs that take `const char *` (e.g. system, getenv).
-    Compared to CallPuts (a statement that prints a fixed StringConstant),
-    StringRef is an expression you can pass anywhere an i8* is expected.
-    """
-    kind: Literal["string_ref"] = "string_ref"
+    """An i8* value: pointer to a `StringConstant`'s underlying bytes. Used
+    as an arg to externs that take `const char *` (e.g. system, getenv,
+    puts, printf's format)."""
+    kind: Literal["cpg.string_ref"] = "cpg.string_ref"
     name: str  # name of a StringConstant in the Program
 
 
+class LocalRef(_Node):
+    """Read the current value of a local introduced by `Let` (or a `For`
+    loop variable)."""
+    kind: Literal["cpg.local_ref"] = "cpg.local_ref"
+    name: str
+
+
 Expr = Annotated[
-    Union[IntLit, ParamRef, BinOp, Call, StringRef],
+    Union[IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd, Call, StringRef],
     Field(discriminator="kind"),
 ]
 
 
+# ---------- Types (referenced from Let; full union defined below) ----------
+
+class I32Type(_Node):
+    kind: Literal["llvm.i32"] = "llvm.i32"
+
+
+class I8PtrType(_Node):
+    kind: Literal["llvm.i8_ptr"] = "llvm.i8_ptr"
+
+
+Type = Annotated[Union[I32Type, I8PtrType], Field(discriminator="kind")]
+
+
 # ---------- Statements ----------
-
-class CallPuts(_Node):
-    kind: Literal["call_puts"] = "call_puts"
-    target: str  # name of a StringConstant
-
 
 class ReturnInt(_Node):
     """Return a constant integer. Shorthand kept for hello-world brevity."""
-    kind: Literal["return_int"] = "return_int"
+    kind: Literal["cpg.return_int"] = "cpg.return_int"
     value: int
 
 
 class ReturnExpr(_Node):
-    kind: Literal["return_expr"] = "return_expr"
+    kind: Literal["cpg.return_expr"] = "cpg.return_expr"
     value: Expr
 
 
 class If(_Node):
-    kind: Literal["if"] = "if"
+    """Two-branch conditional. Branches may both terminate (return), or both
+    fall through to the next statement, or mix — a merge block is created
+    on demand by the lowering pass."""
+    kind: Literal["cpg.if"] = "cpg.if"
     cond: Expr  # must lower to i1
     then_body: tuple["Statement", ...]
     else_body: tuple["Statement", ...]
 
 
+class Let(_Node):
+    """Introduce a mutable local variable. `name` must not shadow a parameter
+    or another local in the same function. Lowered to alloca-at-entry + store."""
+    kind: Literal["cpg.let"] = "cpg.let"
+    name: str
+    type: Type
+    init: Expr
+
+
+class Assign(_Node):
+    """Mutate an existing local. `name` must reference a local previously
+    introduced by `Let` (or a `For` loop variable in scope)."""
+    kind: Literal["cpg.assign"] = "cpg.assign"
+    name: str
+    value: Expr
+
+
+class While(_Node):
+    """Pre-test loop. Evaluates `cond` each iteration; runs `body` if true."""
+    kind: Literal["cpg.while"] = "cpg.while"
+    cond: Expr  # must lower to i1
+    body: tuple["Statement", ...]
+
+
+class For(_Node):
+    """Bounded iteration: `var` runs from `lo` (inclusive) to `hi` (exclusive),
+    incrementing by 1 each iteration. `lo` and `hi` are evaluated once before
+    the loop (snapshot semantics, not C-style re-evaluation). `var` is a local
+    scoped to `body` only."""
+    kind: Literal["cpg.for"] = "cpg.for"
+    var: str
+    lo: Expr
+    hi: Expr
+    body: tuple["Statement", ...]
+
+
+class ExprStmt(_Node):
+    """Evaluate an expression for its side effects, discard the result.
+    The natural shape for `printf(...)` and other void-effect calls."""
+    kind: Literal["cpg.expr_stmt"] = "cpg.expr_stmt"
+    value: Expr
+
+
 Statement = Annotated[
-    Union[CallPuts, ReturnInt, ReturnExpr, If],
+    Union[ReturnInt, ReturnExpr, If, Let, Assign, While, For, ExprStmt],
     Field(discriminator="kind"),
 ]
 
@@ -238,12 +322,8 @@ def claim_param(claim: Claim) -> str | None:
 
 
 def function_callees(fn: "Function") -> tuple[str, ...]:
-    """Names of user functions called from fn's body, deduplicated, first-seen order.
-
-    Walks expressions inside statements (Call can hide in ReturnExpr, If.cond,
-    BinOp arms, and another Call's args). Excludes `puts` (CallPuts is the
-    extern-print path, not a user-function edge).
-    """
+    """Names of functions (user or extern) called from fn's body, deduplicated,
+    first-seen order."""
     seen: dict[str, None] = {}
 
     def visit_expr(e) -> None:
@@ -252,7 +332,7 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
                 seen.setdefault(name, None)
                 for a in args:
                     visit_expr(a)
-            case BinOp(lhs=l, rhs=r):
+            case BinOp(lhs=l, rhs=r) | ShortCircuitOr(lhs=l, rhs=r) | ShortCircuitAnd(lhs=l, rhs=r):
                 visit_expr(l)
                 visit_expr(r)
             case _:
@@ -260,13 +340,24 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
 
     def visit_stmt(s) -> None:
         match s:
-            case ReturnExpr(value=expr):
+            case ReturnExpr(value=expr) | ExprStmt(value=expr):
                 visit_expr(expr)
             case If(cond=cond, then_body=t_body, else_body=e_body):
                 visit_expr(cond)
                 for x in t_body:
                     visit_stmt(x)
                 for x in e_body:
+                    visit_stmt(x)
+            case Let(init=expr) | Assign(value=expr):
+                visit_expr(expr)
+            case While(cond=cond, body=body):
+                visit_expr(cond)
+                for x in body:
+                    visit_stmt(x)
+            case For(lo=lo, hi=hi, body=body):
+                visit_expr(lo)
+                visit_expr(hi)
+                for x in body:
                     visit_stmt(x)
             case _:
                 pass
@@ -293,29 +384,20 @@ class Function(_Node):
         return data
 
 
-class I32Type(_Node):
-    kind: Literal["i32"] = "i32"
-
-
-class I8PtrType(_Node):
-    kind: Literal["i8_ptr"] = "i8_ptr"
-
-
-Type = Annotated[Union[I32Type, I8PtrType], Field(discriminator="kind")]
-
-
 class ExternFunction(_Node):
     """A libc-or-similar function declared but not defined by us.
 
     `arity` is a convenience for all-i32 signatures: when set, it expands
     to `param_types = (I32Type,) * arity` and `return_type = I32Type` at
     use time. For non-i32 sigs, set `param_types` and `return_type` directly
-    and leave `arity` at 0.
+    and leave `arity` at 0. Set `varargs=True` for variadic libc functions
+    like printf — callers may pass any number of args after the fixed prefix.
     """
     name: str
     arity: int = 0
     param_types: tuple[Type, ...] = ()
     return_type: Type = I32Type()
+    varargs: bool = False
 
     @model_serializer(mode="wrap")
     def _drop_extern_defaults(self, handler, info):
@@ -328,6 +410,8 @@ class ExternFunction(_Node):
         # Drop return_type when default i32.
         if isinstance(self.return_type, I32Type):
             data.pop("return_type", None)
+        if not self.varargs:
+            data.pop("varargs", None)
         return data
 
     def effective_param_types(self) -> tuple["Type", ...]:
@@ -466,7 +550,10 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
     if program.externs:
         lines.append("  externs:")
         for ext in program.externs:
-            sig = ", ".join(_format_type(t) for t in ext.effective_param_types())
+            sig_parts = [_format_type(t) for t in ext.effective_param_types()]
+            if ext.varargs:
+                sig_parts.append("...")
+            sig = ", ".join(sig_parts)
             ret = _format_type(ext.return_type)
             lines.append(f"    {label(ext)}extern {ext.name}({sig}) -> {ret}")
     if program.functions:
@@ -547,23 +634,40 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
     pad = " " * indent
     prefix = label(stmt)
     match stmt:
-        case CallPuts(target=t):
-            return f"{pad}{prefix}puts({t})"
         case ReturnInt(value=v):
             return f"{pad}{prefix}return {v}"
         case ReturnExpr(value=expr):
             return f"{pad}{prefix}return {_format_expr(expr)}"
         case If(cond=cond, then_body=t_body, else_body=e_body):
             then_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in t_body)
+            head = f"{pad}{prefix}if ({_format_expr(cond)}) {{"
+            if not e_body:
+                return f"{head}\n{then_lines}\n{pad}}}"
             else_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in e_body)
+            return f"{head}\n{then_lines}\n{pad}}} else {{\n{else_lines}\n{pad}}}"
+        case Let(name=n, type=ty, init=init):
+            return f"{pad}{prefix}let {n}: {_format_type(ty)} = {_format_expr(init)}"
+        case Assign(name=n, value=v):
+            return f"{pad}{prefix}{n} = {_format_expr(v)}"
+        case While(cond=cond, body=body):
+            body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body)
+            return f"{pad}{prefix}while ({_format_expr(cond)}) {{\n{body_lines}\n{pad}}}"
+        case For(var=var, lo=lo, hi=hi, body=body):
+            body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body)
             return (
-                f"{pad}{prefix}if ({_format_expr(cond)}) {{\n"
-                f"{then_lines}\n"
-                f"{pad}}} else {{\n"
-                f"{else_lines}\n"
-                f"{pad}}}"
+                f"{pad}{prefix}for {var} in {_format_expr(lo)}..{_format_expr(hi)} {{\n"
+                f"{body_lines}\n{pad}}}"
             )
+        case ExprStmt(value=v):
+            return f"{pad}{prefix}{_format_expr(v)}"
     raise ValueError(f"unhandled stmt: {stmt!r}")
+
+
+_BINOP_SYMBOL = {
+    "add": "+", "sub": "-", "mul": "*", "srem": "%",
+    "slt": "<", "eq": "==",
+    "or": "|", "and": "&",
+}
 
 
 def _format_expr(expr) -> str:
@@ -572,9 +676,14 @@ def _format_expr(expr) -> str:
             return str(v)
         case ParamRef(name=n):
             return n
+        case LocalRef(name=n):
+            return n
         case BinOp(op=op, lhs=l, rhs=r):
-            sym = {"add": "+", "slt": "<"}[op]
-            return f"({_format_expr(l)} {sym} {_format_expr(r)})"
+            return f"({_format_expr(l)} {_BINOP_SYMBOL[op]} {_format_expr(r)})"
+        case ShortCircuitOr(lhs=l, rhs=r):
+            return f"({_format_expr(l)} || {_format_expr(r)})"
+        case ShortCircuitAnd(lhs=l, rhs=r):
+            return f"({_format_expr(l)} && {_format_expr(r)})"
         case Call(function=fn_name, args=args):
             return f"{fn_name}({', '.join(_format_expr(a) for a in args)})"
         case StringRef(name=n):

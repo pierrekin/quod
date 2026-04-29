@@ -7,8 +7,8 @@ Two paths:
 The encoding lives entirely in this module — `model` knows nothing about SMT.
 
 Coverage:
-  expressions: IntLit, ParamRef, BinOp(add, slt), Call (cross-procedural)
-  statements:  ReturnInt, ReturnExpr, If (both branches return), CallPuts (skipped)
+  expressions: IntLit, ParamRef, BinOp(add, sub, mul, slt, eq), Call (cross-procedural)
+  statements:  ReturnInt, ReturnExpr, If (both branches return), ExprStmt (skipped)
   claims:      NonNegativeClaim, IntRangeClaim, ReturnInRangeClaim
                  - as hypotheses on the function under analysis (via `hypotheses=`)
                  - as hypotheses on calls to *other* user functions (via `program=`),
@@ -29,21 +29,28 @@ import subprocess
 from dataclasses import dataclass, field
 
 from cpg.model import (
+    Assign,
     BinOp,
     Call,
-    CallPuts,
     Claim,
+    ExprStmt,
+    For,
     Function,
     If,
     IntLit,
     IntRangeClaim,
+    Let,
+    LocalRef,
     NonNegativeClaim,
     ParamRef,
     Program,
     ReturnExpr,
     ReturnInRangeClaim,
     ReturnInt,
+    ShortCircuitAnd,
+    ShortCircuitOr,
     StringRef,
+    While,
     claim_param,
 )
 
@@ -76,15 +83,38 @@ def _expr_to_smt(expr, state: _SmtState) -> str:
             return str(v)
         case ParamRef(name=n):
             return n
+        case LocalRef():
+            raise NotImplementedError(
+                "can't lower LocalRef for SMT — function under proof uses "
+                "mutable local state (Let/Assign); the SMT model is "
+                "pure-expression-only"
+            )
         case StringRef():
             raise NotImplementedError(
                 "can't lower StringRef for SMT — function under proof contains "
                 "an i8* expression; SMT model is Int-only"
             )
+        case ShortCircuitOr() | ShortCircuitAnd():
+            raise NotImplementedError(
+                "can't lower short-circuit Or/And for SMT in this round; "
+                "rewrite as nested If if you need a proof"
+            )
         case BinOp(op="add", lhs=l, rhs=r):
             return f"(+ {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
+        case BinOp(op="sub", lhs=l, rhs=r):
+            return f"(- {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
+        case BinOp(op="mul", lhs=l, rhs=r):
+            return f"(* {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
         case BinOp(op="slt", lhs=l, rhs=r):
             return f"(< {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
+        case BinOp(op="eq", lhs=l, rhs=r):
+            return f"(= {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
+        case BinOp(op=op):
+            # srem, or, and: skipped for SMT — semantic mismatch with QF_LIA
+            # (srem ≠ SMT mod) or boolean-vs-integer ambiguity (or/and).
+            raise NotImplementedError(
+                f"can't lower BinOp(op={op!r}) for SMT in this round"
+            )
         case Call(function=fname, args=args):
             arg_terms = [_expr_to_smt(a, state) for a in args]
             if fname not in state.declared_fns:
@@ -111,7 +141,7 @@ def _expr_to_smt(expr, state: _SmtState) -> str:
 
 def _stmts_to_return_smt(stmts, state: _SmtState) -> str:
     """Translate a sequence of statements into the SMT term for the eventual
-    return value. Side-effect-only statements (CallPuts) are skipped."""
+    return value. Side-effect-only statements (ExprStmt) are skipped."""
     for stmt in stmts:
         match stmt:
             case ReturnInt(value=v):
@@ -124,8 +154,14 @@ def _stmts_to_return_smt(stmts, state: _SmtState) -> str:
                     f"{_stmts_to_return_smt(list(t), state)} "
                     f"{_stmts_to_return_smt(list(e), state)})"
                 )
-            case CallPuts():
+            case ExprStmt():
                 continue  # side effect only; doesn't influence return value
+            case Let() | Assign() | While() | For():
+                raise NotImplementedError(
+                    f"can't prove things about functions with mutable state or "
+                    f"loops yet (saw {type(stmt).__name__}); rewrite as a "
+                    f"recursive helper if you want a proof"
+                )
             case _:
                 raise NotImplementedError(f"can't lower stmt {stmt!r} for SMT")
     raise NotImplementedError("function body has no terminating return")

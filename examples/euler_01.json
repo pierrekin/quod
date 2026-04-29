@@ -1,0 +1,138 @@
+{
+  "constants": [
+    {
+      "name": ".fmt",
+      "value": "%d\n"
+    }
+  ],
+  "externs": [
+    {
+      "name": "printf",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ],
+      "varargs": true
+    }
+  ],
+  "functions": [
+    {
+      "name": "main",
+      "params": [],
+      "body": [
+        {
+          "kind": "cpg.let",
+          "name": "sum",
+          "type": {
+            "kind": "llvm.i32"
+          },
+          "init": {
+            "kind": "llvm.const_int",
+            "value": 0
+          }
+        },
+        {
+          "kind": "cpg.for",
+          "var": "i",
+          "lo": {
+            "kind": "llvm.const_int",
+            "value": 1
+          },
+          "hi": {
+            "kind": "llvm.const_int",
+            "value": 1000
+          },
+          "body": [
+            {
+              "kind": "cpg.if",
+              "cond": {
+                "kind": "cpg.sc_or",
+                "lhs": {
+                  "kind": "llvm.binop",
+                  "op": "eq",
+                  "lhs": {
+                    "kind": "llvm.binop",
+                    "op": "srem",
+                    "lhs": {
+                      "kind": "cpg.local_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "value": 3
+                    }
+                  },
+                  "rhs": {
+                    "kind": "llvm.const_int",
+                    "value": 0
+                  }
+                },
+                "rhs": {
+                  "kind": "llvm.binop",
+                  "op": "eq",
+                  "lhs": {
+                    "kind": "llvm.binop",
+                    "op": "srem",
+                    "lhs": {
+                      "kind": "cpg.local_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "value": 5
+                    }
+                  },
+                  "rhs": {
+                    "kind": "llvm.const_int",
+                    "value": 0
+                  }
+                }
+              },
+              "then_body": [
+                {
+                  "kind": "cpg.assign",
+                  "name": "sum",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "cpg.local_ref",
+                      "name": "sum"
+                    },
+                    "rhs": {
+                      "kind": "cpg.local_ref",
+                      "name": "i"
+                    }
+                  }
+                }
+              ],
+              "else_body": []
+            }
+          ]
+        },
+        {
+          "kind": "cpg.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "printf",
+            "args": [
+              {
+                "kind": "cpg.string_ref",
+                "name": ".fmt"
+              },
+              {
+                "kind": "cpg.local_ref",
+                "name": "sum"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "cpg.return_int",
+          "value": 0
+        }
+      ]
+    }
+  ]
+}

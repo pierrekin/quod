@@ -2,8 +2,11 @@
 
 from cpg.model import (
     BinOp,
-    CallPuts,
+    Call,
+    ExprStmt,
+    ExternFunction,
     Function,
+    I8PtrType,
     If,
     IntLit,
     ParamRef,
@@ -11,16 +14,18 @@ from cpg.model import (
     ReturnExpr,
     ReturnInt,
     StringConstant,
+    StringRef,
 )
 
 
 HELLO_WORLD = Program(
     constants=(StringConstant(name=".str.greeting", value="hello, world"),),
+    externs=(ExternFunction(name="puts", param_types=(I8PtrType(),)),),
     functions=(
         Function(
             name="main",
             body=(
-                CallPuts(target=".str.greeting"),
+                ExprStmt(value=Call(function="puts", args=(StringRef(name=".str.greeting"),))),
                 ReturnInt(value=0),
             ),
         ),

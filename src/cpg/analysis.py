@@ -16,15 +16,22 @@ from collections.abc import Iterator
 
 from cpg.hashing import node_hash
 from cpg.model import (
+    Assign,
     BinOp,
     Call,
     Claim,
     DerivedJustification,
+    ExprStmt,
+    For,
     If,
     IntLit,
     IntRangeClaim,
+    Let,
     Program,
     ReturnExpr,
+    ShortCircuitAnd,
+    ShortCircuitOr,
+    While,
 )
 
 
@@ -95,13 +102,24 @@ def elaborate(program: Program, derived: dict[str, tuple[Claim, ...]]) -> Progra
 
 def _walk_calls_in_stmt(stmt) -> Iterator[Call]:
     match stmt:
-        case ReturnExpr(value=expr):
+        case ReturnExpr(value=expr) | ExprStmt(value=expr):
             yield from _walk_calls_in_expr(expr)
         case If(cond=cond, then_body=t_body, else_body=e_body):
             yield from _walk_calls_in_expr(cond)
             for s in t_body:
                 yield from _walk_calls_in_stmt(s)
             for s in e_body:
+                yield from _walk_calls_in_stmt(s)
+        case Let(init=expr) | Assign(value=expr):
+            yield from _walk_calls_in_expr(expr)
+        case While(cond=cond, body=body):
+            yield from _walk_calls_in_expr(cond)
+            for s in body:
+                yield from _walk_calls_in_stmt(s)
+        case For(lo=lo, hi=hi, body=body):
+            yield from _walk_calls_in_expr(lo)
+            yield from _walk_calls_in_expr(hi)
+            for s in body:
                 yield from _walk_calls_in_stmt(s)
 
 
@@ -111,7 +129,7 @@ def _walk_calls_in_expr(expr) -> Iterator[Call]:
             yield call
             for a in call.args:
                 yield from _walk_calls_in_expr(a)
-        case BinOp(lhs=l, rhs=r):
+        case BinOp(lhs=l, rhs=r) | ShortCircuitOr(lhs=l, rhs=r) | ShortCircuitAnd(lhs=l, rhs=r):
             yield from _walk_calls_in_expr(l)
             yield from _walk_calls_in_expr(r)
-        # IntLit, ParamRef, StringRef carry no nested Calls.
+        # IntLit, ParamRef, LocalRef, StringRef carry no nested Calls.
