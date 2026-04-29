@@ -134,7 +134,7 @@ export default function (pi: ExtensionAPI): void {
     name: "quod_run",
     label: "Build and run",
     description:
-      "Build the project and execute one of its [[bin]] entries. Captures stdout, stderr, and exit code.",
+      "Build the project and execute one of its [[bin]] entries. Captures stdout, stderr, and exit code. If the entry function declares i32 params, pass them via `program_args`; the synthesized main wrapper parses each via atoi.",
     parameters: Type.Object({
       ...cwdField,
       bin: Type.Optional(
@@ -143,10 +143,19 @@ export default function (pi: ExtensionAPI): void {
             "Which [[bin]] to run. Required if multiple bins are configured.",
         }),
       ),
+      program_args: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "Args forwarded to the spawned binary as argv. For an entry with N i32 params, pass N integer-shaped strings (atoi-parsed at the wrapper).",
+        }),
+      ),
     }),
     async execute(_id, p, signal) {
       const args = ["run"];
-      if (p.bin) args.push(p.bin);
+      if (p.bin) args.push("--bin", p.bin);
+      if (p.program_args && p.program_args.length > 0) {
+        args.push("--", ...p.program_args);
+      }
       return text(await runQuod(args, { cwd: p.cwd, signal }));
     },
   });

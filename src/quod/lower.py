@@ -78,6 +78,14 @@ def _get_or_declare_abort(module: ir.Module) -> ir.Function:
     return fn
 
 
+def _get_or_declare_atoi(module: ir.Module) -> ir.Function:
+    """libc atoi(const char*) -> int. Used by the argv-parsing main wrapper
+    when the entry function declares i32 params."""
+    if "atoi" in module.globals:
+        return module.globals["atoi"]
+    return ir.Function(module, ir.FunctionType(I32, [I8.as_pointer()]), name="atoi")
+
+
 def _emit_for_enforcement(builder: ir.IRBuilder, cond: ir.Value, enforcement: str, llvm_fn: ir.Function, module: ir.Module) -> None:
     """Lower a single boolean predicate per the claim's effective enforcement.
 
@@ -517,32 +525,89 @@ def lower(
             extern_sigs=extern_sigs,
         )
 
-    if entry is not None and entry != "main":
+    if entry is not None:
         _emit_main_wrapper(module, program, entry)
 
     return module
 
 
 def _emit_main_wrapper(module: ir.Module, program: Program, entry: str) -> None:
-    """Append `i32 main() { return entry(); }` to module."""
+    """Append a synthesized `main` calling the user's entry function.
+
+    Three cases:
+      - entry is 'main' and nullary: nothing to do — user's main IS the C main.
+      - entry is nullary (any name): emit `i32 main() { return entry(); }`.
+      - entry has params (i32, all of them today): emit
+        `i32 main(i32 argc, i8** argv)` that bounds-checks argc, atoi-parses
+        argv[1..N+1], and forwards. Auto-declares atoi/abort if absent.
+    """
     fn = next((f for f in program.functions if f.name == entry), None)
     if fn is None:
         raise ValueError(f"entry function {entry!r} not found in program")
-    if fn.params:
+
+    if entry == "main" and not fn.params:
+        return  # user's nullary main is already the C main
+
+    if entry == "main" and fn.params:
         raise ValueError(
-            f"entry function {entry!r} takes parameters; "
-            f"entry functions must be nullary for now"
+            "entry function 'main' cannot have parameters; the synthesized "
+            "argv wrapper would collide. Rename your entry (e.g. to 'app' "
+            "or 'run') and quod will wrap it."
         )
+
     if any(f.name == "main" for f in program.functions):
         raise ValueError(
             f"cannot use {entry!r} as entry: program already defines a function "
             f"named 'main'; remove one or rename the conflict"
         )
+
     target_fn = module.globals[entry]
-    main_fn = ir.Function(module, ir.FunctionType(I32, []), name="main")
-    bb = main_fn.append_basic_block("entry")
-    builder = ir.IRBuilder(bb)
-    result = builder.call(target_fn, [])
+
+    if not fn.params:
+        # Nullary entry: simple forward.
+        main_fn = ir.Function(module, ir.FunctionType(I32, []), name="main")
+        bb = main_fn.append_basic_block("entry")
+        builder = ir.IRBuilder(bb)
+        result = builder.call(target_fn, [])
+        builder.ret(result)
+        return
+
+    # Entry has params (all i32 today): emit argv-parsing wrapper.
+    atoi = _get_or_declare_atoi(module)
+    abort = _get_or_declare_abort(module)
+    n = len(fn.params)
+
+    main_ty = ir.FunctionType(I32, [I32, I8.as_pointer().as_pointer()])
+    main_fn = ir.Function(module, main_ty, name="main")
+    main_fn.args[0].name = "argc"
+    main_fn.args[1].name = "argv"
+    argc, argv = main_fn.args
+
+    entry_bb = main_fn.append_basic_block("entry")
+    parse_bb = main_fn.append_basic_block("parse")
+    fail_bb = main_fn.append_basic_block("fail")
+    builder = ir.IRBuilder(entry_bb)
+
+    required = ir.Constant(I32, n + 1)
+    too_few = builder.icmp_signed("<", argc, required)
+    builder.cbranch(too_few, fail_bb, parse_bb)
+
+    builder.position_at_end(fail_bb)
+    builder.call(abort, [])
+    builder.unreachable()
+
+    builder.position_at_end(parse_bb)
+    parsed_args = []
+    i64 = ir.IntType(64)
+    for i in range(n):
+        # argv[i+1]: GEP on i8** then load to get i8*
+        idx = ir.Constant(i64, i + 1)
+        arg_slot = builder.gep(argv, [idx])         # i8**
+        arg_ptr = builder.load(arg_slot)            # i8*
+        parsed = builder.call(atoi, [arg_ptr])      # i32
+        parsed_args.append(parsed)
+
+    result = builder.call(target_fn, parsed_args)
     builder.ret(result)
 
 

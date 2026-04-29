@@ -336,10 +336,12 @@ def build(
     _build_impl(profile, target, link, show_ir, enforce_axiom, enforce_witness, enforce_lattice)
 
 
-@app.command()
+@app.command(
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
 def run(
-    bin_name: str | None = typer.Argument(
-        None, help="Which [[bin]] to run. Required if more than one is configured."
+    bin_name: str | None = typer.Option(
+        None, "--bin", help="Which [[bin]] to run. Required if multiple bins are configured.",
     ),
     profile: int | None = typer.Option(None, "--profile"),
     target: str | None = typer.Option(None, "--target"),
@@ -347,7 +349,23 @@ def run(
     enforce_witness: str | None = typer.Option(None, "--enforce-witness", help=_ENFORCE_HELP),
     enforce_lattice: str | None = typer.Option(None, "--enforce-lattice", help=_ENFORCE_HELP),
 ) -> None:
-    """Build and execute a binary. Like `cargo run`."""
+    """Build and execute a binary. Like `cargo run`.
+
+    Usage:
+        quod run                            # single bin, no program args
+        quod run --bin NAME                 # pick a bin, no program args
+        quod run -- ARG ...                 # forward ARGs as argv to the binary
+        quod run --bin NAME -- ARG ...      # both
+
+    If the entry function declares i32 params, the synthesized main wrapper
+    parses each argv slot via atoi.
+    """
+    # Click eats `--` and folds args into typer's parameter parsing, so we
+    # read sys.argv directly to recover whatever was passed after `--`.
+    import sys
+    program_args: list[str] = []
+    if "--" in sys.argv:
+        program_args = sys.argv[sys.argv.index("--") + 1:]
     cfg, result = _build_impl(
         profile, target, link=True, show_ir=False,
         enforce_axiom=enforce_axiom, enforce_witness=enforce_witness, enforce_lattice=enforce_lattice,
@@ -368,7 +386,10 @@ def run(
         typer.echo(f"error: bin {chosen.name!r} was not linked", err=True)
         raise typer.Exit(1)
     typer.echo(f"\n--- {chosen.name} ---")
-    completed = subprocess.run([str(chosen.binary)], capture_output=True, text=True)
+    cmd = [str(chosen.binary), *program_args]
+    completed = subprocess.run(cmd, capture_output=True, text=True)
+    if program_args:
+        typer.echo(f"argv:   {program_args}")
     typer.echo(f"stdout: {completed.stdout!r}")
     typer.echo(f"exit:   {completed.returncode}")
 

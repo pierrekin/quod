@@ -333,7 +333,7 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     },
     "Function": {
         "class": Function,
-        "summary": "A user function. params are i32 names; body is a list of statements; claims optional.",
+        "summary": "A user function. params are i32 names; body is a list of statements; claims optional. Entry-point functions may declare params; the synthesized main wrapper parses each argv slot via atoi (so `quod run -- 42 7` calls entry(42, 7)). An entry called 'main' must be nullary — rename it if you want params.",
         "example": {
             "name": "main", "params": [],
             "body": [{"kind": "quod.return_int", "value": 0}],
