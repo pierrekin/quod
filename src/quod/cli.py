@@ -194,6 +194,15 @@ def init(
     typer.echo(f"wrote {cfg_path}")
     typer.echo(f"wrote {program_path} ({template} starter)")
 
+    next_steps = {
+        "hello": "next: `quod show` to inspect, `quod run` to compile and execute.",
+        "guarded": "next: `quod fn show f` to see the guarded function, "
+                   "`quod claim suggest` to find provable optimizations.",
+        "empty": "next: `quod fn add` to start writing functions, "
+                 "or `quod schema` to discover node shapes.",
+    }
+    typer.echo(f"\n{next_steps[template]}")
+
 
 @app.command()
 def check() -> None:

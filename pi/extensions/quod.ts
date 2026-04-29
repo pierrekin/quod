@@ -75,7 +75,12 @@ export default function (pi: ExtensionAPI): void {
     name: "quod_init",
     label: "Init quod project",
     description:
-      "Initialize a new quod project: writes quod.toml and program.json. Templates: hello (runnable hello-world), guarded (claim/proof playground), empty.",
+      "Initialize a new quod project: writes quod.toml and program.json. Templates: hello (runnable hello-world), guarded (claim/proof playground with an unproven function f), empty.",
+    promptSnippet: "Initialize a new quod project (writes quod.toml + program.json).",
+    promptGuidelines: [
+      "When starting a new quod project, call quod_init. Pick template=hello for a runnable starter, guarded for a claim/proof playground, empty for a blank slate.",
+      "After init, typical next step depends on the goal: quod_show to inspect, quod_run to compile-and-execute (hello), or quod_fn_unconstrained → quod_claim_suggest to start the optimization workflow (guarded).",
+    ],
     parameters: Type.Object({
       ...cwdField,
       template: StringEnum(["hello", "guarded", "empty"] as const),
@@ -351,6 +356,11 @@ export default function (pi: ExtensionAPI): void {
     label: "Add claim",
     description:
       "Attach a claim to a function. The optimizer will trust this assertion. Use regime=axiom (you assert) or witness (proven). non_negative and int_range need `target`; return_in_range must omit it.",
+    promptSnippet: "Attach a claim — axiom (you assert) or witness (proven).",
+    promptGuidelines: [
+      "Use quod_claim_add for facts you can assert without proof, e.g. when the user has told you a parameter is non-negative. The optimizer trusts axiom claims; behavior is undefined at runtime if they're violated.",
+      "Prefer quod_claim_prove over quod_claim_add when the claim should be derivable from the function's body — Z3 will check it and attach a hash-pinned witness, which is safer than asserting blindly.",
+    ],
     parameters: Type.Object({
       ...cwdField,
       ...fnRefField,
@@ -399,6 +409,12 @@ export default function (pi: ExtensionAPI): void {
     label: "Prove claim with Z3",
     description:
       "Synthesize an SMT-LIB encoding of the claim, run Z3, and on success attach the result as a witness claim with a hash-pinned .smt2 artifact.",
+    promptSnippet: "Discharge a claim via Z3; attach as witness on success.",
+    promptGuidelines: [
+      "Use quod_claim_prove to formally verify a claim. On success the proof is stored as a .smt2 artifact and the claim is attached with regime=witness.",
+      "If proof returns 'sat', Z3 found a counterexample — the claim is false. Do NOT fall back to quod_claim_add as axiom; revisit the claim or the function.",
+      "If proof returns 'unknown' or NotImplementedError, the claim is beyond the current SMT lowering (mutable locals, srem, unsigned cmps). Either refactor the function into a pure-expression form or skip proving that particular claim.",
+    ],
     parameters: Type.Object({
       ...cwdField,
       ...fnRefField,
@@ -423,6 +439,10 @@ export default function (pi: ExtensionAPI): void {
     label: "Verify claim evidence",
     description:
       "Re-check evidence attached to stored claims: re-hashes z3 artifacts and re-runs Z3 to confirm unsat.",
+    promptSnippet: "Re-validate stored proofs after edits.",
+    promptGuidelines: [
+      "Run quod_claim_verify after editing a function that has witness claims. The .smt2 artifact's sha256 is checked, and Z3 re-runs to confirm unsat. If a proof breaks, you'll need to re-prove with quod_claim_prove or relax the claim.",
+    ],
     parameters: Type.Object({ ...cwdField }),
     async execute(_id, p, signal) {
       return text(await runQuod(["claim", "verify"], { cwd: p.cwd, signal }));
@@ -434,6 +454,13 @@ export default function (pi: ExtensionAPI): void {
     label: "Suggest claims",
     description:
       "Speculatively compile candidate claims and surface those that would shrink optimized IR if proven. Read-only — does not mutate the program.",
+    promptSnippet:
+      "Find claims worth proving — entry point of the optimization workflow.",
+    promptGuidelines: [
+      "When the user asks to optimize a quod program (or 'make it faster', 'reduce IR size'), run quod_claim_suggest first. It speculatively compiles candidate claims and reports which ones would shrink optimized IR if proven.",
+      "After quod_claim_suggest, run quod_claim_prove on the suggestions that should genuinely hold. Don't fall back to quod_claim_add as axiom unless you've verified the claim by other means — axioms are trusted unconditionally and behavior is undefined if violated.",
+      "If the suggester reports nothing, the codegen is already tight or the candidate set is exhausted; not every program benefits from claim-driven optimization.",
+    ],
     parameters: Type.Object({
       ...cwdField,
       top_n: Type.Optional(Type.Number()),
