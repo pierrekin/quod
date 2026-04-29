@@ -225,6 +225,19 @@ export default function (pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
+    name: "quod_fn_rm",
+    label: "Remove function",
+    description:
+      "Remove a function from the program. Permissive: doesn't refuse if other functions still call this one — the dangling call surfaces at build time. Use `quod_fn_callers` first to see who'd be affected.",
+    parameters: Type.Object({ ...cwdField, ...fnRefField }),
+    async execute(_id, p, signal) {
+      return text(
+        await runQuod(["fn", "rm", p.function], { cwd: p.cwd, signal }),
+      );
+    },
+  });
+
+  pi.registerTool({
     name: "quod_fn_callers",
     label: "Find callers",
     description: "List every call site to a function across the program.",
@@ -446,6 +459,57 @@ export default function (pi: ExtensionAPI): void {
       }
       return text(
         await runQuod(args, { cwd: p.cwd, stdin: p.spec_json, signal }),
+      );
+    },
+  });
+
+  pi.registerTool({
+    name: "quod_stmt_rm",
+    label: "Remove statement",
+    description:
+      "Remove a statement from a function by content-hash prefix. Find the hash via `quod_fn_show` (each statement is shown with its short hash) or `quod_show` with hashes=true.",
+    parameters: Type.Object({
+      ...cwdField,
+      ...fnRefField,
+      hash_prefix: Type.String({
+        description: "Content-hash prefix of the statement to remove.",
+      }),
+    }),
+    async execute(_id, p, signal) {
+      return text(
+        await runQuod(["stmt", "rm", p.function, p.hash_prefix], {
+          cwd: p.cwd,
+          signal,
+        }),
+      );
+    },
+  });
+
+  // -------------------- const --------------------
+
+  pi.registerTool({
+    name: "quod_const_ls",
+    label: "List constants",
+    description: "List declared string constants.",
+    parameters: Type.Object({ ...cwdField }),
+    async execute(_id, p, signal) {
+      return text(await runQuod(["const", "ls"], { cwd: p.cwd, signal }));
+    },
+  });
+
+  pi.registerTool({
+    name: "quod_const_add",
+    label: "Add string constant",
+    description:
+      "Declare a string constant. Reference it from code with quod.string_ref. Pass the value as a raw string (with literal newlines etc.); quod adds a trailing NUL when lowering.",
+    parameters: Type.Object({
+      ...cwdField,
+      name: Type.String({ description: "Constant name, e.g. '.str.fmt'." }),
+      value: Type.String({ description: "Raw string value (not C-escaped)." }),
+    }),
+    async execute(_id, p, signal) {
+      return text(
+        await runQuod(["const", "add", p.name, p.value], { cwd: p.cwd, signal }),
       );
     },
   });

@@ -511,6 +511,20 @@ def replace_function(program: Program, new_fn: Function) -> Program:
     return program.model_copy(update={"functions": updated})
 
 
+def remove_function(program: Program, function_name: str) -> Program:
+    """Return a new Program with the named function removed.
+
+    Permissive about dangling calls — if other functions reference this one,
+    the dangling-callee error surfaces at lower time (matches the
+    callgraph.json example with `ghost`). Use `quod fn callers` first if you
+    want to know who'd be affected.
+    """
+    kept = tuple(fn for fn in program.functions if fn.name != function_name)
+    if kept == program.functions:
+        raise KeyError(f"no function named {function_name!r}")
+    return program.model_copy(update={"functions": kept})
+
+
 def add_claim(program: Program, function: str, claim: Claim) -> Program:
     fn = require_function(program, function)
     target = claim_param(claim)

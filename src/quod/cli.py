@@ -37,12 +37,14 @@ from quod.config import (
     with_overrides,
 )
 from quod.editor import (
+    add_constant_to_program,
     add_function_to_program,
     add_statement_in_function,
     find_function_ref,
     parse_function_spec,
     parse_statement_spec,
     read_json_arg,
+    remove_statement_in_function,
 )
 from quod.hashing import HASH_DISPLAY_LEN, find_by_prefix, node_hash, short_hash, walk
 from quod.model import (
@@ -59,6 +61,7 @@ from quod.model import (
     NonNegativeClaim,
     Program,
     ReturnInRangeClaim,
+    StringConstant,
     Z3Justification,
     add_claim,
     claim_param,
@@ -68,6 +71,7 @@ from quod.model import (
     function_callees,
     load_program,
     relax_claim,
+    remove_function,
     replace_function,
     save_program,
 )
@@ -92,12 +96,14 @@ claim_app = typer.Typer(no_args_is_help=True, help="Operations on claims.")
 stmt_app = typer.Typer(no_args_is_help=True, help="Operations on statements.")
 extern_app = typer.Typer(no_args_is_help=True, help="Operations on externs.")
 note_app = typer.Typer(no_args_is_help=True, help="Operations on notes.")
+const_app = typer.Typer(no_args_is_help=True, help="Operations on string constants.")
 
 app.add_typer(fn_app, name="fn")
 app.add_typer(claim_app, name="claim")
 app.add_typer(stmt_app, name="stmt")
 app.add_typer(extern_app, name="extern")
 app.add_typer(note_app, name="note")
+app.add_typer(const_app, name="const")
 
 
 # ---------- Shared state ----------
@@ -410,6 +416,27 @@ def fn_add(
         raise typer.Exit(1)
     _save(program)
     typer.echo(f"added function {fn.name} (hash={short_hash(fn)})")
+
+
+@fn_app.command("rm")
+def fn_rm(
+    function: str = typer.Argument(..., help="Function name or hash prefix."),
+) -> None:
+    """Remove a function from the program.
+
+    Permissive: doesn't refuse if other functions still call this one. Run
+    `quod fn callers FN` first if you want to know who'd be affected; the
+    dangling call surfaces as an error at `quod build`.
+    """
+    program = _load()
+    try:
+        fn = find_function_ref(program, function)
+        program = remove_function(program, fn.name)
+    except (KeyError, ValueError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+    _save(program)
+    typer.echo(f"removed function {fn.name}")
 
 
 @fn_app.command("callers")
@@ -925,6 +952,63 @@ def stmt_add(
         raise typer.Exit(1)
     _save(program)
     typer.echo(f"added statement to {fn.name}")
+
+
+@stmt_app.command("rm")
+def stmt_rm(
+    function: str = typer.Argument(..., help="Function name or hash prefix."),
+    hash_prefix: str = typer.Argument(
+        ..., help="Content-hash prefix of the statement to remove."
+    ),
+) -> None:
+    """Remove a statement from a function by content-hash prefix.
+
+    Find the hash via `quod fn show FN` (each statement is shown with its
+    short hash) or `quod show --hashes`.
+    """
+    program = _load()
+    try:
+        fn = find_function_ref(program, function)
+        program = remove_statement_in_function(program, fn, hash_prefix)
+    except (KeyError, ValueError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+    _save(program)
+    typer.echo(f"removed statement {hash_prefix} from {fn.name}")
+
+
+# ---------- const sub-app ----------
+
+@const_app.command("ls")
+def const_ls() -> None:
+    """List declared string constants."""
+    program = _load()
+    if not program.constants:
+        typer.echo("(no constants)")
+        return
+    for c in program.constants:
+        typer.echo(f"[{short_hash(c)}] {c.name} = {c.value!r}")
+
+
+@const_app.command("add")
+def const_add(
+    name: str = typer.Argument(..., help="Constant name (e.g. '.str.fmt')."),
+    value: str = typer.Argument(..., help="Constant value (raw string; not C-escaped)."),
+) -> None:
+    """Declare a string constant. Reference it from code with quod.string_ref.
+
+    The value is the raw string as you want it in the program. To embed a
+    newline, pass an actual newline (the shell will likely need $'...\\n' or
+    a heredoc). Quod adds a trailing NUL byte automatically when lowering.
+    """
+    program = _load()
+    try:
+        program = add_constant_to_program(program, StringConstant(name=name, value=value))
+    except (KeyError, ValueError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+    _save(program)
+    typer.echo(f"declared constant {name} = {value!r}")
 
 
 # ---------- extern sub-app ----------

@@ -21,6 +21,7 @@ from quod.model import (
     Function,
     Program,
     Statement,
+    StringConstant,
     replace_function,
 )
 
@@ -88,6 +89,25 @@ def add_statement_in_function(
             raise ValueError(f"unknown anchor mode {where!r}")
     new_fn = function.model_copy(update={"body": tuple(body)})
     return replace_function(program, new_fn)
+
+
+def remove_statement_in_function(
+    program: Program,
+    function: Function,
+    hash_prefix: str,
+) -> Program:
+    """Remove the statement matching `hash_prefix` from the function body."""
+    idx = find_statement_index(function, hash_prefix)
+    body = function.body[:idx] + function.body[idx + 1:]
+    new_fn = function.model_copy(update={"body": body})
+    return replace_function(program, new_fn)
+
+
+def add_constant_to_program(program: Program, constant: StringConstant) -> Program:
+    """Append a string constant. Errors if the name collides."""
+    if any(c.name == constant.name for c in program.constants):
+        raise ValueError(f"constant {constant.name!r} already declared")
+    return program.model_copy(update={"constants": program.constants + (constant,)})
 
 
 # ---------- JSON ingest ----------
