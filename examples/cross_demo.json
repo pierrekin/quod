@@ -1,0 +1,135 @@
+{
+  "constants": [],
+  "functions": [
+    {
+      "name": "f",
+      "params": [
+        "x"
+      ],
+      "body": [
+        {
+          "kind": "if",
+          "cond": {
+            "kind": "binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "param_ref",
+              "name": "x"
+            },
+            "rhs": {
+              "kind": "int_lit",
+              "value": 0
+            }
+          },
+          "then_body": [
+            {
+              "kind": "return_expr",
+              "value": {
+                "kind": "int_lit",
+                "value": -1
+              }
+            }
+          ],
+          "else_body": [
+            {
+              "kind": "return_expr",
+              "value": {
+                "kind": "binop",
+                "op": "add",
+                "lhs": {
+                  "kind": "param_ref",
+                  "name": "x"
+                },
+                "rhs": {
+                  "kind": "int_lit",
+                  "value": 1
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "claims": [
+        {
+          "regime": "witness",
+          "justification": {
+            "kind": "z3",
+            "artifact_path": "proofs/cross-demo/f_return_in_range_return_3f709cfcb113.smt2",
+            "artifact_hash": "3f709cfcb11368288f7a1b7fdbdc85e98bff53348cc534a9bab49ad1d18e442a",
+            "note": null
+          },
+          "kind": "return_in_range",
+          "min": -1,
+          "max": null
+        }
+      ]
+    },
+    {
+      "name": "g",
+      "params": [
+        "y"
+      ],
+      "body": [
+        {
+          "kind": "if",
+          "cond": {
+            "kind": "binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "call",
+              "function": "f",
+              "args": [
+                {
+                  "kind": "param_ref",
+                  "name": "y"
+                }
+              ]
+            },
+            "rhs": {
+              "kind": "int_lit",
+              "value": -100
+            }
+          },
+          "then_body": [
+            {
+              "kind": "return_expr",
+              "value": {
+                "kind": "int_lit",
+                "value": 999
+              }
+            }
+          ],
+          "else_body": [
+            {
+              "kind": "return_expr",
+              "value": {
+                "kind": "call",
+                "function": "f",
+                "args": [
+                  {
+                    "kind": "param_ref",
+                    "name": "y"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "claims": [
+        {
+          "regime": "witness",
+          "justification": {
+            "kind": "z3",
+            "artifact_path": "proofs/cross-demo/g_return_in_range_return_cab3482a222a.smt2",
+            "artifact_hash": "cab3482a222a0da36f2d9cd4875ad43e73516ecba4290940ca6eddc7331fb93a",
+            "note": null
+          },
+          "kind": "return_in_range",
+          "min": -1,
+          "max": null
+        }
+      ]
+    }
+  ]
+}

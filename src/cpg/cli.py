@@ -544,8 +544,9 @@ def prove_cmd(
         raise typer.Exit(2)
 
     # Lower function + existing claims (as hypotheses) + negated goal to SMT.
+    # Pass the full program so callees' return claims become per-call hypotheses.
     try:
-        smt = goal_smt_lib(fn, goal, hypotheses=fn.claims)
+        smt = goal_smt_lib(fn, goal, hypotheses=fn.claims, program=program)
     except NotImplementedError as e:
         typer.echo(f"error: cannot synthesize proof: {e}", err=True)
         raise typer.Exit(1)
