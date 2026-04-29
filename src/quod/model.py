@@ -45,14 +45,17 @@ class ParamRef(_Node):
 class BinOp(_Node):
     """Binary operation. The operator determines the result type:
 
-      arith    — add, sub, mul, srem               : iN in / iN out (operands agree)
-      cmp (s)  — slt, sle, sgt, sge, eq, ne        : iN in / i1 out (signed)
-      cmp (u)  — ult, ule, ugt, uge                : iN in / i1 out (unsigned)
-      bitwise  — or, and                           : iN in / iN out (operands agree)
+      arith (s) — add, sub, mul, sdiv, srem        : iN in / iN out
+      arith (u) — udiv                              : iN in / iN out
+      cmp (s)   — slt, sle, sgt, sge, eq, ne       : iN in / i1 out
+      cmp (u)   — ult, ule, ugt, uge               : iN in / i1 out
+      bitwise   — or, and                           : iN in / iN out
 
     Operands of arith/bitwise/cmp must have the same type; LLVM's verifier
     enforces this at lower time. The signed/unsigned distinction matches
-    LLVM IR icmp predicates — signedness lives on the op, not the type.
+    LLVM IR predicates — signedness lives on the op, not the type. Division
+    by zero is undefined behaviour (matches LLVM); guard with an int_range
+    or runtime branch if the divisor isn't statically nonzero.
 
     For short-circuit boolean combinators (correct in the presence of
     side-effecting operands), use `ShortCircuitOr` / `ShortCircuitAnd` —
@@ -60,7 +63,7 @@ class BinOp(_Node):
     """
     kind: Literal["llvm.binop"] = "llvm.binop"
     op: Literal[
-        "add", "sub", "mul", "srem",
+        "add", "sub", "mul", "sdiv", "udiv", "srem",
         "slt", "sle", "sgt", "sge", "eq", "ne",
         "ult", "ule", "ugt", "uge",
         "or", "and",
@@ -773,7 +776,7 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
 
 
 _BINOP_SYMBOL = {
-    "add": "+", "sub": "-", "mul": "*", "srem": "%",
+    "add": "+", "sub": "-", "mul": "*", "sdiv": "/", "udiv": "/u", "srem": "%",
     "slt": "<", "sle": "<=", "sgt": ">", "sge": ">=", "eq": "==", "ne": "!=",
     "ult": "<u", "ule": "<=u", "ugt": ">u", "uge": ">=u",
     "or": "|", "and": "&",

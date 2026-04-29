@@ -160,6 +160,10 @@ def _lower_expr(
             return builder.sub(go(l), go(r))
         case BinOp(op="mul", lhs=l, rhs=r):
             return builder.mul(go(l), go(r))
+        case BinOp(op="sdiv", lhs=l, rhs=r):
+            return builder.sdiv(go(l), go(r))
+        case BinOp(op="udiv", lhs=l, rhs=r):
+            return builder.udiv(go(l), go(r))
         case BinOp(op="srem", lhs=l, rhs=r):
             return builder.srem(go(l), go(r))
         case BinOp(op=op, lhs=l, rhs=r) if op in _ICMP_SIGNED:

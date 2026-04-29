@@ -130,10 +130,12 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "summary": "Binary operation. Operands must agree in type; the op determines the result type.",
         "field_descriptions": {
             "op": (
-                "one of: add, sub, mul, srem (iN→iN); "
+                "one of: add, sub, mul, sdiv, srem (signed iN→iN); "
+                "udiv (unsigned iN→iN); "
                 "slt, sle, sgt, sge, eq, ne (signed cmp, iN→i1); "
                 "ult, ule, ugt, uge (unsigned cmp, iN→i1); "
-                "or, and (iN→iN, bitwise). Use quod.sc_or/sc_and for short-circuit booleans."
+                "or, and (iN→iN, bitwise). "
+                "Division by zero is UB. Use quod.sc_or/sc_and for short-circuit booleans."
             ),
         },
         "example": {

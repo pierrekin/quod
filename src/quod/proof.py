@@ -137,9 +137,10 @@ def _expr_to_smt(expr, state: _SmtState) -> str:
         case BinOp(op="ne", lhs=l, rhs=r):
             return f"(distinct {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"
         case BinOp(op=op):
-            # srem, or, and, ult/ule/ugt/uge: skipped for SMT — semantic
-            # mismatch with QF_LIA (srem ≠ SMT mod, signed-vs-unsigned, or
-            # boolean-vs-integer ambiguity for or/and).
+            # sdiv/udiv/srem, or, and, ult/ule/ugt/uge: skipped for SMT —
+            # semantic mismatch with QF_LIA (LLVM's sdiv truncates toward
+            # zero while SMT div floors; srem ≠ SMT mod; signed/unsigned
+            # cmp; boolean-vs-integer ambiguity for or/and).
             raise NotImplementedError(
                 f"can't lower BinOp(op={op!r}) for SMT in this round"
             )
