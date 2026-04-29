@@ -1,0 +1,261 @@
+{
+  "constants": [
+    {
+      "name": ".fmt",
+      "value": "%d\n"
+    }
+  ],
+  "externs": [
+    {
+      "name": "printf",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ],
+      "varargs": true
+    }
+  ],
+  "functions": [
+    {
+      "name": "sum_of_squares",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "r",
+          "type": {
+            "kind": "llvm.i32"
+          },
+          "init": {
+            "kind": "llvm.const_int",
+            "value": 0,
+            "type": {
+              "kind": "llvm.i32"
+            }
+          }
+        },
+        {
+          "kind": "quod.for",
+          "var": "i",
+          "type": {
+            "kind": "llvm.i32"
+          },
+          "lo": {
+            "kind": "llvm.const_int",
+            "value": 1,
+            "type": {
+              "kind": "llvm.i32"
+            }
+          },
+          "hi": {
+            "kind": "llvm.binop",
+            "op": "add",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "n"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "value": 1,
+              "type": {
+                "kind": "llvm.i32"
+              }
+            }
+          },
+          "body": [
+            {
+              "kind": "quod.assign",
+              "name": "r",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {
+                  "kind": "quod.local_ref",
+                  "name": "r"
+                },
+                "rhs": {
+                  "kind": "llvm.binop",
+                  "op": "mul",
+                  "lhs": {
+                    "kind": "quod.local_ref",
+                    "name": "i"
+                  },
+                  "rhs": {
+                    "kind": "quod.local_ref",
+                    "name": "i"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "r"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
+    },
+    {
+      "name": "square_of_sum",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "s",
+          "type": {
+            "kind": "llvm.i32"
+          },
+          "init": {
+            "kind": "llvm.const_int",
+            "value": 0,
+            "type": {
+              "kind": "llvm.i32"
+            }
+          }
+        },
+        {
+          "kind": "quod.for",
+          "var": "i",
+          "type": {
+            "kind": "llvm.i32"
+          },
+          "lo": {
+            "kind": "llvm.const_int",
+            "value": 1,
+            "type": {
+              "kind": "llvm.i32"
+            }
+          },
+          "hi": {
+            "kind": "llvm.binop",
+            "op": "add",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "n"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "value": 1,
+              "type": {
+                "kind": "llvm.i32"
+              }
+            }
+          },
+          "body": [
+            {
+              "kind": "quod.assign",
+              "name": "s",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {
+                  "kind": "quod.local_ref",
+                  "name": "s"
+                },
+                "rhs": {
+                  "kind": "quod.local_ref",
+                  "name": "i"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "mul",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "s"
+            },
+            "rhs": {
+              "kind": "quod.local_ref",
+              "name": "s"
+            }
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
+    },
+    {
+      "name": "main",
+      "params": [],
+      "body": [
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "printf",
+            "args": [
+              {
+                "kind": "quod.string_ref",
+                "name": ".fmt"
+              },
+              {
+                "kind": "llvm.binop",
+                "op": "sub",
+                "lhs": {
+                  "kind": "llvm.call",
+                  "function": "square_of_sum",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "value": 100,
+                      "type": {
+                        "kind": "llvm.i32"
+                      }
+                    }
+                  ]
+                },
+                "rhs": {
+                  "kind": "llvm.call",
+                  "function": "sum_of_squares",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "value": 100,
+                      "type": {
+                        "kind": "llvm.i32"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.return_int",
+          "value": 0
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
+    }
+  ]
+}

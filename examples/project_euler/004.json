@@ -1,0 +1,316 @@
+{
+  "constants": [
+    {
+      "name": ".fmt",
+      "value": "%d\n"
+    }
+  ],
+  "externs": [
+    {
+      "name": "printf",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ],
+      "varargs": true
+    }
+  ],
+  "functions": [
+    {
+      "name": "is_palindrome",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "rev",
+          "type": {
+            "kind": "llvm.i32"
+          },
+          "init": {
+            "kind": "llvm.const_int",
+            "value": 0,
+            "type": {
+              "kind": "llvm.i32"
+            }
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "m",
+          "type": {
+            "kind": "llvm.i32"
+          },
+          "init": {
+            "kind": "llvm.param_ref",
+            "name": "n"
+          }
+        },
+        {
+          "kind": "quod.while",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "sgt",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "m"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "value": 0,
+              "type": {
+                "kind": "llvm.i32"
+              }
+            }
+          },
+          "body": [
+            {
+              "kind": "quod.assign",
+              "name": "rev",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {
+                  "kind": "llvm.binop",
+                  "op": "mul",
+                  "lhs": {
+                    "kind": "quod.local_ref",
+                    "name": "rev"
+                  },
+                  "rhs": {
+                    "kind": "llvm.const_int",
+                    "value": 10,
+                    "type": {
+                      "kind": "llvm.i32"
+                    }
+                  }
+                },
+                "rhs": {
+                  "kind": "llvm.binop",
+                  "op": "srem",
+                  "lhs": {
+                    "kind": "quod.local_ref",
+                    "name": "m"
+                  },
+                  "rhs": {
+                    "kind": "llvm.const_int",
+                    "value": 10,
+                    "type": {
+                      "kind": "llvm.i32"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "kind": "quod.assign",
+              "name": "m",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "sdiv",
+                "lhs": {
+                  "kind": "quod.local_ref",
+                  "name": "m"
+                },
+                "rhs": {
+                  "kind": "llvm.const_int",
+                  "value": 10,
+                  "type": {
+                    "kind": "llvm.i32"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "rev"
+            },
+            "rhs": {
+              "kind": "llvm.param_ref",
+              "name": "n"
+            }
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i1"
+      }
+    },
+    {
+      "name": "largest_palindrome_product",
+      "params": [],
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "best",
+          "type": {
+            "kind": "llvm.i32"
+          },
+          "init": {
+            "kind": "llvm.const_int",
+            "value": 0,
+            "type": {
+              "kind": "llvm.i32"
+            }
+          }
+        },
+        {
+          "kind": "quod.for",
+          "var": "i",
+          "type": {
+            "kind": "llvm.i32"
+          },
+          "lo": {
+            "kind": "llvm.const_int",
+            "value": 100,
+            "type": {
+              "kind": "llvm.i32"
+            }
+          },
+          "hi": {
+            "kind": "llvm.const_int",
+            "value": 1000,
+            "type": {
+              "kind": "llvm.i32"
+            }
+          },
+          "body": [
+            {
+              "kind": "quod.for",
+              "var": "j",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "lo": {
+                "kind": "quod.local_ref",
+                "name": "i"
+              },
+              "hi": {
+                "kind": "llvm.const_int",
+                "value": 1000,
+                "type": {
+                  "kind": "llvm.i32"
+                }
+              },
+              "body": [
+                {
+                  "kind": "quod.let",
+                  "name": "p",
+                  "type": {
+                    "kind": "llvm.i32"
+                  },
+                  "init": {
+                    "kind": "llvm.binop",
+                    "op": "mul",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "quod.local_ref",
+                      "name": "j"
+                    }
+                  }
+                },
+                {
+                  "kind": "quod.if",
+                  "cond": {
+                    "kind": "quod.sc_and",
+                    "lhs": {
+                      "kind": "llvm.binop",
+                      "op": "sgt",
+                      "lhs": {
+                        "kind": "quod.local_ref",
+                        "name": "p"
+                      },
+                      "rhs": {
+                        "kind": "quod.local_ref",
+                        "name": "best"
+                      }
+                    },
+                    "rhs": {
+                      "kind": "llvm.call",
+                      "function": "is_palindrome",
+                      "args": [
+                        {
+                          "kind": "quod.local_ref",
+                          "name": "p"
+                        }
+                      ]
+                    }
+                  },
+                  "then_body": [
+                    {
+                      "kind": "quod.assign",
+                      "name": "best",
+                      "value": {
+                        "kind": "quod.local_ref",
+                        "name": "p"
+                      }
+                    }
+                  ],
+                  "else_body": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "best"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
+    },
+    {
+      "name": "main",
+      "params": [],
+      "body": [
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "printf",
+            "args": [
+              {
+                "kind": "quod.string_ref",
+                "name": ".fmt"
+              },
+              {
+                "kind": "llvm.call",
+                "function": "largest_palindrome_product",
+                "args": []
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.return_int",
+          "value": 0
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
+    }
+  ]
+}

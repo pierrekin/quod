@@ -18,6 +18,54 @@
   ],
   "functions": [
     {
+      "name": "is_div",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        },
+        {
+          "name": "k",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "llvm.binop",
+              "op": "srem",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "n"
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "k"
+              }
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "value": 0,
+              "type": {
+                "kind": "llvm.i32"
+              }
+            }
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i1"
+      }
+    },
+    {
       "name": "main",
       "params": [],
       "body": [
@@ -38,6 +86,9 @@
         {
           "kind": "quod.for",
           "var": "i",
+          "type": {
+            "kind": "llvm.i32"
+          },
           "lo": {
             "kind": "llvm.const_int",
             "value": 1,
@@ -58,56 +109,38 @@
               "cond": {
                 "kind": "quod.sc_or",
                 "lhs": {
-                  "kind": "llvm.binop",
-                  "op": "eq",
-                  "lhs": {
-                    "kind": "llvm.binop",
-                    "op": "srem",
-                    "lhs": {
+                  "kind": "llvm.call",
+                  "function": "is_div",
+                  "args": [
+                    {
                       "kind": "quod.local_ref",
                       "name": "i"
                     },
-                    "rhs": {
+                    {
                       "kind": "llvm.const_int",
                       "value": 3,
                       "type": {
                         "kind": "llvm.i32"
                       }
                     }
-                  },
-                  "rhs": {
-                    "kind": "llvm.const_int",
-                    "value": 0,
-                    "type": {
-                      "kind": "llvm.i32"
-                    }
-                  }
+                  ]
                 },
                 "rhs": {
-                  "kind": "llvm.binop",
-                  "op": "eq",
-                  "lhs": {
-                    "kind": "llvm.binop",
-                    "op": "srem",
-                    "lhs": {
+                  "kind": "llvm.call",
+                  "function": "is_div",
+                  "args": [
+                    {
                       "kind": "quod.local_ref",
                       "name": "i"
                     },
-                    "rhs": {
+                    {
                       "kind": "llvm.const_int",
                       "value": 5,
                       "type": {
                         "kind": "llvm.i32"
                       }
                     }
-                  },
-                  "rhs": {
-                    "kind": "llvm.const_int",
-                    "value": 0,
-                    "type": {
-                      "kind": "llvm.i32"
-                    }
-                  }
+                  ]
                 }
               },
               "then_body": [
@@ -130,10 +163,7 @@
               ],
               "else_body": []
             }
-          ],
-          "type": {
-            "kind": "llvm.i32"
-          }
+          ]
         },
         {
           "kind": "quod.expr_stmt",

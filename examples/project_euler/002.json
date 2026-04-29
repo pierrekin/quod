@@ -1,0 +1,251 @@
+{
+  "constants": [
+    {
+      "name": ".fmt",
+      "value": "%d\n"
+    }
+  ],
+  "externs": [
+    {
+      "name": "printf",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ],
+      "varargs": true
+    }
+  ],
+  "functions": [
+    {
+      "name": "is_even",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "llvm.binop",
+              "op": "srem",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "n"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "value": 2,
+                "type": {
+                  "kind": "llvm.i32"
+                }
+              }
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "value": 0,
+              "type": {
+                "kind": "llvm.i32"
+              }
+            }
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i1"
+      }
+    },
+    {
+      "name": "sum_even_fib_below",
+      "params": [
+        {
+          "name": "limit",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "a",
+          "type": {
+            "kind": "llvm.i32"
+          },
+          "init": {
+            "kind": "llvm.const_int",
+            "value": 0,
+            "type": {
+              "kind": "llvm.i32"
+            }
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "b",
+          "type": {
+            "kind": "llvm.i32"
+          },
+          "init": {
+            "kind": "llvm.const_int",
+            "value": 1,
+            "type": {
+              "kind": "llvm.i32"
+            }
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "sum",
+          "type": {
+            "kind": "llvm.i32"
+          },
+          "init": {
+            "kind": "llvm.const_int",
+            "value": 0,
+            "type": {
+              "kind": "llvm.i32"
+            }
+          }
+        },
+        {
+          "kind": "quod.while",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "b"
+            },
+            "rhs": {
+              "kind": "llvm.param_ref",
+              "name": "limit"
+            }
+          },
+          "body": [
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.call",
+                "function": "is_even",
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "b"
+                  }
+                ]
+              },
+              "then_body": [
+                {
+                  "kind": "quod.assign",
+                  "name": "sum",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "sum"
+                    },
+                    "rhs": {
+                      "kind": "quod.local_ref",
+                      "name": "b"
+                    }
+                  }
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.assign",
+              "name": "b",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {
+                  "kind": "quod.local_ref",
+                  "name": "a"
+                },
+                "rhs": {
+                  "kind": "quod.local_ref",
+                  "name": "b"
+                }
+              }
+            },
+            {
+              "kind": "quod.assign",
+              "name": "a",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "sub",
+                "lhs": {
+                  "kind": "quod.local_ref",
+                  "name": "b"
+                },
+                "rhs": {
+                  "kind": "quod.local_ref",
+                  "name": "a"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "sum"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
+    },
+    {
+      "name": "main",
+      "params": [],
+      "body": [
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "printf",
+            "args": [
+              {
+                "kind": "quod.string_ref",
+                "name": ".fmt"
+              },
+              {
+                "kind": "llvm.call",
+                "function": "sum_even_fib_below",
+                "args": [
+                  {
+                    "kind": "llvm.const_int",
+                    "value": 4000000,
+                    "type": {
+                      "kind": "llvm.i32"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.return_int",
+          "value": 0
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      }
+    }
+  ]
+}

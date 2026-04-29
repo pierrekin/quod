@@ -45,7 +45,11 @@ src/quod/
     lower.py        Program → LLVM IR → object/binary
     proof.py        SMT-LIB lowering for `quod claim prove`
     templates.py    Starter programs `quod init` can write
-examples/           Hand-rolled program.json files for various features
+examples/
+    basics/         Hello-world, system() — minimal programs
+    claims/         Axioms, witnesses, lattice, codegen-impact
+    analysis/       Call graphs and cross-procedural lattice
+    project_euler/  Pretty solutions to PE problems (001..)
 ```
 
 ## A taste
