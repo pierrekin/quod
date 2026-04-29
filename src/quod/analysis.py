@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from cpg.hashing import node_hash
-from cpg.model import (
+from quod.hashing import node_hash
+from quod.model import (
     Assign,
     BinOp,
     Call,

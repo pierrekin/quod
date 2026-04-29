@@ -22,7 +22,7 @@
       "params": [],
       "body": [
         {
-          "kind": "cpg.let",
+          "kind": "quod.let",
           "name": "sum",
           "type": {
             "kind": "llvm.i32"
@@ -33,7 +33,7 @@
           }
         },
         {
-          "kind": "cpg.for",
+          "kind": "quod.for",
           "var": "i",
           "lo": {
             "kind": "llvm.const_int",
@@ -45,9 +45,9 @@
           },
           "body": [
             {
-              "kind": "cpg.if",
+              "kind": "quod.if",
               "cond": {
-                "kind": "cpg.sc_or",
+                "kind": "quod.sc_or",
                 "lhs": {
                   "kind": "llvm.binop",
                   "op": "eq",
@@ -55,7 +55,7 @@
                     "kind": "llvm.binop",
                     "op": "srem",
                     "lhs": {
-                      "kind": "cpg.local_ref",
+                      "kind": "quod.local_ref",
                       "name": "i"
                     },
                     "rhs": {
@@ -75,7 +75,7 @@
                     "kind": "llvm.binop",
                     "op": "srem",
                     "lhs": {
-                      "kind": "cpg.local_ref",
+                      "kind": "quod.local_ref",
                       "name": "i"
                     },
                     "rhs": {
@@ -91,17 +91,17 @@
               },
               "then_body": [
                 {
-                  "kind": "cpg.assign",
+                  "kind": "quod.assign",
                   "name": "sum",
                   "value": {
                     "kind": "llvm.binop",
                     "op": "add",
                     "lhs": {
-                      "kind": "cpg.local_ref",
+                      "kind": "quod.local_ref",
                       "name": "sum"
                     },
                     "rhs": {
-                      "kind": "cpg.local_ref",
+                      "kind": "quod.local_ref",
                       "name": "i"
                     }
                   }
@@ -112,24 +112,24 @@
           ]
         },
         {
-          "kind": "cpg.expr_stmt",
+          "kind": "quod.expr_stmt",
           "value": {
             "kind": "llvm.call",
             "function": "printf",
             "args": [
               {
-                "kind": "cpg.string_ref",
+                "kind": "quod.string_ref",
                 "name": ".fmt"
               },
               {
-                "kind": "cpg.local_ref",
+                "kind": "quod.local_ref",
                 "name": "sum"
               }
             ]
           }
         },
         {
-          "kind": "cpg.return_int",
+          "kind": "quod.return_int",
           "value": 0
         }
       ]

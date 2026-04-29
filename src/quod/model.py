@@ -2,7 +2,7 @@
 
 The graph is the asset. Nodes are frozen Pydantic models; mutators return
 new Programs via model_copy. Addressing is by name *or* content-hash prefix
-(the latter implemented in cpg.hashing / cpg.editor).
+(the latter implemented in quod.hashing / quod.editor).
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ class BinOp(_Node):
 class ShortCircuitOr(_Node):
     """`lhs || rhs` with C-style short-circuit. If `lhs` is true, `rhs` is
     not evaluated. Lowered to branch + phi."""
-    kind: Literal["cpg.sc_or"] = "cpg.sc_or"
+    kind: Literal["quod.sc_or"] = "quod.sc_or"
     lhs: "Expr"
     rhs: "Expr"
 
@@ -68,7 +68,7 @@ class ShortCircuitOr(_Node):
 class ShortCircuitAnd(_Node):
     """`lhs && rhs` with C-style short-circuit. If `lhs` is false, `rhs` is
     not evaluated. Lowered to branch + phi."""
-    kind: Literal["cpg.sc_and"] = "cpg.sc_and"
+    kind: Literal["quod.sc_and"] = "quod.sc_and"
     lhs: "Expr"
     rhs: "Expr"
 
@@ -90,14 +90,14 @@ class StringRef(_Node):
     """An i8* value: pointer to a `StringConstant`'s underlying bytes. Used
     as an arg to externs that take `const char *` (e.g. system, getenv,
     puts, printf's format)."""
-    kind: Literal["cpg.string_ref"] = "cpg.string_ref"
+    kind: Literal["quod.string_ref"] = "quod.string_ref"
     name: str  # name of a StringConstant in the Program
 
 
 class LocalRef(_Node):
     """Read the current value of a local introduced by `Let` (or a `For`
     loop variable)."""
-    kind: Literal["cpg.local_ref"] = "cpg.local_ref"
+    kind: Literal["quod.local_ref"] = "quod.local_ref"
     name: str
 
 
@@ -124,12 +124,12 @@ Type = Annotated[Union[I32Type, I8PtrType], Field(discriminator="kind")]
 
 class ReturnInt(_Node):
     """Return a constant integer. Shorthand kept for hello-world brevity."""
-    kind: Literal["cpg.return_int"] = "cpg.return_int"
+    kind: Literal["quod.return_int"] = "quod.return_int"
     value: int
 
 
 class ReturnExpr(_Node):
-    kind: Literal["cpg.return_expr"] = "cpg.return_expr"
+    kind: Literal["quod.return_expr"] = "quod.return_expr"
     value: Expr
 
 
@@ -137,7 +137,7 @@ class If(_Node):
     """Two-branch conditional. Branches may both terminate (return), or both
     fall through to the next statement, or mix — a merge block is created
     on demand by the lowering pass."""
-    kind: Literal["cpg.if"] = "cpg.if"
+    kind: Literal["quod.if"] = "quod.if"
     cond: Expr  # must lower to i1
     then_body: tuple["Statement", ...]
     else_body: tuple["Statement", ...]
@@ -146,7 +146,7 @@ class If(_Node):
 class Let(_Node):
     """Introduce a mutable local variable. `name` must not shadow a parameter
     or another local in the same function. Lowered to alloca-at-entry + store."""
-    kind: Literal["cpg.let"] = "cpg.let"
+    kind: Literal["quod.let"] = "quod.let"
     name: str
     type: Type
     init: Expr
@@ -155,14 +155,14 @@ class Let(_Node):
 class Assign(_Node):
     """Mutate an existing local. `name` must reference a local previously
     introduced by `Let` (or a `For` loop variable in scope)."""
-    kind: Literal["cpg.assign"] = "cpg.assign"
+    kind: Literal["quod.assign"] = "quod.assign"
     name: str
     value: Expr
 
 
 class While(_Node):
     """Pre-test loop. Evaluates `cond` each iteration; runs `body` if true."""
-    kind: Literal["cpg.while"] = "cpg.while"
+    kind: Literal["quod.while"] = "quod.while"
     cond: Expr  # must lower to i1
     body: tuple["Statement", ...]
 
@@ -172,7 +172,7 @@ class For(_Node):
     incrementing by 1 each iteration. `lo` and `hi` are evaluated once before
     the loop (snapshot semantics, not C-style re-evaluation). `var` is a local
     scoped to `body` only."""
-    kind: Literal["cpg.for"] = "cpg.for"
+    kind: Literal["quod.for"] = "quod.for"
     var: str
     lo: Expr
     hi: Expr
@@ -182,7 +182,7 @@ class For(_Node):
 class ExprStmt(_Node):
     """Evaluate an expression for its side effects, discard the result.
     The natural shape for `printf(...)` and other void-effect calls."""
-    kind: Literal["cpg.expr_stmt"] = "cpg.expr_stmt"
+    kind: Literal["quod.expr_stmt"] = "quod.expr_stmt"
     value: Expr
 
 
@@ -292,8 +292,9 @@ class ReturnInRangeClaim(_Claim):
     """Asserts the function's return value is in [min, max] (either bound optional).
 
     Function-scoped, not param-scoped — there's no `param` field. Today this
-    is metadata only: the claim is provable via Z3 (cpg prove) and verifiable
-    (cpg verify-claims) but not yet exploited by the LLVM lowering pass.
+    is metadata only: the claim is provable via Z3 (quod claim prove) and
+    verifiable (quod claim verify) but not yet exploited by the LLVM lowering
+    pass.
     """
     kind: Literal["return_in_range"] = "return_in_range"
     min: int | None = None

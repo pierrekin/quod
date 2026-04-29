@@ -22,7 +22,7 @@ import json
 from collections.abc import Iterator
 from typing import NamedTuple
 
-from cpg.model import _Node
+from quod.model import _Node
 
 
 HASH_DISPLAY_LEN = 12

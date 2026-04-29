@@ -11,20 +11,20 @@
       "params": [],
       "body": [
         {
-          "kind": "cpg.expr_stmt",
+          "kind": "quod.expr_stmt",
           "value": {
             "kind": "llvm.call",
             "function": "puts",
             "args": [
               {
-                "kind": "cpg.string_ref",
+                "kind": "quod.string_ref",
                 "name": ".str.greeting"
               }
             ]
           }
         },
         {
-          "kind": "cpg.return_int",
+          "kind": "quod.return_int",
           "value": 0
         }
       ],

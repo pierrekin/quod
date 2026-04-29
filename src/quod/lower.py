@@ -18,8 +18,8 @@ from pathlib import Path
 from llvmlite import binding as llvm
 from llvmlite import ir
 
-from cpg.analysis import derive_lattice_claims, elaborate
-from cpg.model import (
+from quod.analysis import derive_lattice_claims, elaborate
+from quod.model import (
     Assign,
     BinOp,
     Call,
@@ -58,7 +58,7 @@ def _type_to_llvm(t):
             return I32
         case I8PtrType():
             return I8.as_pointer()
-    raise ValueError(f"unhandled cpg.Type: {t!r}")
+    raise ValueError(f"unhandled quod.Type: {t!r}")
 
 
 # ---------- Lowering helpers ----------
@@ -101,7 +101,7 @@ def _emit_for_enforcement(builder: ir.IRBuilder, cond: ir.Value, enforcement: st
     raise ValueError(f"unknown enforcement: {enforcement!r}")
 
 
-# Map cpg.BinOp.op -> the icmp predicate (cmp ops only).
+# Map quod.BinOp.op -> the icmp predicate (cmp ops only).
 _ICMP_OPS = {"slt": "<", "eq": "=="}
 
 
@@ -472,8 +472,16 @@ def lower(
     program: Program, *,
     target: str | None = None,
     overrides: dict[str, str] | None = None,
+    entry: str | None = None,
 ) -> ir.Module:
-    module = ir.Module(name="cpg")
+    """Lower `program` to LLVM IR.
+
+    `entry` names the function that should serve as the binary's entry point.
+    If `entry` is "main" or None and the program has a function called "main",
+    no wrapping happens. Otherwise a synthetic `main` is appended that calls
+    `entry` and returns its result.
+    """
+    module = ir.Module(name="quod")
     module.triple = target or llvm.get_default_triple()
     overrides = overrides or {}
 
@@ -503,7 +511,33 @@ def lower(
             extern_sigs=extern_sigs,
         )
 
+    if entry is not None and entry != "main":
+        _emit_main_wrapper(module, program, entry)
+
     return module
+
+
+def _emit_main_wrapper(module: ir.Module, program: Program, entry: str) -> None:
+    """Append `i32 main() { return entry(); }` to module."""
+    fn = next((f for f in program.functions if f.name == entry), None)
+    if fn is None:
+        raise ValueError(f"entry function {entry!r} not found in program")
+    if fn.params:
+        raise ValueError(
+            f"entry function {entry!r} takes parameters; "
+            f"entry functions must be nullary for now"
+        )
+    if any(f.name == "main" for f in program.functions):
+        raise ValueError(
+            f"cannot use {entry!r} as entry: program already defines a function "
+            f"named 'main'; remove one or rename the conflict"
+        )
+    target_fn = module.globals[entry]
+    main_fn = ir.Function(module, ir.FunctionType(I32, []), name="main")
+    bb = main_fn.append_basic_block("entry")
+    builder = ir.IRBuilder(bb)
+    result = builder.call(target_fn, [])
+    builder.ret(result)
 
 
 # ---------- Backend pipeline ----------
@@ -548,26 +582,40 @@ def make_target_machine(target: str | None = None):
 
 
 @dataclass(frozen=True)
-class CompileResult:
+class BinResult:
+    name: str
+    entry: str
     ir_unopt: Path
     ir_opt: Path | None
     object_path: Path
     binary: Path | None
 
 
-def has_main(program: Program) -> bool:
-    return any(fn.name == "main" for fn in program.functions)
+@dataclass(frozen=True)
+class CompileResult:
+    bins: tuple[BinResult, ...]
+
+
+def has_function(program: Program, name: str) -> bool:
+    return any(fn.name == name for fn in program.functions)
 
 
 def compile_program(
     program: Program,
     *,
     build_dir: Path,
+    bins: tuple[tuple[str, str], ...] = (("main", "main"),),
     profile: int = 2,
     link: bool = True,
     target: str | None = None,
     overrides: dict[str, str] | None = None,
 ) -> CompileResult:
+    """Compile `program` into one binary per bin.
+
+    `bins` is a tuple of (name, entry) pairs: `name` is the output binary
+    filename, `entry` is the program function used as the entry point. The
+    default ((`"main"`, `"main"`),) preserves pre-config behavior.
+    """
     if not 0 <= profile <= 3:
         raise ValueError(f"profile must be 0..3, got {profile}")
     build_dir.mkdir(parents=True, exist_ok=True)
@@ -578,29 +626,40 @@ def compile_program(
     derived = derive_lattice_claims(program)
     program = elaborate(program, derived)
 
-    module = lower(program, target=target, overrides=overrides)
-    ir_unopt = build_dir / "program.unopt.ll"
-    ir_unopt.write_text(str(module))
-
     target_machine = make_target_machine(target=target)
-    parsed = parse_and_verify(module)
+    results: list[BinResult] = []
 
-    ir_opt: Path | None = None
-    if profile > 0:
-        optimize_module(parsed, target_machine, speed_level=profile)
-        ir_opt = build_dir / "program.opt.ll"
-        ir_opt.write_text(str(parsed))
+    for bin_name, entry in bins:
+        if not has_function(program, entry):
+            raise ValueError(f"bin {bin_name!r}: entry function {entry!r} not found")
 
-    object_path = build_dir / "program.o"
-    object_path.write_bytes(target_machine.emit_object(parsed))
+        module = lower(program, target=target, overrides=overrides, entry=entry)
+        ir_unopt = build_dir / f"{bin_name}.unopt.ll"
+        ir_unopt.write_text(str(module))
 
-    binary: Path | None = None
-    if link and has_main(program):
-        binary = build_dir / "program"
-        cmd = ["clang"]
-        if target:
-            cmd += ["-target", target]
-        cmd += [str(object_path), "-o", str(binary)]
-        subprocess.run(cmd, check=True)
+        parsed = parse_and_verify(module)
+        ir_opt: Path | None = None
+        if profile > 0:
+            optimize_module(parsed, target_machine, speed_level=profile)
+            ir_opt = build_dir / f"{bin_name}.opt.ll"
+            ir_opt.write_text(str(parsed))
 
-    return CompileResult(ir_unopt=ir_unopt, ir_opt=ir_opt, object_path=object_path, binary=binary)
+        object_path = build_dir / f"{bin_name}.o"
+        object_path.write_bytes(target_machine.emit_object(parsed))
+
+        binary: Path | None = None
+        if link:
+            binary = build_dir / bin_name
+            cmd = ["clang"]
+            if target:
+                cmd += ["-target", target]
+            cmd += [str(object_path), "-o", str(binary)]
+            subprocess.run(cmd, check=True)
+
+        results.append(BinResult(
+            name=bin_name, entry=entry,
+            ir_unopt=ir_unopt, ir_opt=ir_opt,
+            object_path=object_path, binary=binary,
+        ))
+
+    return CompileResult(bins=tuple(results))

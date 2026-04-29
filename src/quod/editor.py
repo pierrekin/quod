@@ -16,8 +16,8 @@ from pathlib import Path
 
 from pydantic import TypeAdapter, ValidationError
 
-from cpg.hashing import node_hash
-from cpg.model import (
+from quod.hashing import node_hash
+from quod.model import (
     Function,
     Program,
     Statement,

@@ -21,13 +21,13 @@
       "params": [],
       "body": [
         {
-          "kind": "cpg.return_expr",
+          "kind": "quod.return_expr",
           "value": {
             "kind": "llvm.call",
             "function": "system",
             "args": [
               {
-                "kind": "cpg.string_ref",
+                "kind": "quod.string_ref",
                 "name": ".str.cmd"
               }
             ]

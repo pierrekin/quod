@@ -8,7 +8,7 @@
       ],
       "body": [
         {
-          "kind": "cpg.return_expr",
+          "kind": "quod.return_expr",
           "value": {
             "kind": "llvm.param_ref",
             "name": "x"
@@ -23,7 +23,7 @@
       ],
       "body": [
         {
-          "kind": "cpg.return_expr",
+          "kind": "quod.return_expr",
           "value": {
             "kind": "llvm.binop",
             "op": "add",
@@ -50,7 +50,7 @@
       "params": [],
       "body": [
         {
-          "kind": "cpg.if",
+          "kind": "quod.if",
           "cond": {
             "kind": "llvm.binop",
             "op": "slt",
@@ -71,7 +71,7 @@
           },
           "then_body": [
             {
-              "kind": "cpg.return_expr",
+              "kind": "quod.return_expr",
               "value": {
                 "kind": "llvm.binop",
                 "op": "add",
@@ -100,7 +100,7 @@
           ],
           "else_body": [
             {
-              "kind": "cpg.return_int",
+              "kind": "quod.return_int",
               "value": 0
             }
           ]
@@ -114,7 +114,7 @@
       ],
       "body": [
         {
-          "kind": "cpg.return_expr",
+          "kind": "quod.return_expr",
           "value": {
             "kind": "llvm.call",
             "function": "ghost",

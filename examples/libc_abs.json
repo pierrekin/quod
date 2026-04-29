@@ -14,7 +14,7 @@
       ],
       "body": [
         {
-          "kind": "cpg.return_expr",
+          "kind": "quod.return_expr",
           "value": {
             "kind": "llvm.call",
             "function": "abs",
@@ -33,7 +33,7 @@
       "params": [],
       "body": [
         {
-          "kind": "cpg.return_expr",
+          "kind": "quod.return_expr",
           "value": {
             "kind": "llvm.call",
             "function": "f",

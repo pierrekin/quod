@@ -8,7 +8,7 @@
       ],
       "body": [
         {
-          "kind": "cpg.return_expr",
+          "kind": "quod.return_expr",
           "value": {
             "kind": "llvm.binop",
             "op": "add",
@@ -29,7 +29,7 @@
       "params": [],
       "body": [
         {
-          "kind": "cpg.return_expr",
+          "kind": "quod.return_expr",
           "value": {
             "kind": "llvm.binop",
             "op": "add",

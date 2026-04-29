@@ -1,6 +1,6 @@
-"""Starter programs that `cpg init` can write to program.json."""
+"""Starter programs that `quod init` can write to program.json."""
 
-from cpg.model import (
+from quod.model import (
     BinOp,
     Call,
     ExprStmt,
