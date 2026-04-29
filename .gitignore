@@ -1,5 +1,9 @@
 # Build artefacts
 build/
 
+# Mutation locks
+*.json.lock
+*.json.tmp
+
 # Python
 __pycache__

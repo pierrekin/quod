@@ -482,9 +482,17 @@ def load_program(path: Path) -> Program:
 
 def save_program(program: Program, path: Path) -> None:
     """Validate as InputProgram (raises if any lattice claims slipped into
-    stored), then write JSON."""
+    stored), then write JSON atomically.
+
+    Atomic via write-tmp-then-rename: a concurrent reader sees either the old
+    file or the new file, never a partially-written one. Mutations also need
+    an external lock to prevent two writers from racing on load→save (last
+    writer wins); see `_exclusive_lock` in cli.py.
+    """
     InputProgram(constants=program.constants, functions=program.functions)
-    path.write_text(program.model_dump_json(indent=2))
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(program.model_dump_json(indent=2))
+    tmp.replace(path)
 
 
 # ---------- Lookups + immutable updates (by name) ----------

@@ -20,9 +20,11 @@ a content-hash prefix (any node).
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
 
 import typer
@@ -142,6 +144,31 @@ def _load() -> Program:
 
 def _save(program: Program) -> None:
     save_program(program, _path())
+
+
+@contextmanager
+def _exclusive_lock():
+    """Hold an exclusive advisory lock for the duration of a mutation.
+
+    Cooperating quod invocations serialize on this lock to avoid the
+    load → mutate → save race where parallel writers clobber each other's
+    in-memory state at the save step. The lock lives on a sidecar file
+    (`<program>.lock`) so that save_program's atomic rename doesn't break
+    the lock by replacing the locked inode.
+
+    Read-only commands don't need the lock — save_program writes atomically
+    via tmp + rename, so readers see either the old or new file, never a
+    half-written one.
+    """
+    lock_path = _path().with_suffix(_path().suffix + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.touch(exist_ok=True)
+    with open(lock_path, "rb") as lock_fd:
+        fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
 
 
 def _hash_label(node) -> str:
@@ -446,14 +473,15 @@ def fn_add(
 
     Example: {"name": "g", "params": ["x"], "body": [{"kind": "quod.return_int", "value": 0}]}
     """
-    program = _load()
-    try:
-        fn = parse_function_spec(read_json_arg(spec))
-        program = add_function_to_program(program, fn)
-    except (KeyError, ValueError) as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1)
-    _save(program)
+    with _exclusive_lock():
+        program = _load()
+        try:
+            fn = parse_function_spec(read_json_arg(spec))
+            program = add_function_to_program(program, fn)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
     typer.echo(f"added function {fn.name} (hash={short_hash(fn)})")
 
 
@@ -467,14 +495,15 @@ def fn_rm(
     `quod fn callers FN` first if you want to know who'd be affected; the
     dangling call surfaces as an error at `quod build`.
     """
-    program = _load()
-    try:
-        fn = find_function_ref(program, function)
-        program = remove_function(program, fn.name)
-    except (KeyError, ValueError) as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1)
-    _save(program)
+    with _exclusive_lock():
+        program = _load()
+        try:
+            fn = find_function_ref(program, function)
+            program = remove_function(program, fn.name)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
     typer.echo(f"removed function {fn.name}")
 
 
@@ -720,19 +749,20 @@ def claim_add(
     ),
 ) -> None:
     """Attach a claim to a function. The optimizer will trust this assertion."""
-    program = _load()
-    try:
-        fn = find_function_ref(program, function)
-        just_obj = _parse_justification_spec(justification) if justification else None
-        claim = _build_claim(
-            kind, target, lo=lo, hi=hi,
-            regime=regime, enforcement=enforcement, justification=just_obj,
-        )
-        program = add_claim(program, fn.name, claim)
-    except (KeyError, ValueError) as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1)
-    _save(program)
+    with _exclusive_lock():
+        program = _load()
+        try:
+            fn = find_function_ref(program, function)
+            just_obj = _parse_justification_spec(justification) if justification else None
+            claim = _build_claim(
+                kind, target, lo=lo, hi=hi,
+                regime=regime, enforcement=enforcement, justification=just_obj,
+            )
+            program = add_claim(program, fn.name, claim)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
     typer.echo(f"added {kind}({target}) on {fn.name} [regime={regime}, enforcement={enforcement}]")
 
 
@@ -743,14 +773,15 @@ def claim_relax(
     target: str | None = typer.Argument(None, help="Parameter name (omit for return-scoped claims)."),
 ) -> None:
     """Remove a claim (always safe — drops an assertion)."""
-    program = _load()
-    try:
-        fn = find_function_ref(program, function)
-        program = relax_claim(program, fn.name, kind, target)
-    except KeyError as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1)
-    _save(program)
+    with _exclusive_lock():
+        program = _load()
+        try:
+            fn = find_function_ref(program, function)
+            program = relax_claim(program, fn.name, kind, target)
+        except KeyError as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
     scope = f"({target})" if target is not None else "(return)"
     typer.echo(f"relaxed {kind}{scope} on {fn.name}")
 
@@ -901,57 +932,60 @@ def claim_prove(
     """Synthesize a proof of a claim, attach it as a witness."""
     cfg = _cfg()
     proofs_dir = cfg.resolve(cfg.proofs_dir)
-    program = _load()
-    try:
-        fn = find_function_ref(program, function)
-    except (KeyError, ValueError) as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1)
+    # Hold the lock end-to-end: the proof's correctness depends on fn.body
+    # not changing between load and save. Z3 typically returns in seconds.
+    with _exclusive_lock():
+        program = _load()
+        try:
+            fn = find_function_ref(program, function)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
 
-    try:
-        goal = _build_claim(
-            kind, target, lo=lo, hi=hi,
-            regime="witness", enforcement=enforcement, justification=None,
-        )
-    except typer.BadParameter as e:
-        typer.echo(f"error: {e.message}", err=True)
-        raise typer.Exit(2)
+        try:
+            goal = _build_claim(
+                kind, target, lo=lo, hi=hi,
+                regime="witness", enforcement=enforcement, justification=None,
+            )
+        except typer.BadParameter as e:
+            typer.echo(f"error: {e.message}", err=True)
+            raise typer.Exit(2)
 
-    try:
-        smt = goal_smt_lib(fn, goal, hypotheses=fn.claims, program=program)
-    except NotImplementedError as e:
-        typer.echo(f"error: cannot synthesize proof: {e}", err=True)
-        raise typer.Exit(1)
+        try:
+            smt = goal_smt_lib(fn, goal, hypotheses=fn.claims, program=program)
+        except NotImplementedError as e:
+            typer.echo(f"error: cannot synthesize proof: {e}", err=True)
+            raise typer.Exit(1)
 
-    try:
-        result = run_z3_on_smt(smt)
-    except Z3NotInstalled as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1)
-    if result.status != "unsat":
-        typer.echo(f"could not prove {kind}: z3 returned {result.status!r}", err=True)
-        if result.status == "sat":
-            typer.echo("(z3 found a counterexample; the claim does not hold)", err=True)
-        raise typer.Exit(1)
+        try:
+            result = run_z3_on_smt(smt)
+        except Z3NotInstalled as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        if result.status != "unsat":
+            typer.echo(f"could not prove {kind}: z3 returned {result.status!r}", err=True)
+            if result.status == "sat":
+                typer.echo("(z3 found a counterexample; the claim does not hold)", err=True)
+            raise typer.Exit(1)
 
-    proofs_dir.mkdir(parents=True, exist_ok=True)
-    target_part = target or "return"
-    artifact_hash = hashlib.sha256(smt.encode("utf-8")).hexdigest()
-    artifact_path = proofs_dir / f"{fn.name}_{kind}_{target_part}_{artifact_hash[:12]}.smt2"
-    artifact_path.write_text(smt)
+        proofs_dir.mkdir(parents=True, exist_ok=True)
+        target_part = target or "return"
+        artifact_hash = hashlib.sha256(smt.encode("utf-8")).hexdigest()
+        artifact_path = proofs_dir / f"{fn.name}_{kind}_{target_part}_{artifact_hash[:12]}.smt2"
+        artifact_path.write_text(smt)
 
-    proven = goal.model_copy(update={
-        "justification": Z3Justification(
-            artifact_path=str(artifact_path),
-            artifact_hash=artifact_hash,
-        ),
-    })
-    try:
-        program = add_claim(program, fn.name, proven)
-    except (KeyError, ValueError) as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1)
-    _save(program)
+        proven = goal.model_copy(update={
+            "justification": Z3Justification(
+                artifact_path=str(artifact_path),
+                artifact_hash=artifact_hash,
+            ),
+        })
+        try:
+            program = add_claim(program, fn.name, proven)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
     typer.echo(
         f"proved {format_claim(proven)}\n"
         f"  artifact: {artifact_path} (sha256={artifact_hash[:12]})"
@@ -974,22 +1008,23 @@ def stmt_add(
     if sum(map(bool, anchors)) != 1:
         typer.echo("error: pass exactly one of --at-end, --at-start, --before, --after", err=True)
         raise typer.Exit(2)
-    program = _load()
-    try:
-        fn = find_function_ref(program, function)
-        stmt = parse_statement_spec(read_json_arg(spec))
-        if at_end:
-            program = add_statement_in_function(program, fn, stmt, where="end")
-        elif at_start:
-            program = add_statement_in_function(program, fn, stmt, where="start")
-        elif before is not None:
-            program = add_statement_in_function(program, fn, stmt, where="before", anchor_ref=before)
-        else:
-            program = add_statement_in_function(program, fn, stmt, where="after", anchor_ref=after)
-    except (KeyError, ValueError) as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1)
-    _save(program)
+    with _exclusive_lock():
+        program = _load()
+        try:
+            fn = find_function_ref(program, function)
+            stmt = parse_statement_spec(read_json_arg(spec))
+            if at_end:
+                program = add_statement_in_function(program, fn, stmt, where="end")
+            elif at_start:
+                program = add_statement_in_function(program, fn, stmt, where="start")
+            elif before is not None:
+                program = add_statement_in_function(program, fn, stmt, where="before", anchor_ref=before)
+            else:
+                program = add_statement_in_function(program, fn, stmt, where="after", anchor_ref=after)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
     typer.echo(f"added statement to {fn.name}")
 
 
@@ -1005,14 +1040,15 @@ def stmt_rm(
     Find the hash via `quod fn show FN` (each statement is shown with its
     short hash) or `quod show --hashes`.
     """
-    program = _load()
-    try:
-        fn = find_function_ref(program, function)
-        program = remove_statement_in_function(program, fn, hash_prefix)
-    except (KeyError, ValueError) as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1)
-    _save(program)
+    with _exclusive_lock():
+        program = _load()
+        try:
+            fn = find_function_ref(program, function)
+            program = remove_statement_in_function(program, fn, hash_prefix)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
     typer.echo(f"removed statement {hash_prefix} from {fn.name}")
 
 
@@ -1040,13 +1076,14 @@ def const_add(
     newline, pass an actual newline (the shell will likely need $'...\\n' or
     a heredoc). Quod adds a trailing NUL byte automatically when lowering.
     """
-    program = _load()
-    try:
-        program = add_constant_to_program(program, StringConstant(name=name, value=value))
-    except (KeyError, ValueError) as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1)
-    _save(program)
+    with _exclusive_lock():
+        program = _load()
+        try:
+            program = add_constant_to_program(program, StringConstant(name=name, value=value))
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
     typer.echo(f"declared constant {name} = {value!r}")
 
 
@@ -1096,27 +1133,28 @@ def extern_add(
     varargs: bool = typer.Option(False, "--varargs"),
 ) -> None:
     """Declare an extern (libc-or-similar) function."""
-    program = _load()
-    if any(ext.name == name for ext in program.externs):
-        typer.echo(f"error: extern {name!r} already declared", err=True)
-        raise typer.Exit(1)
-    if any(fn.name == name for fn in program.functions):
-        typer.echo(f"error: {name!r} already exists as a user function", err=True)
-        raise typer.Exit(1)
-    if param_type and arity:
-        raise typer.BadParameter("pass either --arity or --param-type, not both")
-    param_types = tuple(_parse_type_name(t) for t in param_type)
-    ret_ty = _parse_type_name(return_type)
-    ext = ExternFunction(
-        name=name,
-        arity=arity if not param_types else 0,
-        param_types=param_types,
-        return_type=ret_ty,
-        varargs=varargs,
-    )
-    new_externs = program.externs + (ext,)
-    program = program.model_copy(update={"externs": new_externs})
-    _save(program)
+    with _exclusive_lock():
+        program = _load()
+        if any(ext.name == name for ext in program.externs):
+            typer.echo(f"error: extern {name!r} already declared", err=True)
+            raise typer.Exit(1)
+        if any(fn.name == name for fn in program.functions):
+            typer.echo(f"error: {name!r} already exists as a user function", err=True)
+            raise typer.Exit(1)
+        if param_type and arity:
+            raise typer.BadParameter("pass either --arity or --param-type, not both")
+        param_types = tuple(_parse_type_name(t) for t in param_type)
+        ret_ty = _parse_type_name(return_type)
+        ext = ExternFunction(
+            name=name,
+            arity=arity if not param_types else 0,
+            param_types=param_types,
+            return_type=ret_ty,
+            varargs=varargs,
+        )
+        new_externs = program.externs + (ext,)
+        program = program.model_copy(update={"externs": new_externs})
+        _save(program)
     sig_parts = list(param_type or ["i32"] * arity)
     if varargs:
         sig_parts.append("...")
@@ -1131,15 +1169,16 @@ def note_add(
     text: str = typer.Argument(..., help="Note content (free-form intent / TODO / rationale)."),
 ) -> None:
     """Attach a free-form note to a function."""
-    program = _load()
-    try:
-        fn = find_function_ref(program, function)
-    except (KeyError, ValueError) as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1)
-    new_fn = fn.model_copy(update={"notes": fn.notes + (text,)})
-    program = replace_function(program, new_fn)
-    _save(program)
+    with _exclusive_lock():
+        program = _load()
+        try:
+            fn = find_function_ref(program, function)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        new_fn = fn.model_copy(update={"notes": fn.notes + (text,)})
+        program = replace_function(program, new_fn)
+        _save(program)
     typer.echo(f"noted on {fn.name}: {text}")
 
 
@@ -1149,19 +1188,20 @@ def note_rm(
     index: int = typer.Argument(..., help="0-based index of the note to remove."),
 ) -> None:
     """Remove a note by index from a function."""
-    program = _load()
-    try:
-        fn = find_function_ref(program, function)
-    except (KeyError, ValueError) as e:
-        typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(1)
-    if not 0 <= index < len(fn.notes):
-        typer.echo(f"error: index {index} out of range (function has {len(fn.notes)} note(s))", err=True)
-        raise typer.Exit(1)
-    new_notes = fn.notes[:index] + fn.notes[index + 1:]
-    new_fn = fn.model_copy(update={"notes": new_notes})
-    program = replace_function(program, new_fn)
-    _save(program)
+    with _exclusive_lock():
+        program = _load()
+        try:
+            fn = find_function_ref(program, function)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        if not 0 <= index < len(fn.notes):
+            typer.echo(f"error: index {index} out of range (function has {len(fn.notes)} note(s))", err=True)
+            raise typer.Exit(1)
+        new_notes = fn.notes[:index] + fn.notes[index + 1:]
+        new_fn = fn.model_copy(update={"notes": new_notes})
+        program = replace_function(program, new_fn)
+        _save(program)
     typer.echo(f"removed note {index} from {fn.name}")
 
 
