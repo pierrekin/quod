@@ -112,6 +112,13 @@ def add_constant_to_program(program: Program, constant: StringConstant) -> Progr
 
 # ---------- JSON ingest ----------
 
+# Hint shown after pydantic validation errors so an agent knows where to look.
+_SCHEMA_HINT = (
+    "\n\n(see `quod schema` for the canonical shape of any node — "
+    "e.g. `quod schema quod.let` or `quod schema --category statement`)"
+)
+
+
 def parse_function_spec(raw: str) -> Function:
     """Parse a JSON Function spec.
 
@@ -122,14 +129,14 @@ def parse_function_spec(raw: str) -> Function:
     try:
         return Function.model_validate_json(raw)
     except ValidationError as e:
-        raise ValueError(f"invalid function spec:\n{e}") from e
+        raise ValueError(f"invalid function spec:\n{e}{_SCHEMA_HINT}") from e
 
 
 def parse_statement_spec(raw: str) -> Statement:
     try:
         return _StatementAdapter.validate_json(raw)
     except ValidationError as e:
-        raise ValueError(f"invalid statement spec:\n{e}") from e
+        raise ValueError(f"invalid statement spec:\n{e}{_SCHEMA_HINT}") from e
 
 
 def read_json_arg(arg: str) -> str:

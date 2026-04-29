@@ -146,6 +146,39 @@ export default function (pi: ExtensionAPI): void {
     },
   });
 
+  // -------------------- schema introspection --------------------
+
+  pi.registerTool({
+    name: "quod_schema",
+    label: "Show node schema",
+    description:
+      "Discover the JSON shape of any node. With no args, lists categories (statement, expression, type, claim, justification, program). With `category`, lists kinds in that category as one-liners. With `kind`, returns full schema: required/optional fields with types, plus a minimal example. ALWAYS call this before constructing JSON program nodes — saves round-trips that otherwise fail validation. Read-only; doesn't need a quod project (no cwd needed).",
+    parameters: Type.Object({
+      kind: Type.Optional(
+        Type.String({
+          description:
+            "Node kind, e.g. 'quod.let', 'llvm.binop', 'int_range', 'Function'.",
+        }),
+      ),
+      category: Type.Optional(
+        StringEnum([
+          "expression",
+          "statement",
+          "type",
+          "claim",
+          "justification",
+          "program",
+        ] as const),
+      ),
+    }),
+    async execute(_id, p, signal) {
+      const args = ["schema"];
+      if (p.kind) args.push(p.kind);
+      else if (p.category) args.push("--category", p.category);
+      return text(await runQuod(args, { signal }));
+    },
+  });
+
   // -------------------- whole-program inspection --------------------
 
   pi.registerTool({
@@ -205,12 +238,11 @@ export default function (pi: ExtensionAPI): void {
     name: "quod_fn_add",
     label: "Add function",
     description:
-      "Append a new function. Provide the function as a JSON Function object in `spec_json`.",
+      "Append a new function. Provide the function as a JSON Function object in `spec_json`. Call quod_schema(kind='Function') for the canonical shape, or quod_schema(category='statement') / (category='expression') for the body's building blocks.",
     parameters: Type.Object({
       ...cwdField,
       spec_json: Type.String({
-        description:
-          'JSON Function object, e.g. {"name":"g","params":["x"],"body":[{"kind":"quod.return_int","value":0}]}',
+        description: "JSON Function object. See quod_schema(kind='Function').",
       }),
     }),
     async execute(_id, p, signal) {
@@ -430,13 +462,12 @@ export default function (pi: ExtensionAPI): void {
     name: "quod_stmt_add",
     label: "Add statement",
     description:
-      "Insert a statement into a function. Provide the statement as a JSON Statement object in `spec_json`. Anchor selects where to insert: at_end, at_start, before <hash>, after <hash>.",
+      "Insert a statement into a function. Provide the statement as a JSON Statement object in `spec_json`. Anchor selects where to insert: at_end, at_start, before <hash>, after <hash>. Call quod_schema(category='statement') for valid statement kinds and their fields.",
     parameters: Type.Object({
       ...cwdField,
       ...fnRefField,
       spec_json: Type.String({
-        description:
-          'JSON Statement object, e.g. {"kind":"quod.return_int","value":0}',
+        description: "JSON Statement object. See quod_schema(category='statement').",
       }),
       anchor: StringEnum(["at_end", "at_start", "before", "after"] as const),
       anchor_ref: Type.Optional(

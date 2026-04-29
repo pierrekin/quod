@@ -76,6 +76,7 @@ from quod.model import (
     save_program,
 )
 from quod.proof import Z3NotInstalled, goal_smt_lib, run_z3_on_file, run_z3_on_smt
+from quod.schema import render_categories, render_category, render_kind
 from quod.templates import TEMPLATES
 
 
@@ -356,6 +357,35 @@ def show(
             typer.echo(f"{hn.hash[:HASH_DISPLAY_LEN]}  {type(hn.node).__name__}")
         return
     typer.echo(format_program(program, label=_hash_label))
+
+
+@app.command()
+def schema(
+    kind: str | None = typer.Argument(
+        None,
+        help="A node kind (e.g. 'quod.let', 'llvm.binop', 'int_range') for full schema.",
+    ),
+    category: str | None = typer.Option(
+        None, "--category",
+        help="A category (statement, expression, type, claim, justification, program) to list its kinds.",
+    ),
+) -> None:
+    """Show the schema for a node kind, a category, or list all categories.
+
+    With no arguments, lists all categories. With --category, lists kinds in
+    that category. With a kind argument, shows that kind's required/optional
+    fields, types, and a minimal example.
+    """
+    try:
+        if kind is not None:
+            typer.echo(render_kind(kind))
+        elif category is not None:
+            typer.echo(render_category(category))
+        else:
+            typer.echo(render_categories())
+    except KeyError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
 
 
 @app.command()
