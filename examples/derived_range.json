@@ -1,0 +1,35 @@
+{
+  "constants": [],
+  "functions": [
+    {
+      "name": "helper",
+      "params": ["x"],
+      "body": [
+        {
+          "kind": "return_expr",
+          "value": {
+            "kind": "binop",
+            "op": "add",
+            "lhs": {"kind": "param_ref", "name": "x"},
+            "rhs": {"kind": "int_lit", "value": 1}
+          }
+        }
+      ]
+    },
+    {
+      "name": "main",
+      "params": [],
+      "body": [
+        {
+          "kind": "return_expr",
+          "value": {
+            "kind": "binop",
+            "op": "add",
+            "lhs": {"kind": "call", "function": "helper", "args": [{"kind": "int_lit", "value": 5}]},
+            "rhs": {"kind": "call", "function": "helper", "args": [{"kind": "int_lit", "value": 10}]}
+          }
+        }
+      ]
+    }
+  ]
+}

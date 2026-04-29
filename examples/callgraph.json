@@ -1,0 +1,66 @@
+{
+  "constants": [],
+  "functions": [
+    {
+      "name": "leaf",
+      "params": ["x"],
+      "body": [
+        {"kind": "return_expr", "value": {"kind": "param_ref", "name": "x"}}
+      ]
+    },
+    {
+      "name": "helper",
+      "params": ["x"],
+      "body": [
+        {
+          "kind": "return_expr",
+          "value": {
+            "kind": "binop",
+            "op": "add",
+            "lhs": {"kind": "call", "function": "leaf", "args": [{"kind": "param_ref", "name": "x"}]},
+            "rhs": {"kind": "int_lit", "value": 1}
+          }
+        }
+      ]
+    },
+    {
+      "name": "main",
+      "params": [],
+      "body": [
+        {
+          "kind": "if",
+          "cond": {
+            "kind": "binop",
+            "op": "slt",
+            "lhs": {"kind": "call", "function": "helper", "args": [{"kind": "int_lit", "value": 5}]},
+            "rhs": {"kind": "int_lit", "value": 100}
+          },
+          "then_body": [
+            {
+              "kind": "return_expr",
+              "value": {
+                "kind": "binop",
+                "op": "add",
+                "lhs": {"kind": "call", "function": "helper", "args": [{"kind": "int_lit", "value": 5}]},
+                "rhs": {"kind": "call", "function": "leaf", "args": [{"kind": "int_lit", "value": 1}]}
+              }
+            }
+          ],
+          "else_body": [
+            {"kind": "return_int", "value": 0}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "orphan",
+      "params": ["x"],
+      "body": [
+        {
+          "kind": "return_expr",
+          "value": {"kind": "call", "function": "ghost", "args": [{"kind": "param_ref", "name": "x"}]}
+        }
+      ]
+    }
+  ]
+}

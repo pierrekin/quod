@@ -1,0 +1,60 @@
+{
+  "constants": [],
+  "functions": [
+    {
+      "name": "f",
+      "params": [
+        "x"
+      ],
+      "body": [
+        {
+          "kind": "if",
+          "cond": {
+            "kind": "binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "param_ref",
+              "name": "x"
+            },
+            "rhs": {
+              "kind": "int_lit",
+              "value": 0
+            }
+          },
+          "then_body": [
+            {
+              "kind": "return_expr",
+              "value": {
+                "kind": "int_lit",
+                "value": -1
+              }
+            }
+          ],
+          "else_body": [
+            {
+              "kind": "return_expr",
+              "value": {
+                "kind": "binop",
+                "op": "add",
+                "lhs": {
+                  "kind": "param_ref",
+                  "name": "x"
+                },
+                "rhs": {
+                  "kind": "int_lit",
+                  "value": 1
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "claims": [
+        {
+          "kind": "non_negative",
+          "param": "x"
+        }
+      ]
+    }
+  ]
+}

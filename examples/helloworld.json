@@ -1,0 +1,25 @@
+{
+  "constants": [
+    {
+      "name": ".str.greeting",
+      "value": "hello, world"
+    }
+  ],
+  "functions": [
+    {
+      "name": "main",
+      "params": [],
+      "body": [
+        {
+          "kind": "call_puts",
+          "target": ".str.greeting"
+        },
+        {
+          "kind": "return_int",
+          "value": 0
+        }
+      ],
+      "claims": []
+    }
+  ]
+}
