@@ -398,6 +398,26 @@ def _lower_stmt(
     raise ValueError(f"unhandled stmt: {stmt!r}")
 
 
+def _icmp_for_bound(
+    builder: ir.IRBuilder, predicate: str, val: ir.Value, bound: int,
+) -> ir.Value:
+    """Emit an icmp comparing `val` against an integer bound from a claim.
+
+    i1 uses unsigned comparison (the boolean {0, 1} interpretation that
+    matches clang's _Bool). At signed-1-bit, bit pattern 1 sign-extends to
+    -1, so `signed >= 0` on an i1 would assert "value is 0 (false)" — a
+    silent corruption of any non_negative or return_in_range(min=0) claim
+    on an i1 function.
+
+    Wider ints stay signed: quod programs use signed arithmetic (slt, sge,
+    srem) by convention, and a claim's min=-N is meant in signed terms.
+    """
+    const = ir.Constant(val.type, bound)
+    if val.type.width == 1:
+        return builder.icmp_unsigned(predicate, val, const)
+    return builder.icmp_signed(predicate, val, const)
+
+
 def _emit_return_claims(
     builder: ir.IRBuilder, ret_val: ir.Value, return_claims: tuple,
     llvm_fn: ir.Function, module: ir.Module, overrides: dict[str, str],
@@ -405,16 +425,15 @@ def _emit_return_claims(
     """Emit llvm.assume / runtime-check predicates against the return value
     just before `ret`. The optimizer learns the bound; after inlining, callers
     learn it too."""
-    ret_ty = ret_val.type
     for claim in return_claims:
         if not isinstance(claim, ReturnInRangeClaim):
             continue
         enforcement = overrides.get(claim.regime, claim.enforcement)
         if claim.min is not None:
-            cmp = builder.icmp_signed(">=", ret_val, ir.Constant(ret_ty, claim.min))
+            cmp = _icmp_for_bound(builder, ">=", ret_val, claim.min)
             _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
         if claim.max is not None:
-            cmp = builder.icmp_signed("<=", ret_val, ir.Constant(ret_ty, claim.max))
+            cmp = _icmp_for_bound(builder, "<=", ret_val, claim.max)
             _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
 
 
@@ -432,17 +451,16 @@ def _lower_claim(
     enforcement = overrides.get(claim.regime, claim.enforcement)
     match claim:
         case NonNegativeClaim(param=name):
-            val = params[name]
-            cmp = builder.icmp_signed(">=", val, ir.Constant(val.type, 0))
+            cmp = _icmp_for_bound(builder, ">=", params[name], 0)
             _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
             return
         case IntRangeClaim(param=name, min=lo, max=hi):
             val = params[name]
             if lo is not None:
-                cmp = builder.icmp_signed(">=", val, ir.Constant(val.type, lo))
+                cmp = _icmp_for_bound(builder, ">=", val, lo)
                 _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
             if hi is not None:
-                cmp = builder.icmp_signed("<=", val, ir.Constant(val.type, hi))
+                cmp = _icmp_for_bound(builder, "<=", val, hi)
                 _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
             return
         case ReturnInRangeClaim():
