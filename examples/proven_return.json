@@ -51,16 +51,16 @@
       ],
       "claims": [
         {
-          "enforcement": "verify",
+          "regime": "witness",
           "justification": {
-            "kind": "manual",
-            "signed_by": "agent",
-            "rationale": "unproven; verify at runtime"
+            "kind": "z3",
+            "artifact_path": "proofs/f_return_in_range_return_3f709cfcb113.smt2",
+            "artifact_hash": "3f709cfcb11368288f7a1b7fdbdc85e98bff53348cc534a9bab49ad1d18e442a",
+            "note": null
           },
-          "kind": "int_range",
-          "param": "x",
-          "min": 0,
-          "max": 100
+          "kind": "return_in_range",
+          "min": -1,
+          "max": null
         }
       ]
     }

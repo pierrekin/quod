@@ -14,10 +14,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
+from cpg.hashing import node_hash
 from cpg.model import (
     BinOp,
     Call,
     Claim,
+    DerivedJustification,
     If,
     IntLit,
     IntRangeClaim,
@@ -26,12 +28,15 @@ from cpg.model import (
 )
 
 
+_ANALYSIS_NAME = "literal_range_propagation"
+
+
 def derive_lattice_claims(program: Program) -> dict[str, tuple[Claim, ...]]:
     """Return derived (regime=lattice) claims keyed by function name."""
-    # arg_buckets[fn_name][param_index] is either a list of int literals
-    # observed at that arg position, or None once poisoned.
+    # arg_buckets[fn_name][param_index]: list of (literal_value, source_call_hash),
+    # or None once poisoned by a non-literal arg.
     defined = {fn.name for fn in program.functions}
-    arg_buckets: dict[str, list[list[int] | None]] = {
+    arg_buckets: dict[str, list[list[tuple[int, str]] | None]] = {
         fn.name: [[] for _ in fn.params] for fn in program.functions
     }
 
@@ -41,11 +46,12 @@ def derive_lattice_claims(program: Program) -> dict[str, tuple[Claim, ...]]:
                 if call.function not in defined:
                     continue  # extern or dangling; lower-time error
                 buckets = arg_buckets[call.function]
+                call_h = node_hash(call)
                 for i, arg in enumerate(call.args):
                     if i >= len(buckets) or buckets[i] is None:
                         continue
                     if isinstance(arg, IntLit):
-                        buckets[i].append(arg.value)
+                        buckets[i].append((arg.value, call_h))
                     else:
                         buckets[i] = None  # poison: non-literal arg
 
@@ -54,17 +60,22 @@ def derive_lattice_claims(program: Program) -> dict[str, tuple[Claim, ...]]:
         derived: list[Claim] = []
         buckets = arg_buckets[fn.name]
         for i, p_name in enumerate(fn.params):
-            literals = buckets[i]
-            if literals is None or not literals:
+            entries = buckets[i]
+            if entries is None or not entries:
                 continue
+            literals = [v for v, _ in entries]
+            input_hashes = tuple(h for _, h in entries)
             lo, hi = min(literals), max(literals)
-            n = len(literals)
             derived.append(IntRangeClaim(
                 regime="lattice",
                 param=p_name,
                 min=lo,
                 max=hi,
-                justification=f"derived: literal range over {n} call site(s)",
+                justification=DerivedJustification(
+                    analysis=_ANALYSIS_NAME,
+                    inputs=input_hashes,
+                    note=f"literal range over {len(literals)} call site(s)",
+                ),
             ))
         if derived:
             result[fn.name] = tuple(derived)

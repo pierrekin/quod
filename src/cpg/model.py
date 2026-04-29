@@ -89,12 +89,51 @@ Statement = Annotated[
 ]
 
 
+# ---------- Justifications ----------
+
+# Polymorphic evidence channel attached to a claim. The kind discriminator
+# tells you what flavor of evidence is on offer; the regime field on the
+# claim is a coarse epistemic label (loosely correlated, not enforced).
+#
+#   z3        — external proof in SMT-LIB; verifiable by re-running Z3
+#               or, in MVP2, just by re-hashing the artifact
+#   manual    — a human signed off; no machine-checkable evidence
+#   derived   — produced by an analysis pass; reproducible from `inputs`
+#               (content-hash refs to the graph nodes the analysis read)
+
+
+class Z3Justification(_Node):
+    kind: Literal["z3"] = "z3"
+    artifact_path: str
+    artifact_hash: str
+    note: str | None = None
+
+
+class ManualJustification(_Node):
+    kind: Literal["manual"] = "manual"
+    signed_by: str
+    rationale: str
+
+
+class DerivedJustification(_Node):
+    kind: Literal["derived"] = "derived"
+    analysis: str                       # name of the analysis pass
+    inputs: tuple[str, ...] = ()        # content hashes of nodes the pass read
+    note: str | None = None
+
+
+Justification = Annotated[
+    Union[Z3Justification, ManualJustification, DerivedJustification],
+    Field(discriminator="kind"),
+]
+
+
 # ---------- Claims ----------
 
 # Epistemic source of a claim (who/what is making the assertion):
-#   axiom   = the programmer asserts it, no proof attached
-#   witness = a proof was produced out-of-band; the justification points to it
-#   lattice = derived by an analysis pass; the agent didn't author it
+#   axiom   = the programmer asserts it (typically: no justification, or manual)
+#   witness = a proof was produced out-of-band (typically: z3/coq/lean/...)
+#   lattice = derived by an analysis pass (typically: derived)
 Regime = Literal["axiom", "witness", "lattice"]
 
 # Enforcement: do we trust the source named by `regime`, or verify at runtime?
@@ -107,11 +146,11 @@ class _Claim(_Node):
     """Common metadata carried by every claim.
 
     Defaults: a programmer assertion (regime=axiom), trusted unconditionally
-    (enforcement=trust), without a proof reference (justification=None).
+    (enforcement=trust), without a justification (justification=None).
     """
     regime: Regime = "axiom"
     enforcement: Enforcement = "trust"
-    justification: str | None = None
+    justification: Justification | None = None
 
     # Drop metadata fields from serialized JSON when they're at default. This
     # keeps program.json compact for the common case while preserving the
@@ -146,17 +185,36 @@ class IntRangeClaim(_Claim):
     max: int | None = None
 
 
-Claim = Annotated[Union[NonNegativeClaim, IntRangeClaim], Field(discriminator="kind")]
+class ReturnInRangeClaim(_Claim):
+    """Asserts the function's return value is in [min, max] (either bound optional).
+
+    Function-scoped, not param-scoped — there's no `param` field. Today this
+    is metadata only: the claim is provable via Z3 (cpg prove) and verifiable
+    (cpg verify-claims) but not yet exploited by the LLVM lowering pass.
+    """
+    kind: Literal["return_in_range"] = "return_in_range"
+    min: int | None = None
+    max: int | None = None
 
 
-CLAIM_KINDS: tuple[str, ...] = ("non_negative", "int_range")
+Claim = Annotated[
+    Union[NonNegativeClaim, IntRangeClaim, ReturnInRangeClaim],
+    Field(discriminator="kind"),
+]
 
 
-def claim_target_param(claim: Claim) -> str:
-    """The parameter a claim targets. All current claims are param-scoped."""
+CLAIM_KINDS: tuple[str, ...] = ("non_negative", "int_range", "return_in_range")
+PARAM_CLAIM_KINDS: tuple[str, ...] = ("non_negative", "int_range")
+RETURN_CLAIM_KINDS: tuple[str, ...] = ("return_in_range",)
+
+
+def claim_param(claim: Claim) -> str | None:
+    """The parameter a claim targets, or None for function-scoped (return-value) claims."""
     match claim:
         case NonNegativeClaim(param=p) | IntRangeClaim(param=p):
             return p
+        case ReturnInRangeClaim():
+            return None
     raise ValueError(f"unhandled claim: {claim!r}")
 
 
@@ -287,28 +345,32 @@ def replace_function(program: Program, new_fn: Function) -> Program:
 
 def add_claim(program: Program, function: str, claim: Claim) -> Program:
     fn = require_function(program, function)
-    target = claim_target_param(claim)
-    if target not in fn.params:
+    target = claim_param(claim)
+    if target is not None and target not in fn.params:
         raise KeyError(f"function {function!r} has no parameter {target!r}")
     for existing in fn.claims:
-        if existing.kind == claim.kind and claim_target_param(existing) == target:
+        if existing.kind == claim.kind and claim_param(existing) == target:
+            scope = f"on {target!r}" if target is not None else "on return value"
             raise ValueError(
-                f"{claim.kind} claim on {target!r} already present on {function}; "
+                f"{claim.kind} claim {scope} already present on {function}; "
                 f"relax it first if you need to change bounds"
             )
     new_fn = fn.model_copy(update={"claims": fn.claims + (claim,)})
     return replace_function(program, new_fn)
 
 
-def relax_claim(program: Program, function: str, kind: str, target: str) -> Program:
-    """Remove the matching claim (no-op disallowed: must exist)."""
+def relax_claim(program: Program, function: str, kind: str, target: str | None) -> Program:
+    """Remove the matching claim (no-op disallowed: must exist).
+
+    target=None matches return-value claims (which have no parameter scope)."""
     fn = require_function(program, function)
     kept = tuple(
         c for c in fn.claims
-        if not (c.kind == kind and claim_target_param(c) == target)
+        if not (c.kind == kind and claim_param(c) == target)
     )
     if len(kept) == len(fn.claims):
-        raise KeyError(f"no {kind} claim on {function} targeting {target!r}")
+        scope = f"targeting {target!r}" if target is not None else "(return-value)"
+        raise KeyError(f"no {kind} claim on {function} {scope}")
     new_fn = fn.model_copy(update={"claims": kept})
     return replace_function(program, new_fn)
 
@@ -355,6 +417,10 @@ def format_claim(c: Claim) -> str:
             lo_s = "-inf" if lo is None else str(lo)
             hi_s = "+inf" if hi is None else str(hi)
             head = f"int_range({p}, [{lo_s}, {hi_s}])"
+        case ReturnInRangeClaim(min=lo, max=hi):
+            lo_s = "-inf" if lo is None else str(lo)
+            hi_s = "+inf" if hi is None else str(hi)
+            head = f"return_in_range([{lo_s}, {hi_s}])"
         case _:
             raise ValueError(f"unhandled claim: {c!r}")
     return head + format_claim_metadata(c)
@@ -367,9 +433,20 @@ def format_claim_metadata(c: Claim) -> str:
         bits.append(f"regime={c.regime}")
     if c.enforcement != "trust":
         bits.append(f"enforcement={c.enforcement}")
-    if c.justification:
-        bits.append(f"justification={c.justification!r}")
+    if c.justification is not None:
+        bits.append(f"justification={_format_justification(c.justification)}")
     return " {" + ", ".join(bits) + "}" if bits else ""
+
+
+def _format_justification(j: Justification) -> str:
+    match j:
+        case Z3Justification(artifact_path=p, artifact_hash=h):
+            return f"z3({p}@{h[:12]})"
+        case ManualJustification(signed_by=s):
+            return f"manual(signed_by={s!r})"
+        case DerivedJustification(analysis=a, inputs=i):
+            return f"derived({a}, {len(i)} input(s))"
+    raise ValueError(f"unhandled justification: {j!r}")
 
 
 def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:

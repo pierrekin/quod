@@ -10,10 +10,13 @@ output so they can be copy-pasted as refs.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import subprocess
 from pathlib import Path
 
 import typer
+from pydantic import TypeAdapter, ValidationError
 
 from cpg import lower as lower_mod
 from cpg.editor import (
@@ -28,11 +31,18 @@ from cpg.hashing import HASH_DISPLAY_LEN, find_by_prefix, node_hash, short_hash,
 from cpg.analysis import derive_lattice_claims
 from cpg.model import (
     CLAIM_KINDS,
+    PARAM_CLAIM_KINDS,
+    RETURN_CLAIM_KINDS,
+    DerivedJustification,
     IntRangeClaim,
+    Justification,
+    ManualJustification,
     NonNegativeClaim,
     Program,
+    ReturnInRangeClaim,
+    Z3Justification,
     add_claim,
-    claim_target_param,
+    claim_param,
     format_claim,
     format_function,
     format_program,
@@ -41,6 +51,7 @@ from cpg.model import (
     relax_claim,
     save_program,
 )
+from cpg.proof import Z3NotInstalled, goal_smt_lib, run_z3_on_file, run_z3_on_smt
 
 
 REGIMES = ("axiom", "witness", "lattice")
@@ -190,6 +201,70 @@ def list_claims(
         typer.echo("(no claims)")
 
 
+@app.command("verify-claims")
+def verify_claims_cmd(
+    root: Path = typer.Option(
+        Path("."), "--root",
+        help="Project root for resolving justification artifact_path.",
+    ),
+) -> None:
+    """Re-check evidence attached to stored claims.
+
+    z3:       re-sha256 artifact_path, compare to artifact_hash
+    manual:   check signed_by is non-empty
+    derived:  skip (re-derived from the graph each compile)
+    None:     skip (no evidence claimed)
+
+    Exit nonzero if any check fails.
+    """
+    program = _load()
+    failures = 0
+    checked = 0
+    for fn in program.functions:
+        for c in fn.claims:
+            if c.justification is None:
+                continue
+            checked += 1
+            ok, msg = _verify_justification(c.justification, root)
+            status = "ok  " if ok else "FAIL"
+            typer.echo(f"{status} {fn.name}: {format_claim(c)}")
+            if not ok:
+                typer.echo(f"     {msg}")
+                failures += 1
+    if checked == 0:
+        typer.echo("(no claims with justifications)")
+    if failures:
+        raise typer.Exit(1)
+
+
+def _verify_justification(j: Justification, root: Path) -> tuple[bool, str]:
+    match j:
+        case Z3Justification(artifact_path=p, artifact_hash=stored):
+            full = root / p
+            if not full.exists():
+                return False, f"artifact not found: {full}"
+            actual = _sha256_of_file(full)
+            if actual != stored:
+                return False, f"hash mismatch: stored={stored[:12]}, file={actual[:12]}"
+            # MVP3: actually run Z3 on the artifact and confirm `unsat`.
+            try:
+                result = run_z3_on_file(full)
+            except Z3NotInstalled as e:
+                return False, str(e)
+            except Exception as e:
+                return False, f"z3 invocation failed: {e}"
+            if result.status != "unsat":
+                return False, f"z3 returned {result.status!r} (expected 'unsat')"
+            return True, ""
+        case ManualJustification(signed_by=s):
+            if not s.strip():
+                return False, "manual signed_by is empty"
+            return True, ""
+        case DerivedJustification():
+            return True, ""  # re-derivable from program; skip
+    return False, f"unknown justification kind: {j!r}"
+
+
 @app.command("derive-claims")
 def derive_claims_cmd() -> None:
     """Run the lattice analysis and print derived (regime=lattice) claims.
@@ -250,7 +325,7 @@ def find_unconstrained_params() -> None:
     program = _load()
     found = False
     for fn in program.functions:
-        constrained = {claim_target_param(c) for c in fn.claims}
+        constrained = {claim_param(c) for c in fn.claims if claim_param(c) is not None}
         for p in fn.params:
             if p not in constrained:
                 found = True
@@ -292,10 +367,43 @@ def list_hashes() -> None:
 
 # ---------- Mutation: claims ----------
 
+_JustificationAdapter: TypeAdapter[Justification] = TypeAdapter(Justification)
+
+
+def _sha256_of_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _parse_justification_spec(raw: str) -> Justification:
+    """Parse a JSON Justification spec; auto-fill artifact_hash for kinds with
+    artifact_path when the user omitted it."""
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise typer.BadParameter(f"--justification is not valid JSON: {e}")
+    if isinstance(data, dict) and data.get("kind") == "z3":
+        if "artifact_path" in data and not data.get("artifact_hash"):
+            p = Path(data["artifact_path"])
+            if not p.exists():
+                raise typer.BadParameter(
+                    f"--justification artifact not found: {p} "
+                    f"(create the proof file before attaching)"
+                )
+            data["artifact_hash"] = _sha256_of_file(p)
+    try:
+        return _JustificationAdapter.validate_python(data)
+    except ValidationError as e:
+        raise typer.BadParameter(f"invalid --justification:\n{e}")
+
+
 def _build_claim(
-    kind: str, target: str, *,
+    kind: str, target: str | None, *,
     lo: int | None, hi: int | None,
-    regime: str, enforcement: str, justification: str | None,
+    regime: str, enforcement: str, justification: Justification | None,
 ):
     if regime not in STORED_REGIMES:
         raise typer.BadParameter(
@@ -304,6 +412,10 @@ def _build_claim(
         )
     if enforcement not in ENFORCEMENTS:
         raise typer.BadParameter(f"unknown enforcement {enforcement!r}; choices: {', '.join(ENFORCEMENTS)}")
+    if kind in PARAM_CLAIM_KINDS and target is None:
+        raise typer.BadParameter(f"{kind!r} requires --target / -t (the parameter name)")
+    if kind in RETURN_CLAIM_KINDS and target is not None:
+        raise typer.BadParameter(f"{kind!r} is function-scoped; --target / -t must not be set")
     common = {"regime": regime, "enforcement": enforcement, "justification": justification}
     if kind == "non_negative":
         if lo is not None or hi is not None:
@@ -313,6 +425,10 @@ def _build_claim(
         if lo is None and hi is None:
             raise typer.BadParameter("int_range requires --min and/or --max")
         return IntRangeClaim(param=target, min=lo, max=hi, **common)
+    if kind == "return_in_range":
+        if lo is None and hi is None:
+            raise typer.BadParameter("return_in_range requires --min and/or --max")
+        return ReturnInRangeClaim(min=lo, max=hi, **common)
     raise typer.BadParameter(f"unknown claim kind {kind!r}; choices: {', '.join(CLAIM_KINDS)}")
 
 
@@ -320,9 +436,13 @@ def _build_claim(
 def add_claim_cmd(
     kind: str = typer.Argument(..., help=f"Claim kind. One of: {', '.join(CLAIM_KINDS)}."),
     function: str = typer.Option(..., "--function", "-f", help="Function name or hash prefix."),
-    target: str = typer.Option(..., "--target", "-t", help="Parameter name."),
-    lo: int | None = typer.Option(None, "--min", help="Lower bound (int_range)."),
-    hi: int | None = typer.Option(None, "--max", help="Upper bound (int_range)."),
+    target: str | None = typer.Option(
+        None, "--target", "-t",
+        help=f"Parameter name. Required for: {', '.join(PARAM_CLAIM_KINDS)}. "
+             f"Must be omitted for: {', '.join(RETURN_CLAIM_KINDS)}.",
+    ),
+    lo: int | None = typer.Option(None, "--min", help="Lower bound."),
+    hi: int | None = typer.Option(None, "--max", help="Upper bound."),
     regime: str = typer.Option(
         "axiom", "--regime",
         help=f"Epistemic source. One of: {', '.join(STORED_REGIMES)}. "
@@ -335,16 +455,19 @@ def add_claim_cmd(
     ),
     justification: str | None = typer.Option(
         None, "--justification",
-        help="Free-form note (placeholder for the structured justification schema).",
+        help='JSON Justification spec, e.g. \'{"kind":"z3","artifact_path":"proofs/x.smt2"}\' '
+             "(artifact_hash auto-filled from file if omitted). "
+             'Or \'{"kind":"manual","signed_by":"alice","rationale":"..."}\'.',
     ),
 ) -> None:
     """Attach a claim to a function. The optimizer will trust this assertion."""
     program = _load()
     try:
         fn = find_function_ref(program, function)
+        just_obj = _parse_justification_spec(justification) if justification else None
         claim = _build_claim(
             kind, target, lo=lo, hi=hi,
-            regime=regime, enforcement=enforcement, justification=justification,
+            regime=regime, enforcement=enforcement, justification=just_obj,
         )
         program = add_claim(program, fn.name, claim)
     except (KeyError, ValueError) as e:
@@ -358,7 +481,10 @@ def add_claim_cmd(
 def relax_claim_cmd(
     kind: str = typer.Argument(..., help=f"Claim kind. One of: {', '.join(CLAIM_KINDS)}."),
     function: str = typer.Option(..., "--function", "-f", help="Function name or hash prefix."),
-    target: str = typer.Option(..., "--target", "-t", help="Parameter name."),
+    target: str | None = typer.Option(
+        None, "--target", "-t",
+        help="Parameter name (omit for return-value claims).",
+    ),
 ) -> None:
     """Remove a claim (always safe — drops an assertion)."""
     program = _load()
@@ -369,7 +495,98 @@ def relax_claim_cmd(
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
     _save(program)
-    typer.echo(f"relaxed {kind}({target}) on {fn.name}")
+    scope = f"({target})" if target is not None else "(return)"
+    typer.echo(f"relaxed {kind}{scope} on {fn.name}")
+
+
+# ---------- Mutation: prove (MVP4) ----------
+
+@app.command("prove")
+def prove_cmd(
+    kind: str = typer.Argument(..., help=f"Claim kind to prove. One of: {', '.join(CLAIM_KINDS)}."),
+    function: str = typer.Option(..., "--function", "-f", help="Function name or hash prefix."),
+    target: str | None = typer.Option(
+        None, "--target", "-t",
+        help=f"Parameter name. Required for: {', '.join(PARAM_CLAIM_KINDS)}.",
+    ),
+    lo: int | None = typer.Option(None, "--min", help="Lower bound."),
+    hi: int | None = typer.Option(None, "--max", help="Upper bound."),
+    proofs_dir: Path = typer.Option(
+        Path("proofs"), "--proofs-dir",
+        help="Directory to write the .smt2 artifact.",
+    ),
+    enforcement: str = typer.Option(
+        "trust", "--enforcement",
+        help=f"Enforcement for the resulting witness claim. One of: {', '.join(ENFORCEMENTS)}.",
+    ),
+) -> None:
+    """Synthesize a proof of a claim, attach it as a witness.
+
+    Pipeline: build goal claim from CLI args -> lower goal + function body
+    + existing claims as hypotheses to SMT-LIB -> run Z3 -> if unsat, write
+    artifact and add the claim with regime=witness + Z3Justification.
+    """
+    program = _load()
+    try:
+        fn = find_function_ref(program, function)
+    except (KeyError, ValueError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+
+    # Build the goal claim (no justification yet — that's what we're proving).
+    try:
+        goal = _build_claim(
+            kind, target, lo=lo, hi=hi,
+            regime="witness", enforcement=enforcement, justification=None,
+        )
+    except typer.BadParameter as e:
+        typer.echo(f"error: {e.message}", err=True)
+        raise typer.Exit(2)
+
+    # Lower function + existing claims (as hypotheses) + negated goal to SMT.
+    try:
+        smt = goal_smt_lib(fn, goal, hypotheses=fn.claims)
+    except NotImplementedError as e:
+        typer.echo(f"error: cannot synthesize proof: {e}", err=True)
+        raise typer.Exit(1)
+
+    # Run Z3.
+    try:
+        result = run_z3_on_smt(smt)
+    except Z3NotInstalled as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+    if result.status != "unsat":
+        typer.echo(f"could not prove {kind}: z3 returned {result.status!r}", err=True)
+        if result.status == "sat":
+            typer.echo("(z3 found a counterexample; the claim does not hold)", err=True)
+        raise typer.Exit(1)
+
+    # Write artifact + attach to a witness claim. Filename includes a content
+    # hash prefix so different proofs (same fn/kind, different bounds) don't
+    # collide — and same proof regenerates to the same path (idempotent).
+    proofs_dir.mkdir(parents=True, exist_ok=True)
+    target_part = target or "return"
+    artifact_hash = hashlib.sha256(smt.encode("utf-8")).hexdigest()
+    artifact_path = proofs_dir / f"{fn.name}_{kind}_{target_part}_{artifact_hash[:12]}.smt2"
+    artifact_path.write_text(smt)
+
+    proven = goal.model_copy(update={
+        "justification": Z3Justification(
+            artifact_path=str(artifact_path),
+            artifact_hash=artifact_hash,
+        ),
+    })
+    try:
+        program = add_claim(program, fn.name, proven)
+    except (KeyError, ValueError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+    _save(program)
+    typer.echo(
+        f"proved {format_claim(proven)}\n"
+        f"  artifact: {artifact_path} (sha256={artifact_hash[:12]})"
+    )
 
 
 # ---------- Mutation: construction ----------

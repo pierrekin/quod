@@ -27,6 +27,7 @@ from cpg.model import (
     ParamRef,
     Program,
     ReturnExpr,
+    ReturnInRangeClaim,
     ReturnInt,
 )
 
@@ -104,7 +105,11 @@ def _lower_stmt(
     constants: dict[str, ir.GlobalVariable],
     puts: ir.Function,
     module: ir.Module,
+    return_claims: tuple,
+    overrides: dict[str, str],
 ) -> None:
+    """Lower a statement. `return_claims` are emitted as llvm.assume / runtime
+    check at every ret, so callers (after inlining) see the bound."""
     match stmt:
         case CallPuts(target=name):
             gv = constants[name]
@@ -112,10 +117,14 @@ def _lower_stmt(
             builder.call(puts, [str_ptr])
             return
         case ReturnInt(value=v):
-            builder.ret(ir.Constant(I32, v))
+            ret_val = ir.Constant(I32, v)
+            _emit_return_claims(builder, ret_val, return_claims, llvm_fn, module, overrides)
+            builder.ret(ret_val)
             return
         case ReturnExpr(value=expr):
-            builder.ret(_lower_expr(builder, expr, params, module))
+            ret_val = _lower_expr(builder, expr, params, module)
+            _emit_return_claims(builder, ret_val, return_claims, llvm_fn, module, overrides)
+            builder.ret(ret_val)
             return
         case If(cond=cond, then_body=then_body, else_body=else_body):
             then_bb = llvm_fn.append_basic_block("then")
@@ -126,12 +135,39 @@ def _lower_stmt(
             # through.
             builder.position_at_end(then_bb)
             for s in then_body:
-                _lower_stmt(builder, s, llvm_fn=llvm_fn, params=params, constants=constants, puts=puts, module=module)
+                _lower_stmt(
+                    builder, s, llvm_fn=llvm_fn, params=params, constants=constants,
+                    puts=puts, module=module,
+                    return_claims=return_claims, overrides=overrides,
+                )
             builder.position_at_end(else_bb)
             for s in else_body:
-                _lower_stmt(builder, s, llvm_fn=llvm_fn, params=params, constants=constants, puts=puts, module=module)
+                _lower_stmt(
+                    builder, s, llvm_fn=llvm_fn, params=params, constants=constants,
+                    puts=puts, module=module,
+                    return_claims=return_claims, overrides=overrides,
+                )
             return
     raise ValueError(f"unhandled stmt: {stmt!r}")
+
+
+def _emit_return_claims(
+    builder: ir.IRBuilder, ret_val: ir.Value, return_claims: tuple,
+    llvm_fn: ir.Function, module: ir.Module, overrides: dict[str, str],
+) -> None:
+    """Emit llvm.assume / runtime-check predicates against the return value
+    just before `ret`. The optimizer learns the bound; after inlining, callers
+    learn it too."""
+    for claim in return_claims:
+        if not isinstance(claim, ReturnInRangeClaim):
+            continue
+        enforcement = overrides.get(claim.regime, claim.enforcement)
+        if claim.min is not None:
+            cmp = builder.icmp_signed(">=", ret_val, ir.Constant(I32, claim.min))
+            _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
+        if claim.max is not None:
+            cmp = builder.icmp_signed("<=", ret_val, ir.Constant(I32, claim.max))
+            _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
 
 
 def _lower_claim(
@@ -160,6 +196,11 @@ def _lower_claim(
                 cmp = builder.icmp_signed("<=", val, ir.Constant(I32, hi))
                 _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
             return
+        case ReturnInRangeClaim():
+            # Function-scoped — handled per-ret in _emit_return_claims, not at
+            # function entry. _lower_function_body filters these out before
+            # calling _lower_claim, so we should never reach here.
+            raise AssertionError("ReturnInRangeClaim should be handled per-ret")
     raise ValueError(f"unhandled claim: {claim!r}")
 
 
@@ -177,13 +218,19 @@ def _lower_function_body(
         arg.name = name
     params = {name: arg for name, arg in zip(fn.params, llvm_fn.args)}
 
+    # Split claims by scope: param-scoped at function entry, return-scoped
+    # at every ret site (so callers benefit after inlining).
+    entry_claims = tuple(c for c in fn.claims if not isinstance(c, ReturnInRangeClaim))
+    return_claims = tuple(c for c in fn.claims if isinstance(c, ReturnInRangeClaim))
+
     builder = ir.IRBuilder(llvm_fn.append_basic_block(name="entry"))
-    for claim in fn.claims:
+    for claim in entry_claims:
         _lower_claim(builder, claim, params, llvm_fn, module, overrides=overrides)
     for stmt in fn.body:
         _lower_stmt(
             builder, stmt,
             llvm_fn=llvm_fn, params=params, constants=constants, puts=puts, module=module,
+            return_claims=return_claims, overrides=overrides,
         )
 
 
