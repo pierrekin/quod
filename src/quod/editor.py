@@ -110,6 +110,24 @@ def add_constant_to_program(program: Program, constant: StringConstant) -> Progr
     return program.model_copy(update={"constants": program.constants + (constant,)})
 
 
+def remove_constant_from_program(program: Program, name: str) -> Program:
+    """Drop a string constant. Permissive about dangling StringRefs — those
+    surface at lower time. Mirrors `remove_function`'s permissive stance."""
+    kept = tuple(c for c in program.constants if c.name != name)
+    if kept == program.constants:
+        raise KeyError(f"no constant named {name!r}")
+    return program.model_copy(update={"constants": kept})
+
+
+def remove_extern_from_program(program: Program, name: str) -> Program:
+    """Drop an extern declaration. Permissive about dangling Calls — those
+    surface at lower time as 'call to undeclared function'."""
+    kept = tuple(e for e in program.externs if e.name != name)
+    if kept == program.externs:
+        raise KeyError(f"no extern named {name!r}")
+    return program.model_copy(update={"externs": kept})
+
+
 # ---------- JSON ingest ----------
 
 # Hint shown after pydantic validation errors so an agent knows where to look.

@@ -46,6 +46,8 @@ from quod.editor import (
     parse_function_spec,
     parse_statement_spec,
     read_json_arg,
+    remove_constant_from_program,
+    remove_extern_from_program,
     remove_statement_in_function,
 )
 from quod.hashing import HASH_DISPLAY_LEN, find_by_prefix, node_hash, short_hash, walk
@@ -1113,6 +1115,26 @@ def const_add(
     typer.echo(f"declared constant {name} = {value!r}")
 
 
+@const_app.command("rm")
+def const_rm(
+    name: str = typer.Argument(..., help="Constant name to remove."),
+) -> None:
+    """Remove a string constant from the program.
+
+    Permissive: doesn't refuse if a quod.string_ref still points at it. The
+    dangling reference surfaces at `quod build` time.
+    """
+    with _exclusive_lock():
+        program = _load()
+        try:
+            program = remove_constant_from_program(program, name)
+        except KeyError as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    typer.echo(f"removed constant {name}")
+
+
 # ---------- extern sub-app ----------
 
 _TYPE_NAMES = {
@@ -1191,6 +1213,26 @@ def extern_add(
     if varargs:
         sig_parts.append("...")
     typer.echo(f"declared extern {name}({', '.join(sig_parts)}) -> {return_type}")
+
+
+@extern_app.command("rm")
+def extern_rm(
+    name: str = typer.Argument(..., help="Extern name to remove."),
+) -> None:
+    """Remove an extern declaration.
+
+    Permissive: doesn't refuse if a llvm.call still targets it. The dangling
+    call surfaces at `quod build` time as 'call to undeclared function'.
+    """
+    with _exclusive_lock():
+        program = _load()
+        try:
+            program = remove_extern_from_program(program, name)
+        except KeyError as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    typer.echo(f"removed extern {name}")
 
 
 # ---------- note sub-app ----------

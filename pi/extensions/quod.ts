@@ -581,6 +581,22 @@ export default function (pi: ExtensionAPI): void {
     },
   });
 
+  pi.registerTool({
+    name: "quod_const_rm",
+    label: "Remove string constant",
+    description:
+      "Remove a string constant. Permissive: doesn't refuse if a quod.string_ref still points at it — the dangling reference surfaces at build time.",
+    parameters: Type.Object({
+      ...cwdField,
+      name: Type.String({ description: "Constant name to remove." }),
+    }),
+    async execute(_id, p, signal) {
+      return text(
+        await runQuod(["const", "rm", p.name], { cwd: p.cwd, signal }),
+      );
+    },
+  });
+
   // -------------------- extern --------------------
 
   pi.registerTool({
@@ -619,6 +635,22 @@ export default function (pi: ExtensionAPI): void {
       if (p.return_type) args.push("--return-type", p.return_type);
       if (p.varargs) args.push("--varargs");
       return text(await runQuod(args, { cwd: p.cwd, signal }));
+    },
+  });
+
+  pi.registerTool({
+    name: "quod_extern_rm",
+    label: "Remove extern",
+    description:
+      "Remove an extern declaration. Permissive: doesn't refuse if an llvm.call still targets it — the dangling call surfaces at build time as 'call to undeclared function'.",
+    parameters: Type.Object({
+      ...cwdField,
+      name: Type.String({ description: "Extern name to remove." }),
+    }),
+    async execute(_id, p, signal) {
+      return text(
+        await runQuod(["extern", "rm", p.name], { cwd: p.cwd, signal }),
+      );
     },
   });
 
