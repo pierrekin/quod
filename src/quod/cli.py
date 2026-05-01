@@ -90,6 +90,7 @@ from quod.providers import (
     default_for,
     get_provider,
 )
+from quod import completion as _comp
 from quod.render import (
     Span,
     Theme,
@@ -237,6 +238,7 @@ def root(
     program: str | None = typer.Option(
         None, "--program", "-p",
         help="Which [[program]] to operate on (omit if quod.toml has only one).",
+        autocompletion=_comp.program_names,
     ),
     no_color: bool = typer.Option(
         False, "--no-color",
@@ -258,6 +260,7 @@ def init(
     template: str = typer.Option(
         "hello", "--template", "-t",
         help=f"Starter template. One of: {', '.join(TEMPLATES)}.",
+        autocompletion=_comp.template_names,
     ),
     force: bool = typer.Option(False, "--force", help="Overwrite existing files."),
 ) -> None:
@@ -502,9 +505,12 @@ def build(
         help="Link object files into a binary (defaults to quod.toml [build].link).",
     ),
     show_ir: bool = typer.Option(False, "--show-ir", help="Print optimized IR to stdout."),
-    enforce_axiom: str | None = typer.Option(None, "--enforce-axiom", help=_ENFORCE_HELP),
-    enforce_witness: str | None = typer.Option(None, "--enforce-witness", help=_ENFORCE_HELP),
-    enforce_lattice: str | None = typer.Option(None, "--enforce-lattice", help=_ENFORCE_HELP),
+    enforce_axiom: str | None = typer.Option(None, "--enforce-axiom", help=_ENFORCE_HELP,
+                                              autocompletion=_comp.enforcements),
+    enforce_witness: str | None = typer.Option(None, "--enforce-witness", help=_ENFORCE_HELP,
+                                                autocompletion=_comp.enforcements),
+    enforce_lattice: str | None = typer.Option(None, "--enforce-lattice", help=_ENFORCE_HELP,
+                                                autocompletion=_comp.enforcements),
 ) -> None:
     """Lower -> optimize -> object -> link, every [[program.bin]] in quod.toml.
 
@@ -522,12 +528,16 @@ def build(
 def run(
     bin_name: str | None = typer.Option(
         None, "--bin", help="Which [[program.bin]] to run. Required if multiple bins are configured.",
+        autocompletion=_comp.bin_names,
     ),
     profile: int | None = typer.Option(None, "--profile"),
     target: str | None = typer.Option(None, "--target"),
-    enforce_axiom: str | None = typer.Option(None, "--enforce-axiom", help=_ENFORCE_HELP),
-    enforce_witness: str | None = typer.Option(None, "--enforce-witness", help=_ENFORCE_HELP),
-    enforce_lattice: str | None = typer.Option(None, "--enforce-lattice", help=_ENFORCE_HELP),
+    enforce_axiom: str | None = typer.Option(None, "--enforce-axiom", help=_ENFORCE_HELP,
+                                              autocompletion=_comp.enforcements),
+    enforce_witness: str | None = typer.Option(None, "--enforce-witness", help=_ENFORCE_HELP,
+                                                autocompletion=_comp.enforcements),
+    enforce_lattice: str | None = typer.Option(None, "--enforce-lattice", help=_ENFORCE_HELP,
+                                                autocompletion=_comp.enforcements),
 ) -> None:
     """Build and execute a binary. Like `cargo run`.
 
@@ -643,7 +653,9 @@ def schema(
 
 
 @app.command()
-def find(prefix: str) -> None:
+def find(
+    prefix: str = typer.Argument(..., autocompletion=_comp.hash_prefixes),
+) -> None:
     """Resolve a hash prefix to a node and print it."""
     program = _load()
     try:
@@ -684,7 +696,7 @@ def fn_ls() -> None:
 
 @fn_app.command("show")
 def fn_show(
-    ref: str,
+    ref: str = typer.Argument(..., autocompletion=_comp.function_or_hash),
     human: bool = typer.Option(
         False, "--human", "-H",
         help="Columnar human view: hash gutter | code | metadata column.",
@@ -722,7 +734,8 @@ def fn_add(
 
 @fn_app.command("rm")
 def fn_rm(
-    function: str = typer.Argument(..., help="Function name or hash prefix."),
+    function: str = typer.Argument(..., help="Function name or hash prefix.",
+                                    autocompletion=_comp.function_or_hash),
 ) -> None:
     """Remove a function from the program.
 
@@ -744,7 +757,8 @@ def fn_rm(
 
 @fn_app.command("callers")
 def fn_callers(
-    target: str = typer.Argument(..., help="Function whose callers we want."),
+    target: str = typer.Argument(..., help="Function whose callers we want.",
+                                 autocompletion=_comp.function_names),
 ) -> None:
     """List every call site to `target` across the program."""
     from quod.analysis import _walk_calls_in_stmt
@@ -775,8 +789,10 @@ def fn_callers(
 
 @fn_app.command("data-flow")
 def fn_data_flow(
-    function: str = typer.Argument(..., help="Function name or hash prefix."),
-    param: str = typer.Argument(..., help="Parameter name."),
+    function: str = typer.Argument(..., help="Function name or hash prefix.",
+                                    autocompletion=_comp.function_or_hash),
+    param: str = typer.Argument(..., help="Parameter name.",
+                                autocompletion=_comp.param_names_for_function),
 ) -> None:
     """Show every statement in `function` that reads `param`."""
     program = _load()
@@ -877,7 +893,8 @@ def fn_unconstrained() -> None:
 
 @claim_app.command("ls")
 def claim_ls(
-    function: str | None = typer.Argument(None, help="Restrict to one function (omit for all)."),
+    function: str | None = typer.Argument(None, help="Restrict to one function (omit for all).",
+                                          autocompletion=_comp.function_or_hash),
 ) -> None:
     """List stored claims (axiom + witness regimes) across the program."""
     program = _load()
@@ -964,23 +981,28 @@ def _build_claim(
 
 @claim_app.command("add")
 def claim_add(
-    function: str = typer.Argument(..., help="Function name or hash prefix."),
-    kind: str = typer.Argument(..., help=f"Claim kind. One of: {', '.join(CLAIM_KINDS)}."),
+    function: str = typer.Argument(..., help="Function name or hash prefix.",
+                                    autocompletion=_comp.function_or_hash),
+    kind: str = typer.Argument(..., help=f"Claim kind. One of: {', '.join(CLAIM_KINDS)}.",
+                               autocompletion=_comp.claim_kinds),
     target: str | None = typer.Argument(
         None,
         help=f"Parameter name. Required for: {', '.join(PARAM_CLAIM_KINDS)}. "
              f"Must be omitted for: {', '.join(RETURN_CLAIM_KINDS)}.",
+        autocompletion=_comp.param_names_for_function,
     ),
     lo: int | None = typer.Option(None, "--min"),
     hi: int | None = typer.Option(None, "--max"),
     regime: str = typer.Option(
         "axiom", "--regime",
         help=f"Epistemic source. One of: {', '.join(STORED_REGIMES)}.",
+        autocompletion=_comp.stored_regimes,
     ),
     enforcement: str = typer.Option(
         "trust", "--enforcement",
         help=f"trust = llvm.assume (UB if false); verify = runtime branch + abort. "
              f"One of: {', '.join(ENFORCEMENTS)}.",
+        autocompletion=_comp.enforcements,
     ),
     justification: str | None = typer.Option(
         None, "--justification",
@@ -1007,9 +1029,12 @@ def claim_add(
 
 @claim_app.command("relax")
 def claim_relax(
-    function: str = typer.Argument(..., help="Function name or hash prefix."),
-    kind: str = typer.Argument(..., help=f"Claim kind. One of: {', '.join(CLAIM_KINDS)}."),
-    target: str | None = typer.Argument(None, help="Parameter name (omit for return-scoped claims)."),
+    function: str = typer.Argument(..., help="Function name or hash prefix.",
+                                    autocompletion=_comp.function_or_hash),
+    kind: str = typer.Argument(..., help=f"Claim kind. One of: {', '.join(CLAIM_KINDS)}.",
+                               autocompletion=_comp.claim_kinds),
+    target: str | None = typer.Argument(None, help="Parameter name (omit for return-scoped claims).",
+                                        autocompletion=_comp.param_names_for_function),
 ) -> None:
     """Remove a claim (always safe — drops an assertion)."""
     with _exclusive_lock():
@@ -1163,7 +1188,8 @@ def _generate_candidates(program: Program) -> list[tuple[str, object]]:
 @claim_app.command("derive")
 def claim_derive(
     provider: str | None = typer.Option(
-        None, "--provider", help="Provider name (defaults to the first lattice/derive provider)."
+        None, "--provider", help="Provider name (defaults to the first lattice/derive provider).",
+        autocompletion=_comp.provider_names_for("lattice"),
     ),
 ) -> None:
     """Run a lattice provider and print derived (regime=lattice) claims."""
@@ -1191,14 +1217,19 @@ def claim_derive(
 
 @claim_app.command("prove")
 def claim_prove(
-    function: str = typer.Argument(..., help="Function name or hash prefix."),
-    kind: str = typer.Argument(..., help=f"Claim kind to prove. One of: {', '.join(CLAIM_KINDS)}."),
-    target: str | None = typer.Argument(None, help="Parameter name (omit for return-scoped claims)."),
+    function: str = typer.Argument(..., help="Function name or hash prefix.",
+                                    autocompletion=_comp.function_or_hash),
+    kind: str = typer.Argument(..., help=f"Claim kind to prove. One of: {', '.join(CLAIM_KINDS)}.",
+                               autocompletion=_comp.claim_kinds),
+    target: str | None = typer.Argument(None, help="Parameter name (omit for return-scoped claims).",
+                                        autocompletion=_comp.param_names_for_function),
     lo: int | None = typer.Option(None, "--min"),
     hi: int | None = typer.Option(None, "--max"),
-    enforcement: str = typer.Option("trust", "--enforcement"),
+    enforcement: str = typer.Option("trust", "--enforcement",
+                                    autocompletion=_comp.enforcements),
     provider: str | None = typer.Option(
-        None, "--provider", help="Provider name (defaults to the first witness/prove provider)."
+        None, "--provider", help="Provider name (defaults to the first witness/prove provider).",
+        autocompletion=_comp.provider_names_for("witness"),
     ),
 ) -> None:
     """Synthesize a proof of a claim via a provider, attach as a witness."""
@@ -1265,7 +1296,8 @@ def claim_prove(
 
 @stmt_app.command("add")
 def stmt_add(
-    function: str = typer.Argument(..., help="Function name or hash prefix."),
+    function: str = typer.Argument(..., help="Function name or hash prefix.",
+                                    autocompletion=_comp.function_or_hash),
     spec: str = typer.Argument("-", help="Path to JSON spec, or '-' for stdin."),
     at_end: bool = typer.Option(False, "--at-end"),
     at_start: bool = typer.Option(False, "--at-start"),
@@ -1299,9 +1331,11 @@ def stmt_add(
 
 @stmt_app.command("rm")
 def stmt_rm(
-    function: str = typer.Argument(..., help="Function name or hash prefix."),
+    function: str = typer.Argument(..., help="Function name or hash prefix.",
+                                    autocompletion=_comp.function_or_hash),
     hash_prefix: str = typer.Argument(
-        ..., help="Content-hash prefix of the statement to remove."
+        ..., help="Content-hash prefix of the statement to remove.",
+        autocompletion=_comp.hash_prefixes,
     ),
 ) -> None:
     """Remove a statement from a function by content-hash prefix.
@@ -1361,7 +1395,8 @@ def const_add(
 
 @const_app.command("rm")
 def const_rm(
-    name: str = typer.Argument(..., help="Constant name to remove."),
+    name: str = typer.Argument(..., help="Constant name to remove.",
+                               autocompletion=_comp.constant_names),
 ) -> None:
     """Remove a string constant from the program.
 
@@ -1448,7 +1483,8 @@ def extern_add(
 
 @extern_app.command("rm")
 def extern_rm(
-    name: str = typer.Argument(..., help="Extern name to remove."),
+    name: str = typer.Argument(..., help="Extern name to remove.",
+                               autocompletion=_comp.extern_names),
 ) -> None:
     """Remove an extern declaration.
 
@@ -1507,7 +1543,8 @@ def extern_ingest(
 
 @note_app.command("add")
 def note_add(
-    function: str = typer.Argument(..., help="Function name or hash prefix."),
+    function: str = typer.Argument(..., help="Function name or hash prefix.",
+                                    autocompletion=_comp.function_or_hash),
     text: str = typer.Argument(..., help="Note content (free-form intent / TODO / rationale)."),
 ) -> None:
     """Attach a free-form note to a function."""
@@ -1526,7 +1563,8 @@ def note_add(
 
 @note_app.command("rm")
 def note_rm(
-    function: str = typer.Argument(..., help="Function name or hash prefix."),
+    function: str = typer.Argument(..., help="Function name or hash prefix.",
+                                    autocompletion=_comp.function_or_hash),
     index: int = typer.Argument(..., help="0-based index of the note to remove."),
 ) -> None:
     """Remove a note by index from a function."""
