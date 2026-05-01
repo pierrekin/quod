@@ -56,6 +56,7 @@ from quod.model import (
     While,
     _Node,
     format_claim,
+    format_claim_metadata,
 )
 
 
@@ -77,6 +78,8 @@ SpanStyle = Literal[
     "meta_value",    # value text of a meta entry
     "hash",          # gutter hash text
     "gutter_punct",  # the [] brackets around a gutter hash
+    "ok",            # success status (e.g. `ok` in `quod claim verify`)
+    "warn",          # failure / warning status (e.g. `FAIL` in `quod claim verify`)
 ]
 
 
@@ -127,6 +130,8 @@ _ANSI_DEFAULT: dict[SpanStyle, str] = {
     "meta_value":   "38;5;108",
     "hash":         "38;5;245",
     "gutter_punct": "38;5;238",   # very dim
+    "ok":           "38;5;108",   # sage (matches literal_str — "things are good")
+    "warn":         "38;5;167;1", # bold red-orange
 }
 
 
@@ -169,7 +174,7 @@ _TYPE_NAMES: dict[type, str] = {
 }
 
 
-def _type_span(t) -> Span:
+def type_span(t) -> Span:
     name = _TYPE_NAMES.get(type(t))
     if name is None:
         raise ValueError(f"unhandled type: {t!r}")
@@ -262,7 +267,7 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
             yield Line(stmt, indent, (
                 Span("let", "keyword"), Span(" ", "ws"),
                 Span(n, "local"), Span(": ", "punct"),
-                _type_span(ty), Span(" ", "ws"),
+                type_span(ty), Span(" ", "ws"),
                 Span("=", "op"), Span(" ", "ws"),
                 *_expr_spans(init),
             ))
@@ -285,7 +290,7 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
             yield Line(stmt, indent, (
                 Span("for", "keyword"), Span(" ", "ws"),
                 Span(v, "local"), Span(": ", "punct"),
-                _type_span(ty), Span(" ", "ws"),
+                type_span(ty), Span(" ", "ws"),
                 Span("in", "keyword"), Span(" ", "ws"),
                 *_expr_spans(lo),
                 Span("..", "op"),
@@ -303,7 +308,7 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
 
 # ---------- Claim / meta-column spans ----------
 
-def _claim_spans(claim) -> tuple[Span, ...]:
+def claim_spans(claim) -> tuple[Span, ...]:
     """Compact rendering of one claim for the meta column."""
     match claim:
         case NonNegativeClaim(param=p):
@@ -356,9 +361,76 @@ def _function_meta(fn: Function) -> tuple[Span, ...]:
         for i, c in enumerate(cs):
             if i > 0:
                 out.append(Span(", ", "punct"))
-            out.extend(_claim_spans(c))
+            out.extend(claim_spans(c))
     out.append(Span("]", "punct"))
     return tuple(out)
+
+
+def claim_full_spans(claim) -> tuple[Span, ...]:
+    """`claim_spans` + the trailing `{regime=..., enforcement=..., justification=...}`
+    block for non-default fields. The full rendering used by `quod claim ls`."""
+    head = claim_spans(claim)
+    suffix = format_claim_metadata(claim)
+    if not suffix:
+        return head
+    return (*head, Span(suffix, "meta_value"))
+
+
+# ---------- Row builders (reusable across listing commands) ----------
+
+def hash_brackets(node: _Node) -> tuple[Span, ...]:
+    """`[hash]` spans for inline use (e.g. `quod fn ls`, `quod show` default)."""
+    return (
+        Span("[", "gutter_punct"),
+        Span(short_hash(node), "hash"),
+        Span("]", "gutter_punct"),
+    )
+
+
+def function_signature_spans(fn: Function) -> tuple[Span, ...]:
+    """`name(p: type, ...) -> ret` — no trailing brace, no claims summary."""
+    out: list[Span] = [Span(fn.name, "fn_name"), Span("(", "punct")]
+    for i, p in enumerate(fn.params):
+        if i > 0:
+            out.append(Span(", ", "punct"))
+        out.extend((Span(p.name, "param"), Span(": ", "punct"), type_span(p.type)))
+    out.extend((
+        Span(") ", "punct"), Span("->", "op"), Span(" ", "ws"),
+        type_span(fn.return_type),
+    ))
+    return tuple(out)
+
+
+def extern_signature_spans(ext: ExternFunction) -> tuple[Span, ...]:
+    """`name(types..., ...) -> ret` — leading `extern ` keyword is the caller's choice."""
+    out: list[Span] = [Span(ext.name, "fn_name"), Span("(", "punct")]
+    types = list(ext.effective_param_types())
+    for i, t in enumerate(types):
+        if i > 0:
+            out.append(Span(", ", "punct"))
+        out.append(type_span(t))
+    if ext.varargs:
+        if types:
+            out.append(Span(", ", "punct"))
+        out.append(Span("...", "op"))
+    out.extend((
+        Span(") ", "punct"), Span("->", "op"), Span(" ", "ws"),
+        type_span(ext.return_type),
+    ))
+    return tuple(out)
+
+
+def constant_spans(c: StringConstant) -> tuple[Span, ...]:
+    return (
+        Span(c.name, "const_name"), Span(" ", "ws"),
+        Span("=", "op"), Span(" ", "ws"),
+        Span(repr(c.value), "literal_str"),
+    )
+
+
+def paint(spans: Iterable[Span], theme: Theme = plain_theme) -> str:
+    """Render a span sequence to a single string. The one-liner cousin of `render`."""
+    return "".join(theme(s) for s in spans)
 
 
 # ---------- Function / program lines ----------
@@ -366,50 +438,20 @@ def _function_meta(fn: Function) -> tuple[Span, ...]:
 def format_function_lines(fn: Function, indent: int = 0) -> Iterator[Line]:
     for note in fn.notes:
         yield Line(None, indent, (Span(f"// {note}", "comment"),))
-    header: list[Span] = [Span(fn.name, "fn_name"), Span("(", "punct")]
-    for i, p in enumerate(fn.params):
-        if i > 0:
-            header.append(Span(", ", "punct"))
-        header.extend((
-            Span(p.name, "param"), Span(": ", "punct"), _type_span(p.type),
-        ))
-    header.extend((
-        Span(") ", "punct"), Span("->", "op"), Span(" ", "ws"),
-        _type_span(fn.return_type), Span(" {", "punct"),
-    ))
-    yield Line(fn, indent, tuple(header), meta=_function_meta(fn))
+    header = (*function_signature_spans(fn), Span(" {", "punct"))
+    yield Line(fn, indent, header, meta=_function_meta(fn))
     for s in fn.body:
         yield from _stmt_lines(s, indent + 2)
     yield Line(None, indent, (Span("}", "punct"),))
 
 
 def _extern_line(ext: ExternFunction, indent: int) -> Line:
-    spans: list[Span] = [
-        Span("extern", "keyword"), Span(" ", "ws"),
-        Span(ext.name, "fn_name"), Span("(", "punct"),
-    ]
-    types = list(ext.effective_param_types())
-    for i, t in enumerate(types):
-        if i > 0:
-            spans.append(Span(", ", "punct"))
-        spans.append(_type_span(t))
-    if ext.varargs:
-        if types:
-            spans.append(Span(", ", "punct"))
-        spans.append(Span("...", "op"))
-    spans.extend((
-        Span(") ", "punct"), Span("->", "op"), Span(" ", "ws"),
-        _type_span(ext.return_type),
-    ))
-    return Line(ext, indent, tuple(spans))
+    spans = (Span("extern", "keyword"), Span(" ", "ws"), *extern_signature_spans(ext))
+    return Line(ext, indent, spans)
 
 
 def _constant_line(c: StringConstant, indent: int) -> Line:
-    return Line(c, indent, (
-        Span(c.name, "const_name"), Span(" ", "ws"),
-        Span("=", "op"), Span(" ", "ws"),
-        Span(repr(c.value), "literal_str"),
-    ))
+    return Line(c, indent, constant_spans(c))
 
 
 def format_program_lines(program: Program) -> Iterator[Line]:
@@ -437,28 +479,46 @@ def render(
     lines: Iterable[Line],
     *,
     theme: Theme = plain_theme,
-    hash_col: bool = True,
-    meta_col: bool = True,
+    mode: Literal["columnar", "inline"] = "columnar",
 ) -> str:
     """Lay out a stream of Lines into a single string.
 
-    hash_col: prepend a fixed-width gutter `[hash]  ` on each line (blank for
-        ownerless lines). False suppresses the column entirely.
-    meta_col: pad the code column to the widest line and append per-line meta
-        spans. Lines with no meta render flush-left within the code column.
+    columnar: hash gutter `[hash]  ` on the left, code column padded to the
+        widest line, meta spans appended in a right column.
+    inline:   hash prefix `[hash] ` inserted before each owner line's spans
+        (after the indent); meta spans appended after the code on the same
+        line. Reproduces the canonical `quod show` layout.
     """
     materialized = list(lines)
-    code_widths = [line.indent + _visual_width(line.spans) for line in materialized]
-    max_code_width = max(code_widths, default=0) if meta_col else 0
+    if mode == "inline":
+        return _render_inline(materialized, theme)
+    return _render_columnar(materialized, theme)
 
+
+def _render_columnar(lines: list[Line], theme: Theme) -> str:
+    code_widths = [line.indent + _visual_width(line.spans) for line in lines]
+    max_code_width = max(code_widths, default=0)
     out: list[str] = []
-    for line, code_w in zip(materialized, code_widths):
-        gutter = "".join(theme(s) for s in _gutter_spans(line.owner)) if hash_col else ""
-        code = (" " * line.indent) + "".join(theme(s) for s in line.spans)
-        if meta_col and line.meta:
+    for line, code_w in zip(lines, code_widths):
+        gutter = paint(_gutter_spans(line.owner), theme)
+        code = (" " * line.indent) + paint(line.spans, theme)
+        if line.meta:
             pad = " " * max(2, max_code_width - code_w + 2)
-            meta = pad + "".join(theme(s) for s in line.meta)
+            meta = pad + paint(line.meta, theme)
             out.append(f"{gutter}{code}{meta}")
         else:
             out.append(f"{gutter}{code}")
+    return "\n".join(out)
+
+
+def _render_inline(lines: list[Line], theme: Theme) -> str:
+    out: list[str] = []
+    for line in lines:
+        prefix = ""
+        if line.owner is not None:
+            prefix = paint(hash_brackets(line.owner), theme) + " "
+        code = (" " * line.indent) + prefix + paint(line.spans, theme)
+        if line.meta:
+            code += "  " + paint(line.meta, theme)
+        out.append(code)
     return "\n".join(out)

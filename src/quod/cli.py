@@ -23,7 +23,9 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import os
 import subprocess
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -74,9 +76,6 @@ from quod.model import (
     Z3Justification,
     add_claim,
     claim_param,
-    format_claim,
-    format_function,
-    format_program,
     function_callees,
     load_program,
     relax_claim,
@@ -92,9 +91,18 @@ from quod.providers import (
     get_provider,
 )
 from quod.render import (
+    Span,
+    Theme,
     ansi_theme,
+    claim_full_spans,
+    claim_spans,
+    constant_spans,
+    extern_signature_spans,
     format_function_lines,
     format_program_lines,
+    function_signature_spans,
+    hash_brackets,
+    paint,
     plain_theme,
     render,
 )
@@ -206,20 +214,17 @@ def _exclusive_lock():
             fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
 
 
-def _hash_label(node) -> str:
-    return f"[{short_hash(node)}] "
-
-
-def _use_color(mode: str) -> bool:
-    import os
-    import sys
-    if mode == "always":
-        return True
-    if mode == "never":
+def _color_on() -> bool:
+    """Color on iff stdout is a TTY, NO_COLOR is unset, and --no-color wasn't passed."""
+    if _state.get("no_color"):
         return False
-    if mode != "auto":
-        raise typer.BadParameter(f"--color must be auto, always, or never (got {mode!r})")
-    return sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+    if os.environ.get("NO_COLOR"):
+        return False
+    return sys.stdout.isatty()
+
+
+def _theme() -> Theme:
+    return ansi_theme if _color_on() else plain_theme
 
 
 @app.callback(invoke_without_command=True)
@@ -233,9 +238,14 @@ def root(
         None, "--program", "-p",
         help="Which [[program]] to operate on (omit if quod.toml has only one).",
     ),
+    no_color: bool = typer.Option(
+        False, "--no-color",
+        help="Disable ANSI color even on a TTY. NO_COLOR env var also works.",
+    ),
 ) -> None:
     _state["config_path"] = config
     _state["program_name"] = program
+    _state["no_color"] = no_color
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
         raise typer.Exit()
@@ -581,31 +591,26 @@ def show(
     ),
     human: bool = typer.Option(
         False, "--human", "-H",
-        help="Columnar human view: hash gutter | code | metadata. "
-             "Color on a TTY (override with --color).",
-    ),
-    color: str = typer.Option(
-        "auto", "--color",
-        help="auto | always | never. Auto enables color when stdout is a TTY "
-             "and NO_COLOR is unset.",
+        help="Columnar human view: hash gutter | code | metadata column.",
     ),
 ) -> None:
-    """Print the program in canonical form, with content-hash prefixes."""
+    """Print the program. Color follows TTY (disable with `quod --no-color`)."""
     program = _load()
+    theme = _theme()
     if hashes:
         seen: set[str] = set()
         for hn in walk(program):
             if hn.hash in seen:
                 continue
             seen.add(hn.hash)
-            typer.echo(f"{hn.hash[:HASH_DISPLAY_LEN]}  {type(hn.node).__name__}")
+            typer.echo(paint((
+                Span(hn.hash[:HASH_DISPLAY_LEN], "hash"),
+                Span("  ", "ws"),
+                Span(type(hn.node).__name__, "type"),
+            ), theme))
         return
-    if human:
-        use_color = _use_color(color)
-        theme = ansi_theme if use_color else plain_theme
-        typer.echo(render(format_program_lines(program), theme=theme), color=use_color)
-        return
-    typer.echo(format_program(program, label=_hash_label))
+    mode = "columnar" if human else "inline"
+    typer.echo(render(format_program_lines(program), theme=theme, mode=mode))
 
 
 @app.command()
@@ -646,10 +651,18 @@ def find(prefix: str) -> None:
     except (KeyError, ValueError) as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
-    typer.echo(f"hash:  {node_hash(node)}")
-    typer.echo(f"short: {short_hash(node)}")
-    typer.echo(f"type:  {type(node).__name__}")
-    typer.echo(f"json:  {node.model_dump_json()}")
+    theme = _theme()
+
+    def row(label: str, value: str, value_style: str) -> str:
+        return paint((
+            Span(f"{label}:  ", "meta_label"),
+            Span(value, value_style),  # type: ignore[arg-type]
+        ), theme)
+
+    typer.echo(row("hash", node_hash(node), "hash"))
+    typer.echo(row("short", short_hash(node), "hash"))
+    typer.echo(row("type", type(node).__name__, "type"))
+    typer.echo(row("json", node.model_dump_json(), "literal_str"))
 
 
 # ---------- fn sub-app ----------
@@ -661,11 +674,12 @@ def fn_ls() -> None:
     if not program.functions:
         typer.echo("(no functions)")
         return
+    theme = _theme()
     for fn in program.functions:
-        sig = ", ".join(f"{p.name}: {_format_type(p.type)}" for p in fn.params)
-        ret = _format_type(fn.return_type)
-        suffix = f"  [{len(fn.claims)} claim(s)]" if fn.claims else ""
-        typer.echo(f"[{short_hash(fn)}] {fn.name}({sig}) -> {ret}{suffix}")
+        spans = [*hash_brackets(fn), Span(" ", "ws"), *function_signature_spans(fn)]
+        if fn.claims:
+            spans.append(Span(f"  [{len(fn.claims)} claim(s)]", "meta_label"))
+        typer.echo(paint(spans, theme))
 
 
 @fn_app.command("show")
@@ -673,10 +687,7 @@ def fn_show(
     ref: str,
     human: bool = typer.Option(
         False, "--human", "-H",
-        help="Columnar human view: hash gutter | code | metadata.",
-    ),
-    color: str = typer.Option(
-        "auto", "--color", help="auto | always | never.",
+        help="Columnar human view: hash gutter | code | metadata column.",
     ),
 ) -> None:
     """Print a single function. Accepts a name or a content-hash prefix."""
@@ -685,12 +696,8 @@ def fn_show(
     except (KeyError, ValueError) as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
-    if human:
-        use_color = _use_color(color)
-        theme = ansi_theme if use_color else plain_theme
-        typer.echo(render(format_function_lines(fn), theme=theme), color=use_color)
-        return
-    typer.echo(format_function(fn, label=_hash_label))
+    mode = "columnar" if human else "inline"
+    typer.echo(render(format_function_lines(fn), theme=_theme(), mode=mode))
 
 
 @fn_app.command("add")
@@ -879,11 +886,15 @@ def claim_ls(
     except (KeyError, ValueError) as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
+    theme = _theme()
     found = False
     for fn in fns:
         for c in fn.claims:
             found = True
-            typer.echo(f"{fn.name}: {format_claim(c)}")
+            typer.echo(paint((
+                Span(fn.name, "fn_name"), Span(": ", "punct"),
+                *claim_full_spans(c),
+            ), theme))
     if not found:
         typer.echo("(no claims)")
 
@@ -1026,6 +1037,7 @@ def claim_verify(
     cfg = _cfg()
     program = _load()
     resolve_root = root if root is not None else cfg.root
+    theme = _theme()
     failures = 0
     checked = 0
     for fn in program.functions:
@@ -1034,8 +1046,12 @@ def claim_verify(
                 continue
             checked += 1
             ok, msg = _verify_justification(c.justification, resolve_root)
-            status = "ok  " if ok else "FAIL"
-            typer.echo(f"{status} {fn.name}: {format_claim(c)}")
+            status_span = Span("ok  ", "ok") if ok else Span("FAIL", "warn")
+            typer.echo(paint((
+                status_span, Span(" ", "ws"),
+                Span(fn.name, "fn_name"), Span(": ", "punct"),
+                *claim_full_spans(c),
+            ), theme))
             if not ok:
                 typer.echo(f"     {msg}")
                 failures += 1
@@ -1107,8 +1123,14 @@ def claim_suggest(
                    "or candidates were trivially redundant.")
         return
     typer.echo("\ntop suggestions (lines saved):")
+    theme = _theme()
     for delta, fn_name, claim in results[:top_n]:
-        typer.echo(f"  -{delta:>3} lines  on {fn_name}: {format_claim(claim)}")
+        typer.echo(paint((
+            Span(f"  -{delta:>3} lines  ", "literal_int"),
+            Span("on ", "punct"),
+            Span(fn_name, "fn_name"), Span(": ", "punct"),
+            *claim_full_spans(claim),
+        ), theme))
     typer.echo("\nNext: try `quod claim prove KIND -f FN [...]` for the candidates that "
                "should actually be true.")
 
@@ -1158,9 +1180,13 @@ def claim_derive(
     if not derived:
         typer.echo(f"(no derived claims from {prov.name})")
         return
+    theme = _theme()
     for fn in program.functions:
         for c in derived.get(fn.name, ()):
-            typer.echo(f"{fn.name}: {format_claim(c)}")
+            typer.echo(paint((
+                Span(fn.name, "fn_name"), Span(": ", "punct"),
+                *claim_full_spans(c),
+            ), theme))
 
 
 @claim_app.command("prove")
@@ -1224,10 +1250,15 @@ def claim_prove(
             raise typer.Exit(1)
         _save(program)
 
-    msg = f"proved {format_claim(result.claim)} via {prov.name}"
+    theme = _theme()
+    typer.echo(paint((
+        Span("proved ", "ok"),
+        *claim_full_spans(result.claim),
+        Span(" via ", "punct"),
+        Span(prov.name, "fn_name"),
+    ), theme))
     if result.artifact_path is not None and result.artifact_hash is not None:
-        msg += f"\n  artifact: {result.artifact_path} (sha256={result.artifact_hash[:12]})"
-    typer.echo(msg)
+        typer.echo(f"  artifact: {result.artifact_path} (sha256={result.artifact_hash[:12]})")
 
 
 # ---------- stmt sub-app ----------
@@ -1299,8 +1330,11 @@ def const_ls() -> None:
     if not program.constants:
         typer.echo("(no constants)")
         return
+    theme = _theme()
     for c in program.constants:
-        typer.echo(f"[{short_hash(c)}] {c.name} = {c.value!r}")
+        typer.echo(paint((
+            *hash_brackets(c), Span(" ", "ws"), *constant_spans(c),
+        ), theme))
 
 
 @const_app.command("add")
@@ -1360,13 +1394,6 @@ def _parse_type_name(s: str):
     return cls()
 
 
-_TYPE_LABELS = {v: k for k, v in _TYPE_NAMES.items()}
-
-
-def _format_type(t) -> str:
-    return _TYPE_LABELS.get(type(t), type(t).__name__)
-
-
 @extern_app.command("ls")
 def extern_ls() -> None:
     """List declared externs with their signatures."""
@@ -1374,15 +1401,9 @@ def extern_ls() -> None:
     if not program.externs:
         typer.echo("(no externs)")
         return
+    theme = _theme()
     for ext in program.externs:
-        if ext.param_types:
-            params = [_format_type(t) for t in ext.param_types]
-        else:
-            params = ["i32"] * ext.arity
-        if ext.varargs:
-            params.append("...")
-        ret = _format_type(ext.return_type)
-        typer.echo(f"{ext.name}({', '.join(params)}) -> {ret}")
+        typer.echo(paint(extern_signature_spans(ext), theme))
 
 
 @extern_app.command("add")
@@ -1535,12 +1556,20 @@ def provider_ls() -> None:
     if not providers:
         typer.echo("(no providers registered)")
         return
+    theme = _theme()
     name_w = max(len(p.name) for p in providers.values())
     regime_w = max(len(p.regime) for p in providers.values())
     for p in providers.values():
         modes = "+".join(p.modes) if p.modes else "(none)"
-        typer.echo(f"{p.name:<{name_w}}  regime={p.regime:<{regime_w}}  modes={modes}")
-        typer.echo(f"  {p.description}")
+        name_pad = " " * (name_w - len(p.name))
+        regime_pad = " " * (regime_w - len(p.regime))
+        typer.echo(paint((
+            Span(p.name, "fn_name"), Span(name_pad, "ws"), Span("  ", "ws"),
+            Span("regime=", "meta_label"), Span(p.regime, "meta_value"),
+            Span(regime_pad, "ws"), Span("  ", "ws"),
+            Span("modes=", "meta_label"), Span(modes, "meta_value"),
+        ), theme))
+        typer.echo(paint((Span(f"  {p.description}", "comment"),), theme))
 
 
 if __name__ == "__main__":
