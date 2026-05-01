@@ -599,10 +599,6 @@ def show(
         False, "--hashes",
         help="Dump every node and its short hash, instead of the program form.",
     ),
-    human: bool = typer.Option(
-        False, "--human", "-H",
-        help="Columnar human view: hash gutter | code | metadata column.",
-    ),
 ) -> None:
     """Print the program. Color follows TTY (disable with `quod --no-color`)."""
     program = _load()
@@ -619,8 +615,7 @@ def show(
                 Span(type(hn.node).__name__, "type"),
             ), theme))
         return
-    mode = "columnar" if human else "inline"
-    typer.echo(render(format_program_lines(program), theme=theme, mode=mode))
+    typer.echo(render(format_program_lines(program), theme=theme, mode="columnar"))
 
 
 @app.command()
@@ -697,10 +692,6 @@ def fn_ls() -> None:
 @fn_app.command("show")
 def fn_show(
     ref: str = typer.Argument(..., autocompletion=_comp.function_or_hash),
-    human: bool = typer.Option(
-        False, "--human", "-H",
-        help="Columnar human view: hash gutter | code | metadata column.",
-    ),
 ) -> None:
     """Print a single function. Accepts a name or a content-hash prefix."""
     try:
@@ -708,8 +699,7 @@ def fn_show(
     except (KeyError, ValueError) as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
-    mode = "columnar" if human else "inline"
-    typer.echo(render(format_function_lines(fn), theme=_theme(), mode=mode))
+    typer.echo(render(format_function_lines(fn), theme=_theme(), mode="columnar"))
 
 
 @fn_app.command("add")
