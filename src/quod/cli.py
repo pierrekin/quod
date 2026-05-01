@@ -91,6 +91,13 @@ from quod.providers import (
     default_for,
     get_provider,
 )
+from quod.render import (
+    ansi_theme,
+    format_function_lines,
+    format_program_lines,
+    plain_theme,
+    render,
+)
 from quod.schema import render_categories, render_category, render_kind
 from quod.templates import TEMPLATES
 
@@ -201,6 +208,18 @@ def _exclusive_lock():
 
 def _hash_label(node) -> str:
     return f"[{short_hash(node)}] "
+
+
+def _use_color(mode: str) -> bool:
+    import os
+    import sys
+    if mode == "always":
+        return True
+    if mode == "never":
+        return False
+    if mode != "auto":
+        raise typer.BadParameter(f"--color must be auto, always, or never (got {mode!r})")
+    return sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
 
 
 @app.callback(invoke_without_command=True)
@@ -559,6 +578,16 @@ def show(
         False, "--hashes",
         help="Dump every node and its short hash, instead of the program form.",
     ),
+    human: bool = typer.Option(
+        False, "--human", "-H",
+        help="Columnar human view: hash gutter | code | metadata. "
+             "Color on a TTY (override with --color).",
+    ),
+    color: str = typer.Option(
+        "auto", "--color",
+        help="auto | always | never. Auto enables color when stdout is a TTY "
+             "and NO_COLOR is unset.",
+    ),
 ) -> None:
     """Print the program in canonical form, with content-hash prefixes."""
     program = _load()
@@ -569,6 +598,11 @@ def show(
                 continue
             seen.add(hn.hash)
             typer.echo(f"{hn.hash[:HASH_DISPLAY_LEN]}  {type(hn.node).__name__}")
+        return
+    if human:
+        use_color = _use_color(color)
+        theme = ansi_theme if use_color else plain_theme
+        typer.echo(render(format_program_lines(program), theme=theme), color=use_color)
         return
     typer.echo(format_program(program, label=_hash_label))
 
@@ -634,13 +668,27 @@ def fn_ls() -> None:
 
 
 @fn_app.command("show")
-def fn_show(ref: str) -> None:
+def fn_show(
+    ref: str,
+    human: bool = typer.Option(
+        False, "--human", "-H",
+        help="Columnar human view: hash gutter | code | metadata.",
+    ),
+    color: str = typer.Option(
+        "auto", "--color", help="auto | always | never.",
+    ),
+) -> None:
     """Print a single function. Accepts a name or a content-hash prefix."""
     try:
         fn = find_function_ref(_load(), ref)
     except (KeyError, ValueError) as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
+    if human:
+        use_color = _use_color(color)
+        theme = ansi_theme if use_color else plain_theme
+        typer.echo(render(format_function_lines(fn), theme=theme), color=use_color)
+        return
     typer.echo(format_function(fn, label=_hash_label))
 
 
