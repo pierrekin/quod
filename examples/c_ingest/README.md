@@ -1,0 +1,51 @@
+# C ingestion examples
+
+Each subdirectory pairs a C source file with the quod program that `quod
+ingest` produces from it.
+
+```
+hello/
+  hello.c        ← input: the original C source
+  program.json   ← output: what `quod ingest hello.c` writes
+```
+
+The `.c` file is the source of truth. The `program.json` is committed so
+you can inspect the result without re-running ingest:
+
+```sh
+# from the examples/ directory:
+quod -p c_hello show          # see the ingested program
+quod -p c_hello run           # build and run the binary
+```
+
+To regenerate a `program.json` after editing a `.c` file, delete the old
+one and re-run ingest from inside the example dir:
+
+```sh
+cd c_ingest/fizzbuzz
+rm program.json quod.toml
+quod ingest fizzbuzz.c
+```
+
+(Then copy the new `program.json` back over the committed one. `quod
+ingest` always writes a sibling `quod.toml`; delete it before committing
+since the umbrella `examples/quod.toml` is what wires these into the
+workspace.)
+
+## What each example demonstrates
+
+| Example         | Constructs                                                  |
+| --------------- | ----------------------------------------------------------- |
+| `hello`         | Minimal `printf`. String literal + variadic extern.         |
+| `arithmetic`    | User functions, params, calls between user functions.       |
+| `control_flow`  | `if` / `else if` / `else`, comparisons, `&&`, i1→int widen. |
+| `loops`         | `while`, `int` locals, assignment.                          |
+| `fizzbuzz`      | Loops + nested `if/else if/else` + `%` + mixed `printf`.    |
+
+## v1 subset reminder
+
+Only `int`-typed values are ingested. Pointers (other than `const char*`
+to externs like `printf`), structs, floats, `unsigned`, `long`, `short`,
+arrays, `for` loops, `goto`, and `switch` are all refused with a clear
+error pointing at the offending source location. See `src/quod/ingest/c.py`
+for the full list of supported AST kinds.

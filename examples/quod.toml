@@ -157,3 +157,55 @@ file    = "project_euler/007.json"
   [[program.bin]]
   name  = "pe_007"
   entry = "main"
+
+# ---------- c_ingest ----------
+#
+# Each program.json was produced by `quod ingest <file>.c` against the
+# .c source committed alongside it. Treat the .c file as the source of
+# truth; to regenerate, delete program.json and re-run `quod ingest`
+# from inside that directory.
+
+[[program]]
+name    = "c_hello"
+version = "0.1.0"
+file    = "c_ingest/hello/program.json"
+
+  [[program.bin]]
+  name  = "c_hello"
+  entry = "main"
+
+[[program]]
+name    = "c_arithmetic"
+version = "0.1.0"
+file    = "c_ingest/arithmetic/program.json"
+
+  [[program.bin]]
+  name  = "c_arithmetic"
+  entry = "main"
+
+[[program]]
+name    = "c_control_flow"
+version = "0.1.0"
+file    = "c_ingest/control_flow/program.json"
+
+  [[program.bin]]
+  name  = "c_control_flow"
+  entry = "main"
+
+[[program]]
+name    = "c_loops"
+version = "0.1.0"
+file    = "c_ingest/loops/program.json"
+
+  [[program.bin]]
+  name  = "c_loops"
+  entry = "main"
+
+[[program]]
+name    = "c_fizzbuzz"
+version = "0.1.0"
+file    = "c_ingest/fizzbuzz/program.json"
+
+  [[program.bin]]
+  name  = "c_fizzbuzz"
+  entry = "main"

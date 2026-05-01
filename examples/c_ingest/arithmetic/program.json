@@ -1,0 +1,159 @@
+{
+  "constants": [
+    {
+      "name": ".str.0",
+      "value": "3^2 + 4^2 = %d\n"
+    }
+  ],
+  "functions": [
+    {
+      "name": "square",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "mul",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            },
+            "rhs": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            }
+          }
+        }
+      ],
+      "claims": [],
+      "notes": [
+        "ingested from arithmetic.c:6"
+      ]
+    },
+    {
+      "name": "sum_squares",
+      "params": [
+        {
+          "name": "a",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        },
+        {
+          "name": "b",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "add",
+            "lhs": {
+              "kind": "llvm.call",
+              "function": "square",
+              "args": [
+                {
+                  "kind": "llvm.param_ref",
+                  "name": "a"
+                }
+              ]
+            },
+            "rhs": {
+              "kind": "llvm.call",
+              "function": "square",
+              "args": [
+                {
+                  "kind": "llvm.param_ref",
+                  "name": "b"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "claims": [],
+      "notes": [
+        "ingested from arithmetic.c:10"
+      ]
+    },
+    {
+      "name": "main",
+      "params": [],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": [
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "printf",
+            "args": [
+              {
+                "kind": "quod.string_ref",
+                "name": ".str.0"
+              },
+              {
+                "kind": "llvm.call",
+                "function": "sum_squares",
+                "args": [
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
+                    "value": 3
+                  },
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
+                    "value": 4
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.return_int",
+          "value": 0
+        }
+      ],
+      "claims": [],
+      "notes": [
+        "ingested from arithmetic.c:14"
+      ]
+    }
+  ],
+  "externs": [
+    {
+      "name": "printf",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ],
+      "varargs": true
+    }
+  ]
+}

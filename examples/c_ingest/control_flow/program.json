@@ -1,0 +1,334 @@
+{
+  "constants": [
+    {
+      "name": ".str.0",
+      "value": "classify(-5) = %d\n"
+    },
+    {
+      "name": ".str.1",
+      "value": "classify(0)  = %d\n"
+    },
+    {
+      "name": ".str.2",
+      "value": "classify(42) = %d\n"
+    },
+    {
+      "name": ".str.3",
+      "value": "in_unit_range(50) = %d\n"
+    },
+    {
+      "name": ".str.4",
+      "value": "in_unit_range(150) = %d\n"
+    }
+  ],
+  "functions": [
+    {
+      "name": "classify",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": -1
+              }
+            }
+          ],
+          "else_body": [
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "eq",
+                "lhs": {
+                  "kind": "llvm.param_ref",
+                  "name": "x"
+                },
+                "rhs": {
+                  "kind": "llvm.const_int",
+                  "type": {
+                    "kind": "llvm.i32"
+                  },
+                  "value": 0
+                }
+              },
+              "then_body": [
+                {
+                  "kind": "quod.return_int",
+                  "value": 0
+                }
+              ],
+              "else_body": [
+                {
+                  "kind": "quod.return_int",
+                  "value": 1
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "claims": [],
+      "notes": [
+        "ingested from control_flow.c:6"
+      ]
+    },
+    {
+      "name": "in_unit_range",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "quod.sc_and",
+            "lhs": {
+              "kind": "llvm.binop",
+              "op": "sge",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 0
+              }
+            },
+            "rhs": {
+              "kind": "llvm.binop",
+              "op": "sle",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 100
+              }
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_int",
+              "value": 1
+            }
+          ],
+          "else_body": [
+            {
+              "kind": "quod.return_int",
+              "value": 0
+            }
+          ]
+        }
+      ],
+      "claims": [],
+      "notes": [
+        "ingested from control_flow.c:16"
+      ]
+    },
+    {
+      "name": "main",
+      "params": [],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": [
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "printf",
+            "args": [
+              {
+                "kind": "quod.string_ref",
+                "name": ".str.0"
+              },
+              {
+                "kind": "llvm.call",
+                "function": "classify",
+                "args": [
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
+                    "value": -5
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "printf",
+            "args": [
+              {
+                "kind": "quod.string_ref",
+                "name": ".str.1"
+              },
+              {
+                "kind": "llvm.call",
+                "function": "classify",
+                "args": [
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
+                    "value": 0
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "printf",
+            "args": [
+              {
+                "kind": "quod.string_ref",
+                "name": ".str.2"
+              },
+              {
+                "kind": "llvm.call",
+                "function": "classify",
+                "args": [
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
+                    "value": 42
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "printf",
+            "args": [
+              {
+                "kind": "quod.string_ref",
+                "name": ".str.3"
+              },
+              {
+                "kind": "llvm.call",
+                "function": "in_unit_range",
+                "args": [
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
+                    "value": 50
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "printf",
+            "args": [
+              {
+                "kind": "quod.string_ref",
+                "name": ".str.4"
+              },
+              {
+                "kind": "llvm.call",
+                "function": "in_unit_range",
+                "args": [
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
+                    "value": 150
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.return_int",
+          "value": 0
+        }
+      ],
+      "claims": [],
+      "notes": [
+        "ingested from control_flow.c:20"
+      ]
+    }
+  ],
+  "externs": [
+    {
+      "name": "printf",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ],
+      "varargs": true
+    }
+  ]
+}

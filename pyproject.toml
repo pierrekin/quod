@@ -3,6 +3,8 @@ name = "quod"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
+    "clang>=21.1.7",
+    "libclang>=18.1.1",
     "llvmlite>=0.47.0",
     "pydantic>=2.13.3",
     "typer>=0.25.0",

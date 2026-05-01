@@ -51,6 +51,7 @@ from quod.editor import (
     remove_statement_in_function,
 )
 from quod.hashing import HASH_DISPLAY_LEN, find_by_prefix, node_hash, short_hash, walk
+from quod.ingest import IngestError, ingest_c
 from quod.model import (
     CLAIM_KINDS,
     PARAM_CLAIM_KINDS,
@@ -261,6 +262,65 @@ def init(
                  "or `quod schema` to discover node shapes.",
     }
     typer.echo(f"\n{next_steps[template]}")
+
+
+@app.command()
+def ingest(
+    source: Path = typer.Argument(..., help="Source file to ingest (e.g. hello.c)."),
+    name: str = typer.Option(
+        None, "--name", "-n",
+        help="Program name in quod.toml. Defaults to the source file's stem.",
+    ),
+) -> None:
+    """Ingest a source file into a fresh quod project.
+
+    Sibling to `init`: writes `quod.toml` and `program.json` in the cwd, and
+    refuses if either already exists. Currently supports C only.
+    """
+    if source.suffix != ".c":
+        typer.echo(f"error: only `.c` files are supported (got {source.suffix!r})", err=True)
+        raise typer.Exit(2)
+    if not source.exists():
+        typer.echo(f"error: {source} does not exist", err=True)
+        raise typer.Exit(1)
+
+    cfg_path = _cfg_path().resolve()
+    program_path = cfg_path.parent / "program.json"
+    if cfg_path.exists():
+        typer.echo(f"error: {cfg_path} already exists", err=True)
+        raise typer.Exit(1)
+    if program_path.exists():
+        typer.echo(f"error: {program_path} already exists", err=True)
+        raise typer.Exit(1)
+
+    try:
+        program = ingest_c(source)
+    except IngestError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+
+    program_name = name or source.stem
+    main_fn = next((f for f in program.functions if f.name == "main" and not f.params), None)
+    bin_block = (
+        f"\n  [[program.bin]]\n  name  = \"{program_name}\"\n  entry = \"main\"\n"
+        if main_fn is not None
+        else ""
+    )
+    toml = (
+        "[build]\nprofile = 2\n\n"
+        f"[[program]]\nname    = \"{program_name}\"\nversion = \"0.1.0\"\nfile    = \"program.json\"\n"
+        f"{bin_block}"
+    )
+
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    cfg_path.write_text(toml)
+    save_program(program, program_path)
+
+    typer.echo(f"wrote {cfg_path}")
+    typer.echo(f"wrote {program_path} ({len(program.functions)} function(s) ingested from {source})")
+    if main_fn is None:
+        typer.echo("\nnote: no `int main()` found — add a [[program.bin]] entry to build a binary.")
+    typer.echo("\nnext: `quod show` to inspect, `quod check` to verify it lowers cleanly.")
 
 
 @app.command()
