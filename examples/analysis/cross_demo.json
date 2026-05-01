@@ -68,7 +68,7 @@
           "regime": "witness",
           "justification": {
             "kind": "z3",
-            "artifact_path": "proofs/cross-demo/f_return_in_range_return_3f709cfcb113.smt2",
+            "artifact_path": "proofs/cross_demo/f_return_in_range_return_3f709cfcb113.smt2",
             "artifact_hash": "3f709cfcb11368288f7a1b7fdbdc85e98bff53348cc534a9bab49ad1d18e442a",
             "note": null
           },
@@ -149,7 +149,7 @@
           "regime": "witness",
           "justification": {
             "kind": "z3",
-            "artifact_path": "proofs/cross-demo/g_return_in_range_return_cab3482a222a.smt2",
+            "artifact_path": "proofs/cross_demo/g_return_in_range_return_cab3482a222a.smt2",
             "artifact_hash": "cab3482a222a0da36f2d9cd4875ad43e73516ecba4290940ca6eddc7331fb93a",
             "note": null
           },

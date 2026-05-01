@@ -143,9 +143,22 @@ def _cfg() -> Config:
     return _state["config"]  # type: ignore[return-value]
 
 
+def _selected_program_name() -> str | None:
+    return _state.get("program_name")  # type: ignore[return-value]
+
+
+def _selected_program():
+    cfg = _cfg()
+    try:
+        return cfg.select(_selected_program_name())
+    except ValueError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+
+
 def _path() -> Path:
     cfg = _cfg()
-    return cfg.resolve(cfg.program)
+    return cfg.resolve(_selected_program().file)
 
 
 def _load() -> Program:
@@ -196,8 +209,13 @@ def root(
         Path("quod.toml"), "--config", "-c",
         help="Path to quod.toml (default: ./quod.toml).",
     ),
+    program: str | None = typer.Option(
+        None, "--program", "-p",
+        help="Which [[program]] to operate on (omit if quod.toml has only one).",
+    ),
 ) -> None:
     _state["config_path"] = config
+    _state["program_name"] = program
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
         raise typer.Exit()
@@ -247,16 +265,43 @@ def init(
 
 @app.command()
 def check() -> None:
-    """Parse, lower, and LLVM-verify the program. No artifacts emitted."""
-    program = _load()
-    try:
-        module = lower_mod.lower(program)
-        parsed = lower_mod.parse_and_verify(module)
-    except (ValueError, KeyError) as e:
-        typer.echo(f"error: {e}", err=True)
+    """Parse, lower, and LLVM-verify each program. No artifacts emitted.
+
+    With multiple `[[program]]` entries, checks all of them by default; pass
+    `--program / -p NAME` (at the root level) to check just one.
+    """
+    cfg = _cfg()
+    selector = _selected_program_name()
+    if selector is None:
+        targets = cfg.programs
+    else:
+        try:
+            targets = (cfg.select(selector),)
+        except ValueError as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+    if not targets:
+        typer.echo(f"error: no [[program]] entries in {_cfg_path()}", err=True)
         raise typer.Exit(1)
-    del parsed
-    typer.echo("ok")
+    failures = 0
+    for prog in targets:
+        program_path = cfg.resolve(prog.file)
+        if not program_path.exists():
+            typer.echo(f"[{prog.name}] FAIL: {program_path} does not exist")
+            failures += 1
+            continue
+        try:
+            program_obj = load_program(program_path)
+            module = lower_mod.lower(program_obj)
+            parsed = lower_mod.parse_and_verify(module)
+        except (ValueError, KeyError) as e:
+            typer.echo(f"[{prog.name}] FAIL: {e}")
+            failures += 1
+            continue
+        del parsed
+        typer.echo(f"[{prog.name}] ok")
+    if failures:
+        raise typer.Exit(1)
 
 
 def _build_impl(
@@ -267,7 +312,7 @@ def _build_impl(
     enforce_axiom: str | None,
     enforce_witness: str | None,
     enforce_lattice: str | None,
-) -> tuple[Config, lower_mod.CompileResult]:
+) -> tuple[Config, tuple[lower_mod.BinResult, ...]]:
     cfg = _cfg()
     cfg = with_overrides(
         cfg,
@@ -276,50 +321,77 @@ def _build_impl(
         enforce_witness=enforce_witness,
         enforce_lattice=enforce_lattice,
     )
-    if not cfg.bins:
-        typer.echo(
-            f"error: no [[bin]] entries in {_cfg_path()}; "
-            f"declare at least one to build", err=True,
-        )
-        raise typer.Exit(1)
-    program = _load()
     overrides = cfg.enforce.overrides()
     for regime, val in overrides.items():
         if val not in ENFORCEMENTS:
             raise typer.BadParameter(
                 f"enforce.{regime}={val!r}; expected one of: {', '.join(ENFORCEMENTS)}"
             )
-    bins = tuple((b.name, b.entry) for b in cfg.bins)
-    target_or_none = cfg.build.target or None
-    try:
-        result = lower_mod.compile_program(
-            program,
-            build_dir=cfg.resolve(cfg.build_dir),
-            bins=bins,
-            profile=cfg.build.profile,
-            link=cfg.build.link,
-            target=target_or_none,
-            overrides=overrides,
+
+    selector = _selected_program_name()
+    if selector is None:
+        if not cfg.programs:
+            typer.echo(
+                f"error: no [[program]] entries in {_cfg_path()}; "
+                f"declare at least one to build", err=True,
+            )
+            raise typer.Exit(1)
+        targets = cfg.programs
+    else:
+        try:
+            targets = (cfg.select(selector),)
+        except ValueError as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+
+    if not any(prog.bins for prog in targets):
+        typer.echo(
+            f"error: no [[program.bin]] entries in {_cfg_path()}; "
+            f"declare at least one to build", err=True,
         )
-    except subprocess.CalledProcessError as e:
-        typer.echo(f"error: link step failed (exit {e.returncode})", err=True)
-        raise typer.Exit(e.returncode)
-    except (ValueError, KeyError) as e:
-        typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
 
-    for br in result.bins:
-        typer.echo(f"[{br.name}] entry={br.entry}")
-        typer.echo(f"  unopt IR -> {br.ir_unopt}")
-        if br.ir_opt is not None:
-            typer.echo(f"  opt IR   -> {br.ir_opt}")
-        typer.echo(f"  object   -> {br.object_path}")
-        if br.binary is not None:
-            typer.echo(f"  binary   -> {br.binary}")
-        if show_ir and br.ir_opt is not None:
-            typer.echo(f"\n--- {br.name} optimized IR ---")
-            typer.echo(br.ir_opt.read_text())
-    return cfg, result
+    target_or_none = cfg.build.target or None
+    all_results: list[lower_mod.BinResult] = []
+    for prog in targets:
+        if not prog.bins:
+            continue
+        program_path = cfg.resolve(prog.file)
+        if not program_path.exists():
+            typer.echo(f"error: {program_path} does not exist", err=True)
+            raise typer.Exit(1)
+        program_obj = load_program(program_path)
+        bins = tuple((b.name, b.entry) for b in prog.bins)
+        try:
+            result = lower_mod.compile_program(
+                program_obj,
+                build_dir=cfg.resolve(cfg.build_dir) / prog.name,
+                bins=bins,
+                profile=cfg.build.profile,
+                link=cfg.build.link,
+                target=target_or_none,
+                overrides=overrides,
+            )
+        except subprocess.CalledProcessError as e:
+            typer.echo(f"error: link step failed (exit {e.returncode})", err=True)
+            raise typer.Exit(e.returncode)
+        except (ValueError, KeyError) as e:
+            typer.echo(f"error: [{prog.name}] {e}", err=True)
+            raise typer.Exit(1)
+
+        for br in result.bins:
+            typer.echo(f"[{prog.name}/{br.name}] entry={br.entry}")
+            typer.echo(f"  unopt IR -> {br.ir_unopt}")
+            if br.ir_opt is not None:
+                typer.echo(f"  opt IR   -> {br.ir_opt}")
+            typer.echo(f"  object   -> {br.object_path}")
+            if br.binary is not None:
+                typer.echo(f"  binary   -> {br.binary}")
+            if show_ir and br.ir_opt is not None:
+                typer.echo(f"\n--- {prog.name}/{br.name} optimized IR ---")
+                typer.echo(br.ir_opt.read_text())
+        all_results.extend(result.bins)
+    return cfg, tuple(all_results)
 
 
 _ENFORCE_HELP = "Override enforcement for claims of this regime. trust|verify."
@@ -344,7 +416,11 @@ def build(
     enforce_witness: str | None = typer.Option(None, "--enforce-witness", help=_ENFORCE_HELP),
     enforce_lattice: str | None = typer.Option(None, "--enforce-lattice", help=_ENFORCE_HELP),
 ) -> None:
-    """Lower -> optimize -> object -> link, for every [[bin]] in quod.toml."""
+    """Lower -> optimize -> object -> link, every [[program.bin]] in quod.toml.
+
+    With multiple `[[program]]` entries, builds all of them by default; pass
+    `--program / -p NAME` (at the root level) to build just one.
+    """
     if profile is not None and not 0 <= profile <= 3:
         raise typer.BadParameter("--profile must be in 0..3")
     _build_impl(profile, target, link, show_ir, enforce_axiom, enforce_witness, enforce_lattice)
@@ -355,7 +431,7 @@ def build(
 )
 def run(
     bin_name: str | None = typer.Option(
-        None, "--bin", help="Which [[bin]] to run. Required if multiple bins are configured.",
+        None, "--bin", help="Which [[program.bin]] to run. Required if multiple bins are configured.",
     ),
     profile: int | None = typer.Option(None, "--profile"),
     target: str | None = typer.Option(None, "--target"),
@@ -380,22 +456,29 @@ def run(
     program_args: list[str] = []
     if "--" in sys.argv:
         program_args = sys.argv[sys.argv.index("--") + 1:]
-    cfg, result = _build_impl(
+    cfg, bin_results = _build_impl(
         profile, target, link=True, show_ir=False,
         enforce_axiom=enforce_axiom, enforce_witness=enforce_witness, enforce_lattice=enforce_lattice,
     )
     if bin_name is None:
-        if len(result.bins) != 1:
-            names = ", ".join(b.name for b in result.bins)
-            typer.echo(f"error: multiple bins ({names}); pass one as the argument", err=True)
+        if len(bin_results) != 1:
+            names = ", ".join(b.name for b in bin_results)
+            typer.echo(f"error: multiple bins ({names}); pass --bin NAME", err=True)
             raise typer.Exit(2)
-        chosen = result.bins[0]
+        chosen = bin_results[0]
     else:
-        chosen = next((b for b in result.bins if b.name == bin_name), None)
-        if chosen is None:
-            names = ", ".join(b.name for b in result.bins)
+        matches = [b for b in bin_results if b.name == bin_name]
+        if not matches:
+            names = ", ".join(b.name for b in bin_results)
             typer.echo(f"error: no bin named {bin_name!r}; choices: {names}", err=True)
             raise typer.Exit(2)
+        if len(matches) > 1:
+            typer.echo(
+                f"error: bin name {bin_name!r} appears in multiple programs; "
+                f"pass --program / -p NAME at the root to disambiguate", err=True,
+            )
+            raise typer.Exit(2)
+        chosen = matches[0]
     if chosen.binary is None:
         typer.echo(f"error: bin {chosen.name!r} was not linked", err=True)
         raise typer.Exit(1)
@@ -824,13 +907,16 @@ def claim_relax(
 
 @claim_app.command("verify")
 def claim_verify(
-    root: Path = typer.Option(
-        Path("."), "--root",
-        help="Project root for resolving justification artifact_path.",
+    root: Path | None = typer.Option(
+        None, "--root",
+        help="Root for resolving justification artifact_path. "
+             "Defaults to the quod.toml directory.",
     ),
 ) -> None:
     """Re-check evidence attached to stored claims."""
+    cfg = _cfg()
     program = _load()
+    resolve_root = root if root is not None else cfg.root
     failures = 0
     checked = 0
     for fn in program.functions:
@@ -838,7 +924,7 @@ def claim_verify(
             if c.justification is None:
                 continue
             checked += 1
-            ok, msg = _verify_justification(c.justification, root)
+            ok, msg = _verify_justification(c.justification, resolve_root)
             status = "ok  " if ok else "FAIL"
             typer.echo(f"{status} {fn.name}: {format_claim(c)}")
             if not ok:
@@ -982,7 +1068,8 @@ def claim_prove(
 ) -> None:
     """Synthesize a proof of a claim via a provider, attach as a witness."""
     cfg = _cfg()
-    proofs_dir = cfg.resolve(cfg.proofs_dir)
+    prog_spec = _selected_program()
+    proofs_dir = cfg.resolve(cfg.proofs_dir) / prog_spec.name
     try:
         prov = get_provider(provider) if provider else default_for(regime="witness", mode="prove")
     except KeyError as e:

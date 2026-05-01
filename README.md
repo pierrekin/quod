@@ -50,6 +50,9 @@ examples/
     claims/         Axioms, witnesses, lattice, codegen-impact
     analysis/       Call graphs and cross-procedural lattice
     project_euler/  Pretty solutions to PE problems (001..)
+integrations/
+    pi/             pi-coding-agent extension exposing quod as tools
+    claude/         Claude Code plugin (skill + slash commands)
 ```
 
 ## A taste

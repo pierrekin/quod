@@ -9,7 +9,6 @@ Paths inside quod.toml are resolved relative to the file's parent dir, so
 
 Schema:
 
-    program     = "program.json"   # required
     build_dir   = "build"
     proofs_dir  = "proofs"
 
@@ -18,14 +17,23 @@ Schema:
     target  = ""         # triple; "" = host
     link    = true
 
-    [[bin]]
-    name  = "main"       # output binary filename
-    entry = "main"       # entry-point function name in program.json
-
     [enforce]
     axiom   = "trust"    # trust | verify
     witness = "trust"
     lattice = "trust"
+
+    [[program]]
+    name    = "hello"        # program identifier (used by --program / -p)
+    version = "0.1.0"
+    file    = "program.json" # path to the program JSON
+
+      [[program.bin]]
+      name  = "hello"        # output binary filename
+      entry = "main"         # entry-point function in program.json
+
+A workspace can list any number of `[[program]]` entries. Per-program
+commands (`show`, `fn`, `claim`, ...) accept `--program / -p NAME`; if
+exactly one program is configured the flag is optional.
 """
 
 from __future__ import annotations
@@ -42,6 +50,14 @@ CONFIG_FILENAME = "quod.toml"
 class Bin:
     name: str
     entry: str
+
+
+@dataclass(frozen=True)
+class ProgramSpec:
+    name: str
+    version: str
+    file: Path
+    bins: tuple[Bin, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -70,11 +86,10 @@ class EnforceConfig:
 
 @dataclass(frozen=True)
 class Config:
-    program: Path
+    programs: tuple[ProgramSpec, ...] = ()
     build_dir: Path = Path("build")
     proofs_dir: Path = Path("proofs")
     build: BuildConfig = field(default_factory=BuildConfig)
-    bins: tuple[Bin, ...] = ()
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
     # Directory the config was loaded from. Relative paths in the config
     # resolve against this — so build artifacts and program files are
@@ -84,12 +99,31 @@ class Config:
     def resolve(self, p: Path) -> Path:
         return p if p.is_absolute() else self.root / p
 
+    def select(self, name: str | None) -> ProgramSpec:
+        """Pick a [[program]] by name. If name is None and exactly one program
+        is configured, return it. Otherwise raise ValueError listing choices."""
+        if name is None:
+            if len(self.programs) == 1:
+                return self.programs[0]
+            if not self.programs:
+                raise ValueError("no [[program]] entries declared")
+            names = ", ".join(p.name for p in self.programs)
+            raise ValueError(
+                f"multiple programs ({names}); pass --program / -p NAME"
+            )
+        for p in self.programs:
+            if p.name == name:
+                return p
+        names = ", ".join(p.name for p in self.programs) or "(none)"
+        raise ValueError(f"no [[program]] named {name!r}; choices: {names}")
+
 
 def load_config(path: Path) -> Config:
     """Load `path` as a quod.toml. Errors if the file is missing or invalid.
 
-    `program` is required. `[[bin]]` entries are optional but `quod build`
-    will error if there are none.
+    At least one `[[program]]` is required for any build/inspection command,
+    but `load_config` itself does not enforce that — `quod init` writes a
+    quod.toml as part of project bootstrap.
     """
     path = path.resolve()
     if not path.is_file():
@@ -101,10 +135,6 @@ def load_config(path: Path) -> Config:
     raw = tomllib.loads(path.read_text())
     root = path.parent
 
-    if "program" not in raw:
-        raise ValueError(f"{path}: missing required key `program`")
-    program = Path(raw["program"])
-
     build_dir = Path(raw.get("build_dir", "build"))
     proofs_dir = Path(raw.get("proofs_dir", "proofs"))
 
@@ -115,14 +145,6 @@ def load_config(path: Path) -> Config:
         link=bool(b.get("link", True)),
     )
 
-    bins_raw = raw.get("bin", [])
-    if isinstance(bins_raw, dict):  # tolerate `[bin]` (single) instead of `[[bin]]`
-        bins_raw = [bins_raw]
-    bins = tuple(
-        Bin(name=str(b["name"]), entry=str(b.get("entry", b["name"])))
-        for b in bins_raw
-    )
-
     e = raw.get("enforce", {})
     enforce = EnforceConfig(
         axiom=e.get("axiom"),
@@ -130,12 +152,39 @@ def load_config(path: Path) -> Config:
         lattice=e.get("lattice"),
     )
 
+    programs_raw = raw.get("program", [])
+    if isinstance(programs_raw, dict):  # tolerate `[program]` (single)
+        programs_raw = [programs_raw]
+    programs: list[ProgramSpec] = []
+    seen_names: set[str] = set()
+    for entry in programs_raw:
+        if "name" not in entry:
+            raise ValueError(f"{path}: [[program]] entry missing required key `name`")
+        if "file" not in entry:
+            raise ValueError(
+                f"{path}: [[program]] {entry['name']!r} missing required key `file`"
+            )
+        name = str(entry["name"])
+        if name in seen_names:
+            raise ValueError(f"{path}: duplicate [[program]] name {name!r}")
+        seen_names.add(name)
+        version = str(entry.get("version", "0.0.0"))
+        file = Path(entry["file"])
+
+        bins_raw = entry.get("bin", [])
+        if isinstance(bins_raw, dict):
+            bins_raw = [bins_raw]
+        bins = tuple(
+            Bin(name=str(bb["name"]), entry=str(bb.get("entry", bb["name"])))
+            for bb in bins_raw
+        )
+        programs.append(ProgramSpec(name=name, version=version, file=file, bins=bins))
+
     return Config(
-        program=program,
+        programs=tuple(programs),
         build_dir=build_dir,
         proofs_dir=proofs_dir,
         build=build,
-        bins=bins,
         enforce=enforce,
         root=root,
     )
@@ -170,28 +219,37 @@ def with_overrides(
 
 _STARTER_TOMLS: dict[str, str] = {
     "hello": """\
-program = "program.json"
-
 [build]
 profile = 2
 
-[[bin]]
-name = "hello"
-entry = "main"
+[[program]]
+name    = "hello"
+version = "0.1.0"
+file    = "program.json"
+
+  [[program.bin]]
+  name  = "hello"
+  entry = "main"
 """,
     "guarded": """\
 # `guarded` is a claim/proof playground — function `f` takes a parameter,
-# so it can't be an entry point. Add a [[bin]] once you've written one.
-program = "program.json"
-
+# so it can't be an entry point. Add a [[program.bin]] once you've written one.
 [build]
 profile = 2
+
+[[program]]
+name    = "guarded"
+version = "0.1.0"
+file    = "program.json"
 """,
     "empty": """\
-program = "program.json"
-
 [build]
 profile = 2
+
+[[program]]
+name    = "empty"
+version = "0.1.0"
+file    = "program.json"
 """,
 }
 

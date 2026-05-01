@@ -53,19 +53,25 @@ wrote /tmp/demo/program.json (hello starter)
 The `quod.toml` is short and explicit:
 
 ```toml
-program = "program.json"
-
 [build]
 profile = 2
 
-[[bin]]
-name = "hello"
-entry = "main"
+[[program]]
+name    = "hello"
+version = "0.1.0"
+file    = "program.json"
+
+  [[program.bin]]
+  name  = "hello"
+  entry = "main"
 ```
 
-`[[bin]]` is the rust-style "things to build" list. `name` is the binary
-filename; `entry` names the function inside `program.json` to use as the
-entry point.
+A `quod.toml` lists one or more `[[program]]` entries — each is a quod
+program with a `name`, a `version`, and a `file` pointing at its JSON.
+Each `[[program.bin]]` is a thing-to-build for that program: `name` is
+the output binary filename, `entry` names the function inside the
+program JSON to use as the entry point. Multiple programs in one
+`quod.toml` give you a workspace; pick one with `quod -p NAME ...`.
 
 The `program.json` itself:
 
@@ -188,19 +194,20 @@ a271725532b7  ExternFunction
 
 ## 3. Build and run
 
-`quod build` lowers the program to LLVM IR, optimizes it, emits an object
-file, and links a binary — once per `[[bin]]` entry in `quod.toml`.
+`quod build` lowers each program to LLVM IR, optimizes it, emits an
+object file, and links a binary — once per `[[program.bin]]` entry in
+`quod.toml`. Artifacts are grouped by program name:
 
 ```sh
 quod build
 ```
 
 ```
-[hello] entry=main
-  unopt IR -> /tmp/demo/build/hello.unopt.ll
-  opt IR   -> /tmp/demo/build/hello.opt.ll
-  object   -> /tmp/demo/build/hello.o
-  binary   -> /tmp/demo/build/hello
+[hello/hello] entry=main
+  unopt IR -> /tmp/demo/build/hello/hello.unopt.ll
+  opt IR   -> /tmp/demo/build/hello/hello.opt.ll
+  object   -> /tmp/demo/build/hello/hello.o
+  binary   -> /tmp/demo/build/hello/hello
 ```
 
 All four artifacts are written; you can read the IR if you want to see
@@ -211,11 +218,11 @@ quod run
 ```
 
 ```
-[hello] entry=main
-  unopt IR -> /tmp/demo/build/hello.unopt.ll
-  opt IR   -> /tmp/demo/build/hello.opt.ll
-  object   -> /tmp/demo/build/hello.o
-  binary   -> /tmp/demo/build/hello
+[hello/hello] entry=main
+  unopt IR -> /tmp/demo/build/hello/hello.unopt.ll
+  opt IR   -> /tmp/demo/build/hello/hello.opt.ll
+  object   -> /tmp/demo/build/hello/hello.o
+  binary   -> /tmp/demo/build/hello/hello
 
 --- hello ---
 stdout: 'hello, world\n'
@@ -249,8 +256,8 @@ quod fn show f
 
 `f(x) = if x < 0 then -1 else x + 1`. The function takes a parameter, so
 it can't be a binary entry point on its own — the starter `quod.toml` for
-`guarded` deliberately has no `[[bin]]`. We can still inspect, validate,
-and prove things about it.
+`guarded` deliberately has no `[[program.bin]]`. We can still inspect,
+validate, and prove things about it.
 
 `quod fn unconstrained` is a helper that lists params with no claims —
 useful to see "what does this function not yet know about its inputs":
@@ -386,9 +393,10 @@ A few commands that round out the tour:
 
 ```
 quod init                           # write quod.toml + program.json
+quod -p NAME ...                    # select a [[program]] (omit if only one)
 quod check                          # parse, lower, LLVM-verify
-quod build                          # → object → linked binary, per [[bin]]
-quod run [BIN]                      # build then exec
+quod build                          # → object → linked binary, per [[program.bin]]
+quod run [--bin NAME]               # build then exec
 quod show [--hashes]                # whole program
 quod find PREFIX                    # resolve a hash prefix
 

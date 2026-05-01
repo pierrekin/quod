@@ -110,7 +110,7 @@ export default function (pi: ExtensionAPI): void {
     name: "quod_build",
     label: "Build binaries",
     description:
-      "Lower, optimize, emit objects, and link a binary for every [[bin]] in quod.toml.",
+      "Lower, optimize, emit objects, and link a binary for every [[program.bin]] in quod.toml.",
     parameters: Type.Object({
       ...cwdField,
       profile: Type.Optional(
@@ -134,13 +134,13 @@ export default function (pi: ExtensionAPI): void {
     name: "quod_run",
     label: "Build and run",
     description:
-      "Build the project and execute one of its [[bin]] entries. Captures stdout, stderr, and exit code. If the entry function declares int params, pass them via `program_args`; the synthesized main wrapper parses each via atoll then trunc/sext's to the param's width.",
+      "Build the project and execute one of its [[program.bin]] entries. Captures stdout, stderr, and exit code. If the entry function declares int params, pass them via `program_args`; the synthesized main wrapper parses each via atoll then trunc/sext's to the param's width.",
     parameters: Type.Object({
       ...cwdField,
       bin: Type.Optional(
         Type.String({
           description:
-            "Which [[bin]] to run. Required if multiple bins are configured.",
+            "Which [[program.bin]] to run. Required if multiple bins are configured.",
         }),
       ),
       program_args: Type.Optional(

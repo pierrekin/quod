@@ -1,0 +1,10 @@
+{
+  "name": "quod",
+  "description": "Author and optimize quod programs — a JSON-AST language with LLVM lowering and Z3-discharged claims.",
+  "version": "0.1.0",
+  "author": {"name": "quod"},
+  "homepage": "https://github.com/pierrekin/quod",
+  "repository": "https://github.com/pierrekin/quod",
+  "license": "MIT",
+  "keywords": ["quod", "llvm", "z3", "smt", "claims", "compiler"]
+}

@@ -1,0 +1,159 @@
+# Quod examples workspace.
+#
+# Every example file is its own [[program]]. Examples with a `main()` get
+# a [[program.bin]]; claim/proof playgrounds (no entry) just declare the
+# program so `quod -p NAME claim ...` works.
+#
+# Build everything:   `quod build`
+# Build one:          `quod build -p hello`
+# Run one:            `quod run -p hello`            (or `quod run --bin hello`)
+# Inspect one:        `quod -p range_check fn ls`
+
+build_dir  = "build"
+proofs_dir = "proofs"
+
+[build]
+profile = 2
+
+# ---------- basics ----------
+
+[[program]]
+name    = "hello"
+version = "0.1.0"
+file    = "basics/helloworld.json"
+
+  [[program.bin]]
+  name  = "hello"
+  entry = "main"
+
+[[program]]
+name    = "run_ls"
+version = "0.1.0"
+file    = "basics/run_ls.json"
+
+  [[program.bin]]
+  name  = "run_ls"
+  entry = "main"
+
+# ---------- claims ----------
+
+[[program]]
+name    = "derived_range"
+version = "0.1.0"
+file    = "claims/derived_range.json"
+
+  [[program.bin]]
+  name  = "derived_range"
+  entry = "main"
+
+# Playgrounds — no `main`, so no [[program.bin]]. Use these with
+# `quod -p NAME claim suggest|prove|...`.
+
+[[program]]
+name    = "guarded_inc"
+version = "0.1.0"
+file    = "claims/guarded_inc.json"
+
+[[program]]
+name    = "proven_return"
+version = "0.1.0"
+file    = "claims/proven_return.json"
+
+[[program]]
+name    = "range_check"
+version = "0.1.0"
+file    = "claims/range_check.json"
+
+[[program]]
+name    = "witness_changes_codegen"
+version = "0.1.0"
+file    = "claims/witness_changes_codegen.json"
+
+# ---------- analysis ----------
+
+# `callgraph` deliberately contains an `orphan` function calling an
+# undeclared `ghost` to exercise `quod fn call-graph` markers. Not
+# buildable as a binary; inspect with `quod -p callgraph fn call-graph`.
+[[program]]
+name    = "callgraph"
+version = "0.1.0"
+file    = "analysis/callgraph.json"
+
+[[program]]
+name    = "cross_demo"
+version = "0.1.0"
+file    = "analysis/cross_demo.json"
+
+[[program]]
+name    = "libc_abs"
+version = "0.1.0"
+file    = "analysis/libc_abs.json"
+
+  [[program.bin]]
+  name  = "libc_abs"
+  entry = "main"
+
+# ---------- project euler ----------
+
+[[program]]
+name    = "pe_001"
+version = "0.1.0"
+file    = "project_euler/001.json"
+
+  [[program.bin]]
+  name  = "pe_001"
+  entry = "main"
+
+[[program]]
+name    = "pe_002"
+version = "0.1.0"
+file    = "project_euler/002.json"
+
+  [[program.bin]]
+  name  = "pe_002"
+  entry = "main"
+
+[[program]]
+name    = "pe_003"
+version = "0.1.0"
+file    = "project_euler/003.json"
+
+  [[program.bin]]
+  name  = "pe_003"
+  entry = "main"
+
+[[program]]
+name    = "pe_004"
+version = "0.1.0"
+file    = "project_euler/004.json"
+
+  [[program.bin]]
+  name  = "pe_004"
+  entry = "main"
+
+[[program]]
+name    = "pe_005"
+version = "0.1.0"
+file    = "project_euler/005.json"
+
+  [[program.bin]]
+  name  = "pe_005"
+  entry = "main"
+
+[[program]]
+name    = "pe_006"
+version = "0.1.0"
+file    = "project_euler/006.json"
+
+  [[program.bin]]
+  name  = "pe_006"
+  entry = "main"
+
+[[program]]
+name    = "pe_007"
+version = "0.1.0"
+file    = "project_euler/007.json"
+
+  [[program.bin]]
+  name  = "pe_007"
+  entry = "main"
