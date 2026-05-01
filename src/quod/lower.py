@@ -732,6 +732,7 @@ def compile_program(
     bins: tuple[tuple[str, str], ...] = (("main", "main"),),
     profile: int = 2,
     link: bool = True,
+    libraries: tuple[str, ...] = (),
     target: str | None = None,
     overrides: dict[str, str] | None = None,
 ) -> CompileResult:
@@ -779,6 +780,7 @@ def compile_program(
             if target:
                 cmd += ["-target", target]
             cmd += [str(object_path), "-o", str(binary)]
+            cmd += [f"-l{lib}" for lib in libraries]
             subprocess.run(cmd, check=True)
 
         results.append(BinResult(

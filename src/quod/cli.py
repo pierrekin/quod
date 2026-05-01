@@ -51,7 +51,7 @@ from quod.editor import (
     remove_statement_in_function,
 )
 from quod.hashing import HASH_DISPLAY_LEN, find_by_prefix, node_hash, short_hash, walk
-from quod.ingest import IngestError, ingest_c
+from quod.ingest import IngestError, ingest_c, ingest_header
 from quod.model import (
     CLAIM_KINDS,
     PARAM_CLAIM_KINDS,
@@ -448,6 +448,7 @@ def _build_impl(
                 bins=bins,
                 profile=cfg.build.profile,
                 link=cfg.build.link,
+                libraries=cfg.link.libraries,
                 target=target_or_none,
                 overrides=overrides,
             )
@@ -1442,6 +1443,43 @@ def extern_rm(
             raise typer.Exit(1)
         _save(program)
     typer.echo(f"removed extern {name}")
+
+
+@extern_app.command("ingest")
+def extern_ingest(
+    header: Path = typer.Argument(..., help="C header file (e.g. /usr/include/stdio.h)."),
+) -> None:
+    """Append externs from every supported FUNCTION_DECL in HEADER.
+
+    Skips declarations whose signatures use unsupported types (structs,
+    floats, wider ints, function pointers) and skips names that already
+    have an extern in the current program. Prints a summary tally.
+    """
+    if not header.exists():
+        typer.echo(f"error: {header} does not exist", err=True)
+        raise typer.Exit(1)
+
+    try:
+        new_externs, skipped_unsupported = ingest_header(header)
+    except IngestError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+
+    with _exclusive_lock():
+        program = _load()
+        existing = {ext.name for ext in program.externs}
+        existing |= {fn.name for fn in program.functions}
+        to_add = tuple(ext for ext in new_externs if ext.name not in existing)
+        skipped_duplicate = tuple(ext.name for ext in new_externs if ext.name in existing)
+        if to_add:
+            program = program.model_copy(update={"externs": program.externs + to_add})
+            _save(program)
+
+    typer.echo(f"added {len(to_add)} extern(s) from {header}")
+    if skipped_unsupported:
+        typer.echo(f"  skipped {len(skipped_unsupported)} (unsupported signatures)")
+    if skipped_duplicate:
+        typer.echo(f"  skipped {len(skipped_duplicate)} (already declared)")
 
 
 # ---------- note sub-app ----------

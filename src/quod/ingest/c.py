@@ -165,27 +165,34 @@ class _ProgramState:
     def record_extern(self, cursor: cx.Cursor, name: str, decl: cx.Cursor | None) -> None:
         if name in self.externs:
             return
-        if decl is None:
-            self.externs[name] = ExternFunction(name=name)
-            return
-        fn_type = decl.type
-        if fn_type.kind != cx.TypeKind.FUNCTIONPROTO:
-            self.externs[name] = ExternFunction(name=name)
-            return
-        try:
-            param_types = tuple(_extern_type(cursor, t) for t in fn_type.argument_types())
-            return_type = _extern_type(cursor, fn_type.get_result())
-        except IngestError:
-            # Unsupported signature element (e.g. struct param) — fall back to
-            # the all-i32 default and let `Call` validation flag any mismatch.
-            self.externs[name] = ExternFunction(name=name)
-            return
-        self.externs[name] = ExternFunction(
-            name=name,
-            param_types=param_types,
-            return_type=return_type,
-            varargs=fn_type.is_function_variadic(),
-        )
+        ext = _build_extern_from_decl(decl) if decl is not None else None
+        # If the signature has unsupported elements (struct param, float, ...)
+        # we fall back to an all-i32 default extern. `Call` validation will
+        # flag any mismatch when the program is built.
+        self.externs[name] = ext if ext is not None else ExternFunction(name=name)
+
+
+def _build_extern_from_decl(decl: cx.Cursor) -> ExternFunction | None:
+    """Build an ExternFunction from a libclang FUNCTION_DECL cursor.
+
+    Returns None if any element of the signature can't be represented in the
+    quod type system (struct, float, wider int, etc.) — caller decides
+    whether to fall back to a default extern or skip the symbol entirely.
+    """
+    fn_type = decl.type
+    if fn_type.kind != cx.TypeKind.FUNCTIONPROTO:
+        return None
+    try:
+        param_types = tuple(_extern_type(decl, t) for t in fn_type.argument_types())
+        return_type = _extern_type(decl, fn_type.get_result())
+    except IngestError:
+        return None
+    return ExternFunction(
+        name=decl.spelling,
+        param_types=param_types,
+        return_type=return_type,
+        varargs=fn_type.is_function_variadic(),
+    )
 
 
 def _extern_type(cursor: cx.Cursor, t: cx.Type) -> Type:
@@ -484,3 +491,68 @@ def ingest_c(path: Path, *, clang_args: tuple[str, ...] = ()) -> Program:
         functions=tuple(functions),
         externs=externs,
     )
+
+
+def _parse_translation_unit(path: Path, *, language: str, clang_args: tuple[str, ...]) -> cx.TranslationUnit:
+    """Shared libclang entry point. `language` is `c` or `c-header`."""
+    if not path.exists():
+        raise IngestError(f"{path}: no such file")
+    index = cx.Index.create()
+    args: tuple[str, ...] = ("-x", language)
+    resource_dir = _detect_resource_dir()
+    if resource_dir is not None:
+        args = (*args, f"-resource-dir={resource_dir}")
+    args = (*args, *clang_args)
+    tu = index.parse(str(path), args=args)
+    if not tu:
+        raise IngestError(f"{path}: clang failed to parse file")
+    diags = [d for d in tu.diagnostics if d.severity >= cx.Diagnostic.Error]
+    if diags:
+        msg = "; ".join(f"{d.location.file}:{d.location.line}: {d.spelling}" for d in diags)
+        raise IngestError(f"{path}: parse errors: {msg}")
+    return tu
+
+
+def ingest_header(
+    path: Path, *, clang_args: tuple[str, ...] = (),
+) -> tuple[tuple[ExternFunction, ...], tuple[str, ...]]:
+    """Parse a C header and emit ExternFunction declarations.
+
+    Walks every FUNCTION_DECL reachable from the translation unit and
+    builds an `ExternFunction` for each whose signature fits the supported
+    type system (`int`, `char*`, varargs). Returns:
+
+        (externs_built, names_skipped)
+
+    Names that appeared as function declarations but had unsupported
+    signatures (struct params, floats, wider ints, etc.) are returned in
+    `names_skipped` so the caller can show a count or list. Symbols
+    declared multiple times (e.g. via redeclaration) are deduplicated by
+    name; first sighting wins.
+    """
+    path = path.resolve()
+    tu = _parse_translation_unit(path, language="c-header", clang_args=clang_args)
+
+    externs: list[ExternFunction] = []
+    skipped: list[str] = []
+    seen: set[str] = set()
+
+    for cursor in tu.cursor.walk_preorder():
+        if cursor.kind != cx.CursorKind.FUNCTION_DECL:
+            continue
+        # Headers may contain `static inline` definitions (e.g. from
+        # libc's transitive includes). Those have bodies — skip them, we
+        # only want pure declarations to expose as externs.
+        if cursor.is_definition():
+            continue
+        name = cursor.spelling
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        ext = _build_extern_from_decl(cursor)
+        if ext is None:
+            skipped.append(name)
+            continue
+        externs.append(ext)
+
+    return tuple(externs), tuple(skipped)

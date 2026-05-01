@@ -5,6 +5,6 @@ The output is a normal `Program` — every existing CLI command (`show`,
 `fn ls`, `claim add`, `build`, `run`) works on it without special cases.
 """
 
-from quod.ingest.c import IngestError, ingest_c
+from quod.ingest.c import IngestError, ingest_c, ingest_header
 
-__all__ = ["IngestError", "ingest_c"]
+__all__ = ["IngestError", "ingest_c", "ingest_header"]

@@ -68,6 +68,17 @@ class BuildConfig:
 
 
 @dataclass(frozen=True)
+class LinkConfig:
+    """Linker settings applied at the `clang object.o -o binary` step.
+
+    `libraries` are bare names — e.g. ("m", "pthread") becomes `-lm -lpthread`.
+    libc is always implicitly available (clang links it by default), so don't
+    list "c". Project-wide; per-program overrides aren't supported in v1.
+    """
+    libraries: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class EnforceConfig:
     axiom: str | None = None
     witness: str | None = None
@@ -90,6 +101,7 @@ class Config:
     build_dir: Path = Path("build")
     proofs_dir: Path = Path("proofs")
     build: BuildConfig = field(default_factory=BuildConfig)
+    link: LinkConfig = field(default_factory=LinkConfig)
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
     # Directory the config was loaded from. Relative paths in the config
     # resolve against this — so build artifacts and program files are
@@ -145,6 +157,12 @@ def load_config(path: Path) -> Config:
         link=bool(b.get("link", True)),
     )
 
+    l = raw.get("link", {})
+    libs_raw = l.get("libraries", [])
+    if not isinstance(libs_raw, list):
+        raise ValueError(f"{path}: [link] libraries must be a list of strings")
+    link = LinkConfig(libraries=tuple(str(x) for x in libs_raw))
+
     e = raw.get("enforce", {})
     enforce = EnforceConfig(
         axiom=e.get("axiom"),
@@ -185,6 +203,7 @@ def load_config(path: Path) -> Config:
         build_dir=build_dir,
         proofs_dir=proofs_dir,
         build=build,
+        link=link,
         enforce=enforce,
         root=root,
     )
