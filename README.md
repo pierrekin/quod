@@ -39,17 +39,23 @@ src/quod/
     cli.py          Typer CLI (noun-first sub-apps)
     config.py       quod.toml loader
     model.py        Pydantic node types (the Program AST)
+    schema.py       Node-shape introspection for `quod schema`
     editor.py       Mutation primitives (add/replace/insert nodes)
     hashing.py      Content-addressable node hashes
     analysis.py     Call graph, data flow, lattice claim derivation
     lower.py        Program → LLVM IR → object/binary
     proof.py        SMT-LIB lowering for `quod claim prove`
+    providers.py    Pluggable claim providers (lattice / Z3)
+    render.py       Span/line model + theme-driven syntax highlighting
+    completion.py   Semantic shell completion for the CLI
+    ingest/         Source-language importers (C via libclang)
     templates.py    Starter programs `quod init` can write
 examples/
     basics/         Hello-world, system() — minimal programs
     claims/         Axioms, witnesses, lattice, codegen-impact
     analysis/       Call graphs and cross-procedural lattice
     project_euler/  Pretty solutions to PE problems (001..)
+    c_ingest/       C sources + their `quod ingest` outputs
 integrations/
     pi/             pi-coding-agent extension exposing quod as tools
     claude/         Claude Code plugin (skill + slash commands)

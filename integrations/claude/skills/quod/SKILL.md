@@ -50,6 +50,7 @@ quod schema Function                     # whole-function shape
 
 ```
 quod init -t {hello|guarded|empty}    # writes quod.toml + program.json
+quod ingest SOURCE [-n NAME]          # ingest a C source file into a fresh project
 quod -p NAME ...                      # select a [[program]] (omit if only one)
 quod check                            # parse, lower, LLVM-verify (no artifacts)
 quod build [--profile N] [--show-ir]  # → object → linked binary, per [[program.bin]]
@@ -81,6 +82,8 @@ quod extern rm NAME
 
 quod note add FN TEXT
 quod note rm  FN INDEX
+
+quod provider ls                      # registered claim providers (regime + modes)
 ```
 
 For `fn add` and `stmt add`, pass JSON on stdin (`-`).

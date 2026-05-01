@@ -122,17 +122,17 @@ quod show
 ```
 
 ```
-program {
-  constants:
-    [cd8f4e38d2c2] .str.greeting = 'hello, world'
-  externs:
-    [a271725532b7] extern puts(i8*) -> i32
-  functions:
-    [de26d57b1bf8] main() -> i32 {
-      [e90990997573] puts(&.str.greeting)
-      [8220f593d9a1] return 0
-    }
-}
+[d39337f21f95]  program {
+                  constants:
+[cd8f4e38d2c2]      .str.greeting = 'hello, world'
+                  externs:
+[a271725532b7]      extern puts(i8*) -> i32
+                  functions:
+[740bab5f21fd]      main() -> i32 {
+[e90990997573]        puts(&.str.greeting)
+[8220f593d9a1]        return 0
+                    }
+                }
 ```
 
 `quod fn ls` lists functions with their signatures:
@@ -142,7 +142,7 @@ quod fn ls
 ```
 
 ```
-[de26d57b1bf8] main() -> i32
+[740bab5f21fd] main() -> i32
 ```
 
 `quod fn show NAME` prints just one function (accepts a name or a hash
@@ -153,10 +153,10 @@ quod fn show main
 ```
 
 ```
-[de26d57b1bf8] main() -> i32 {
-  [e90990997573] puts(&.str.greeting)
-  [8220f593d9a1] return 0
-}
+[740bab5f21fd]  main() -> i32 {
+[e90990997573]    puts(&.str.greeting)
+[8220f593d9a1]    return 0
+                }
 ```
 
 Hashes are content-addressable. If you have a hash from `show` and want
@@ -168,7 +168,7 @@ quod find e909
 
 ```
 hash:  e90990997573c55e3418e3600faedc5860a24d865a9825a7e772f040b8b73e08
-short: e90990997573
+short:  e90990997573
 type:  ExprStmt
 json:  {"kind":"quod.expr_stmt","value":{"kind":"llvm.call","function":"puts","args":[...]}}
 ```
@@ -180,16 +180,16 @@ quod show --hashes
 ```
 
 ```
-2ba324733640  Program
+d39337f21f95  Program
 cd8f4e38d2c2  StringConstant
-de26d57b1bf8  Function
+740bab5f21fd  Function
+79cac65d1b69  I32Type
 e90990997573  ExprStmt
 55f87d55fb52  Call
 adfa48c7f0bc  StringRef
 8220f593d9a1  ReturnInt
 a271725532b7  ExternFunction
 617dda8608f6  I8PtrType
-79cac65d1b69  I32Type
 ```
 
 ## 3. Build and run
@@ -245,13 +245,13 @@ quod fn show f
 ```
 
 ```
-[cee39749a928] f(x: i32) -> i32 {
-  [84f9753f7b9a] if ((x < 0)) {
-    [7e8d42cb0b10] return -1
-  } else {
-    [3e9996845fc4] return (x + 1)
-  }
-}
+[b7b7f0d8d936]  f(x: i32) -> i32 {
+[1b872194c743]    if ((x < 0)) {
+[8f183d93c201]      return -1
+                  } else {
+[75271b08dd67]      return (x + 1)
+                  }
+                }
 ```
 
 `f(x) = if x < 0 then -1 else x + 1`. The function takes a parameter, so
@@ -331,9 +331,12 @@ quod claim prove f return_in_range --min -1
 ```
 
 ```
-proved return_in_range([-1, +inf]) {regime=witness, justification=z3(...)}
-  artifact: /tmp/demo3/proofs/f_return_in_range_return_c37ad8704aef.smt2 (sha256=c37ad8704aef)
+proved return_in_range([-1, +inf]) {regime=witness, justification=z3(/tmp/demo3/proofs/guarded/f_return_in_range_return_e7b5f9f88a3d.smt2@e7b5f9f88a3d)} via z3.qf_lia
+  artifact: /tmp/demo3/proofs/guarded/f_return_in_range_return_e7b5f9f88a3d.smt2 (sha256=e7b5f9f88a3d)
 ```
+
+Proof artifacts are written under `<proofs_dir>/<program-name>/`
+(`proofs_dir` defaults to `proofs/`, configurable in `quod.toml`).
 
 The `.smt2` file is real — you can open it and read the encoding Z3
 solved. Its sha256 is now baked into the program:
@@ -343,7 +346,7 @@ quod claim ls
 ```
 
 ```
-f: return_in_range([-1, +inf]) {regime=witness, justification=z3(proofs/f_return_in_range_return_c37ad8704aef.smt2@c37ad8704aef)}
+f: return_in_range([-1, +inf]) {regime=witness, justification=z3(/tmp/demo3/proofs/guarded/f_return_in_range_return_e7b5f9f88a3d.smt2@e7b5f9f88a3d)}
 ```
 
 If you try to prove something that isn't true, Z3 returns `sat` (a model
@@ -354,8 +357,8 @@ quod claim prove f return_in_range --min 100
 ```
 
 ```
-could not prove return_in_range: z3 returned 'sat'
-(z3 found a counterexample; the claim does not hold)
+could not prove return_in_range: z3.qf_lia reported refuted (z3 returned 'sat')
+(provider found a counterexample; the claim does not hold)
 ```
 
 `quod claim verify` re-runs every stored proof — re-hashes the artifact
@@ -393,32 +396,44 @@ A few commands that round out the tour:
 
 ```
 quod init                           # write quod.toml + program.json
+quod ingest SOURCE                  # ingest a C source file into a fresh project
 quod -p NAME ...                    # select a [[program]] (omit if only one)
 quod check                          # parse, lower, LLVM-verify
-quod build                          # → object → linked binary, per [[program.bin]]
-quod run [--bin NAME]               # build then exec
+quod build [--profile N] [--show-ir]  # → object → linked binary, per [[program.bin]]
+quod run [--bin NAME] [-- ARGS...]  # build then exec
 quod show [--hashes]                # whole program
 quod find PREFIX                    # resolve a hash prefix
+quod schema [--category C | KIND]   # node-shape introspection
 
-quod fn ls / show REF / add SPEC
+quod fn ls / show REF / add - / rm REF
 quod fn callers TARGET
 quod fn data-flow FN PARAM
 quod fn call-graph
 quod fn unconstrained
 
 quod claim ls [FN]
-quod claim add FN KIND [TARGET]   [--min N] [--max N] [--regime ...] [--enforcement ...]
+quod claim add FN KIND [TARGET]   [--min N] [--max N]
+                                  [--regime axiom|witness] [--enforcement trust|verify]
+                                  [--justification '<json>']
 quod claim relax FN KIND [TARGET]
 quod claim prove FN KIND [TARGET] [--min N] [--max N]
 quod claim verify
-quod claim suggest
+quod claim suggest [--top-n N]
 quod claim derive
 
-quod stmt add FN SPEC [--at-end | --at-start | --before HASH | --after HASH]
+quod stmt add FN - [--at-end | --at-start | --before HASH | --after HASH]
+quod stmt rm FN HASH_PREFIX
+
+quod const ls / add NAME VALUE / rm NAME
 
 quod extern ls
 quod extern add NAME [--arity N | --param-type T ...] [--return-type T] [--varargs]
+quod extern rm NAME
 
 quod note add FN TEXT
 quod note rm FN INDEX
+
+quod provider ls                    # registered claim providers (regime + modes)
 ```
+
+`fn add` and `stmt add` read the JSON spec from stdin (`-`).
