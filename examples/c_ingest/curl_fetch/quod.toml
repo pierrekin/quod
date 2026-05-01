@@ -1,0 +1,20 @@
+# Standalone — not in the umbrella examples/quod.toml because it requires
+# libcurl as a link-time dependency, and we don't want every other example
+# to drag that in.
+#
+# Run:  cd examples/c_ingest/curl_fetch && quod run
+
+[build]
+profile = 2
+
+[[program]]
+name    = "curl_fetch"
+version = "0.1.0"
+file    = "program.json"
+
+  [[program.bin]]
+  name  = "curl_fetch"
+  entry = "main"
+
+[link]
+libraries = ["curl"]

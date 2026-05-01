@@ -109,6 +109,17 @@ def _quod_type(cursor: cx.Cursor, t: cx.Type) -> I32Type:
     return _I32
 
 
+def _local_type(cursor: cx.Cursor, t: cx.Type) -> Type:
+    """Map a clang local-var type to a quod Type. Wider than `_quod_type`:
+    accepts `int`, `enum`, and any pointer (modeled as i8_ptr)."""
+    canon = t.get_canonical()
+    if canon.kind in (cx.TypeKind.INT, cx.TypeKind.ENUM):
+        return _I32
+    if canon.kind == cx.TypeKind.POINTER:
+        return _I8PTR
+    raise _refuse(cursor, f"unsupported local-var type {t.spelling!r} (only `int`, `enum`, and pointers in v1)")
+
+
 def _unwrap(cursor: cx.Cursor) -> cx.Cursor:
     """Skip implicit casts / parens that libclang exposes as UNEXPOSED_EXPR."""
     while cursor.kind in (cx.CursorKind.UNEXPOSED_EXPR, cx.CursorKind.PAREN_EXPR):
@@ -163,30 +174,37 @@ class _ProgramState:
         return StringRef(name=name)
 
     def record_extern(self, cursor: cx.Cursor, name: str, decl: cx.Cursor | None) -> None:
+        """Record an extern at a call site.
+
+        Refuses if `decl` is provided but the signature can't be represented
+        — silently producing a stub extern would have us emit IR that calls
+        `@foo()` while passing args, which is a quiet miscompilation. If the
+        callee genuinely can't be resolved (rare; usually means a missing
+        `#include`), we keep the all-i32 default — the build step will fail
+        clearly when the symbol can't be linked.
+        """
         if name in self.externs:
             return
-        ext = _build_extern_from_decl(decl) if decl is not None else None
-        # If the signature has unsupported elements (struct param, float, ...)
-        # we fall back to an all-i32 default extern. `Call` validation will
-        # flag any mismatch when the program is built.
-        self.externs[name] = ext if ext is not None else ExternFunction(name=name)
+        if decl is None:
+            self.externs[name] = ExternFunction(name=name)
+            return
+        # IngestError propagates up — the caller fails the whole ingest.
+        self.externs[name] = _build_extern_from_decl(cursor, decl)
 
 
-def _build_extern_from_decl(decl: cx.Cursor) -> ExternFunction | None:
+def _build_extern_from_decl(call_cursor: cx.Cursor, decl: cx.Cursor) -> ExternFunction:
     """Build an ExternFunction from a libclang FUNCTION_DECL cursor.
 
-    Returns None if any element of the signature can't be represented in the
-    quod type system (struct, float, wider int, etc.) — caller decides
-    whether to fall back to a default extern or skip the symbol entirely.
+    Raises IngestError with the call-site location if any element of the
+    signature can't be represented in quod's type system (struct, float,
+    wider int, etc.). `call_cursor` is used purely for error attribution
+    so users see *where* the call was that triggered the failure.
     """
     fn_type = decl.type
     if fn_type.kind != cx.TypeKind.FUNCTIONPROTO:
-        return None
-    try:
-        param_types = tuple(_extern_type(decl, t) for t in fn_type.argument_types())
-        return_type = _extern_type(decl, fn_type.get_result())
-    except IngestError:
-        return None
+        raise _refuse(call_cursor, f"call to {decl.spelling!r}: declaration has no function prototype (KR-style or otherwise unsupported)")
+    param_types = tuple(_extern_type(call_cursor, t) for t in fn_type.argument_types())
+    return_type = _extern_type(call_cursor, fn_type.get_result(), is_return=True)
     return ExternFunction(
         name=decl.spelling,
         param_types=param_types,
@@ -195,20 +213,31 @@ def _build_extern_from_decl(decl: cx.Cursor) -> ExternFunction | None:
     )
 
 
-def _extern_type(cursor: cx.Cursor, t: cx.Type) -> Type:
+def _extern_type(cursor: cx.Cursor, t: cx.Type, *, is_return: bool = False) -> Type:
     """Map a clang Type to a quod Type, for use in extern signatures.
 
-    Wider than `_quod_type` (which only allows int) — externs may legitimately
-    take `const char *` for printf-style format args. Anything not int / char*
-    is refused so we don't silently accept structs/floats/wider-int signatures.
+    Wider than `_quod_type` (which only allows int):
+
+      - `int` and `enum` → I32. Enums are int-typed at IR level.
+      - any pointer → I8Ptr. LLVM has opaque pointers, so `char*`, `void*`,
+        and `CURL*` are all the same type at IR level — modeling them as
+        i8_ptr is honest, not a hack.
+      - `void` (return only) → I32. Stand-in until VoidType lands; callers
+        must discard the return value, since the runtime ABI doesn't put
+        anything in the return register and we'd be reading garbage.
+
+    Floats, wider ints, structs, function pointers (other than as opaque
+    i8_ptr) all refuse — quod can't represent them yet.
     """
     canon = t.get_canonical()
-    if canon.kind == cx.TypeKind.INT:
+    if canon.kind in (cx.TypeKind.INT, cx.TypeKind.ENUM):
         return _I32
     if canon.kind == cx.TypeKind.POINTER:
-        pointee = canon.get_pointee().get_canonical()
-        if pointee.kind in (cx.TypeKind.CHAR_S, cx.TypeKind.CHAR_U, cx.TypeKind.SCHAR, cx.TypeKind.UCHAR):
-            return _I8PTR
+        return _I8PTR
+    if is_return and canon.kind == cx.TypeKind.VOID:
+        # TODO: replace with VoidType once quod gains one — i32 stand-in
+        # works only because expr-stmt calls discard the return value.
+        return _I32
     raise _refuse(cursor, f"unsupported extern signature type {t.spelling!r}")
 
 
@@ -257,6 +286,12 @@ class _FunctionTranslator:
             return self._state.intern_string(value)
 
         if k == cx.CursorKind.DECL_REF_EXPR:
+            referenced = c.referenced
+            if referenced is not None and referenced.kind == cx.CursorKind.ENUM_CONSTANT_DECL:
+                # Header-defined enum constant (e.g. CURLOPT_URL = 10002).
+                # libclang resolves the value for us; emit it as a plain
+                # int literal since the source-level name doesn't survive.
+                return IntLit(type=_I32, value=referenced.enum_value)
             return self._ref(c, c.spelling)
 
         if k == cx.CursorKind.UNARY_OPERATOR:
@@ -353,14 +388,14 @@ class _FunctionTranslator:
             decl = children[0]
             if decl.kind != cx.CursorKind.VAR_DECL:
                 raise _refuse(decl, f"only var declarations supported, got {decl.kind.name}")
-            _quod_type(decl, decl.type)
+            local_ty = _local_type(decl, decl.type)
             init_children = list(decl.get_children())
             if not init_children:
-                raise _refuse(decl, "uninitialized locals not supported (require `int x = …;`)")
+                raise _refuse(decl, "uninitialized locals not supported (require `T x = …;`)")
             # The last child is the initializer; earlier children are type refs we ignore.
             init_expr = self.expr(init_children[-1])
             self._locals.add(decl.spelling)
-            return Let(name=decl.spelling, type=_I32, init=init_expr)
+            return Let(name=decl.spelling, type=local_ty, init=init_expr)
 
         if k == cx.CursorKind.BINARY_OPERATOR:
             # Bare assignment as a statement: `x = expr;`
@@ -549,8 +584,12 @@ def ingest_header(
         if not name or name in seen:
             continue
         seen.add(name)
-        ext = _build_extern_from_decl(cursor)
-        if ext is None:
+        try:
+            ext = _build_extern_from_decl(cursor, cursor)
+        except IngestError:
+            # Bulk-import path is tolerant: a header full of unsupported
+            # signatures shouldn't refuse the whole ingest. Caller gets
+            # a tally of what was skipped.
             skipped.append(name)
             continue
         externs.append(ext)

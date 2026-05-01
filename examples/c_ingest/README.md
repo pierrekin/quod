@@ -41,6 +41,25 @@ workspace.)
 | `control_flow`  | `if` / `else if` / `else`, comparisons, `&&`, i1→int widen. |
 | `loops`         | `while`, `int` locals, assignment.                          |
 | `fizzbuzz`      | Loops + nested `if/else if/else` + `%` + mixed `printf`.    |
+| `curl_fetch`    | Pointer locals, opaque handles, enum constants, `[link]`.   |
+
+### Note on `curl_fetch`
+
+This one's standalone — it has its own `quod.toml` and isn't in the
+umbrella `examples/quod.toml`. Two reasons:
+
+1. It needs libcurl at link time (`[link] libraries = ["curl"]`), and we
+   don't want every other example dragging that dependency in.
+2. The C source has a `#define CURL_DISABLE_TYPECHECK` before the include
+   to disable libcurl's GCC-statement-expression typecheck macros, which
+   our ingester can't walk. Plain function calls work fine.
+
+Run it with:
+
+```sh
+cd examples/c_ingest/curl_fetch
+quod run
+```
 
 ## v1 subset reminder
 

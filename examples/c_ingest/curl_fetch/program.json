@@ -1,0 +1,104 @@
+{
+  "constants": [
+    {
+      "name": ".str.0",
+      "value": "https://example.com"
+    }
+  ],
+  "functions": [
+    {
+      "name": "main",
+      "params": [],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "handle",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "init": {
+            "kind": "llvm.call",
+            "function": "curl_easy_init",
+            "args": []
+          }
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "curl_easy_setopt",
+            "args": [
+              {
+                "kind": "quod.local_ref",
+                "name": "handle"
+              },
+              {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 10002
+              },
+              {
+                "kind": "quod.string_ref",
+                "name": ".str.0"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "curl_easy_perform",
+            "args": [
+              {
+                "kind": "quod.local_ref",
+                "name": "handle"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.return_int",
+          "value": 0
+        }
+      ],
+      "claims": [],
+      "notes": [
+        "ingested from curl_fetch.c:16"
+      ]
+    }
+  ],
+  "externs": [
+    {
+      "name": "curl_easy_init",
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      }
+    },
+    {
+      "name": "curl_easy_setopt",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        },
+        {
+          "kind": "llvm.i32"
+        }
+      ],
+      "varargs": true
+    },
+    {
+      "name": "curl_easy_perform",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ]
+    }
+  ]
+}
