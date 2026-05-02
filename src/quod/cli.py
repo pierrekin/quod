@@ -781,15 +781,40 @@ def fn_show(
 @fn_app.command("add")
 def fn_add(
     spec: str = typer.Argument("-", help="Path to JSON spec, or '-' for stdin."),
+    script: str = typer.Option(
+        None, "--script",
+        help="Inline quod-script source instead of a JSON spec. Use '-' to "
+             "read script from stdin. See `quod schema --category script`.",
+    ),
+    script_file: str = typer.Option(
+        None, "--script-file",
+        help="Path to a quod-script file instead of inline --script.",
+    ),
 ) -> None:
-    """Append a new function. Spec is a JSON Function object.
+    """Append a new function. Spec is a JSON Function object, OR a
+    quod-script source via --script / --script-file.
 
-    Example: {"name": "g", "params": ["x"], "body": [{"kind": "quod.return_int", "value": 0}]}
+    JSON example: {"name": "g", "params": [...], "body": [...]}
+
+    Script example: --script "fn g(x: i32) -> i32 { return x + 1 }"
     """
+    if sum(s is not None for s in (script, script_file)) > 1:
+        typer.echo("error: --script and --script-file are mutually exclusive", err=True)
+        raise typer.Exit(1)
+
     with _exclusive_lock():
         program = _load()
         try:
-            fn = parse_function_spec(read_json_arg(spec))
+            if script is not None or script_file is not None:
+                from quod.script import parse_function as _parse_script
+                if script_file is not None:
+                    text = (sys.stdin.read() if script_file == "-"
+                            else Path(script_file).read_text())
+                else:
+                    text = sys.stdin.read() if script == "-" else script
+                fn = _parse_script(text)
+            else:
+                fn = parse_function_spec(read_json_arg(spec))
             program = add_function_to_program(program, fn)
         except (KeyError, ValueError) as e:
             typer.echo(f"error: {e}", err=True)

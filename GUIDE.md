@@ -372,7 +372,62 @@ quod claim verify
 ok   f: return_in_range([-1, +inf]) {regime=witness, justification=z3(...)}
 ```
 
-## 7. Other useful things
+## 7. Authoring with quod-script
+
+Authoring full function bodies as JSON gets verbose fast — every
+expression is a discriminated-union node, every `let` carries an
+explicit type, and the JSON quoting works against any kind of inline
+prototyping. **quod-script** is a compact textual surface for the
+authoring subset (signatures, statements, expressions). It's one-way
+(script → JSON nodes) and the JSON remains the asset; quod-script is
+just an input format for `quod fn add`.
+
+```
+$ quod fn add --script "fn add_two(a: i32, b: i32) -> i32 { return a + b }"
+added function add_two (hash=...)
+```
+
+Pass a file with `--script-file path` (or `--script-file -` for
+stdin):
+
+```
+$ cat <<'EOF' | quod fn add --script-file -
+fn skip_ws(p: i8*) -> void {
+  while (true) {
+    if (at_end(p)) { return }
+    let b: i8 = peek_byte(p)
+    if (b == ' ' || b == '\t' || b == '\n' || b == '\r') {
+      let _drop: i8 = consume_byte(p)
+    } else {
+      return
+    }
+  }
+}
+EOF
+```
+
+The grammar covers everything you need to write function bodies:
+`let`, `if`/`else`, `while`, `for X: T in lo..hi`, `return` (with or
+without a value), `store(ptr, value)`, `with_arena name (capacity = N)
+{ ... }`, plus expressions: integer/char/`null`/`true`/`false`
+literals, `&.const_name` for string refs, field reads (`x.field`),
+calls (`fn(a, b)`), struct literals (`Parser { input_ptr: ..., ... }`),
+`load[T](ptr)`, `widen(e to T)` / `uwiden(e to T)`, `ptr_offset(base,
+off)`, all binops, short-circuit `&&` / `||`, parens.
+
+What it deliberately doesn't do: claims (`@`-style annotations are
+out — claims have their own surface), struct definitions, externs,
+string constants, imports. Those stay on the existing `quod struct
+add` / `quod extern add` / `quod const add` / `quod claim add`
+commands. There's no round-trip with `quod show` (yet) — the script is
+purely an input format.
+
+When the grammar can't disambiguate a `{` (e.g. `if (Foo { … })` —
+struct literal or block?), Rust-style: struct literals are disabled
+in the cond position of `if` / `while` / `for`. Wrap in parens to
+force one in: `if ((Parser { … }).had_error == 0) { ... }`.
+
+## 8. Other useful things
 
 A few commands that round out the tour:
 
@@ -392,7 +447,7 @@ A few commands that round out the tour:
 - `quod extern add NAME --param-type i8_ptr --varargs` — declare a libc
   symbol like `printf`.
 
-## 8. The CLI tree at a glance
+## 9. The CLI tree at a glance
 
 ```
 quod init                           # write quod.toml + program.json
@@ -406,6 +461,8 @@ quod find PREFIX                    # resolve a hash prefix
 quod schema [--category C | KIND]   # node-shape introspection
 
 quod fn ls / show REF / add - / rm REF
+quod fn add --script "fn ... { ... }"   # quod-script (textual surface)
+quod fn add --script-file path | -      # script from file or stdin
 quod fn callers TARGET
 quod fn data-flow FN PARAM
 quod fn call-graph

@@ -1,0 +1,12 @@
+{
+  "name": "fn_add_script_stdin",
+  "in_program": "before.json",
+  "steps": [
+    {
+      "cli": ["fn", "add", "--script-file", "-"],
+      "stdin": "fn noop() -> i32 {\n  return 0\n}\n",
+      "expect": { "exit": 0 }
+    }
+  ],
+  "expect": { "program_json": "after.json" }
+}

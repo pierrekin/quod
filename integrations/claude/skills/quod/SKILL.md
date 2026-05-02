@@ -88,6 +88,10 @@ quod provider ls                      # registered claim providers (regime + mod
 
 For `fn add` and `stmt add`, pass JSON on stdin (`-`).
 
+For function bodies of any complexity, prefer `quod fn add --script
+"fn ... { ... }"` — a compact textual surface that emits the same
+JSON nodes (see "Authoring with quod-script" below).
+
 ## Authoring workflows
 
 ### Starting a new project
@@ -109,14 +113,28 @@ for guarded.
 Hashes are content-addressable. `quod show` prints them as `[abc123]`
 prefixes; the CLI accepts any unique prefix anywhere a name is taken.
 
-To add a function or statement:
+To add a function:
 
-1. `quod schema Function` (or `quod schema --category statement`) to
-   get the canonical shape.
-2. Construct the JSON.
-3. `quod fn add -` (stdin) or `quod stmt add FN - --at-end` (or
-   `--before HASH` / `--after HASH` for precise placement).
-4. `quod check` to validate.
+- **Preferred for non-trivial bodies:** `quod fn add --script "fn name(p: T, ...) -> T { ... }"`.
+  The script grammar covers `let`, `if`/`else`, `while`, `for X: T in lo..hi`,
+  `return [expr]`, `store(p, v)`, `with_arena name (capacity = N) { ... }`,
+  and expressions: int/char/`null`/`true`/`false` literals, `&.const_name`,
+  field reads, calls, `Struct { f: e, ... }`, `load[T](p)`,
+  `widen(e to T)` / `uwiden(e to T)`, `ptr_offset(b, o)`, all binops, `&&` / `||`.
+  Use `--script-file path` (or `-` for stdin) for longer bodies.
+  Script literals are disabled in `if`/`while`/`for` cond positions —
+  wrap in parens if you really need a struct literal there.
+- **JSON path:** `quod schema Function` → construct JSON → `quod fn add -`
+  (stdin). Use this when you need claims, notes, or anything outside the
+  script grammar.
+
+To add a statement to an existing function:
+
+1. `quod schema --category statement` for the canonical shape.
+2. `quod stmt add FN - --at-end` (or `--at-start` / `--before HASH` /
+   `--after HASH` for precise placement). The script surface doesn't
+   cover statement-level edits yet.
+3. `quod check` to validate.
 
 Removals (`fn rm`, `stmt rm`, `extern rm`, `const rm`) are permissive
 — they don't refuse if other code still references the target. The

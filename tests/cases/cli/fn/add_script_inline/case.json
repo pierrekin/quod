@@ -1,0 +1,11 @@
+{
+  "name": "fn_add_script_inline",
+  "in_program": "before.json",
+  "steps": [
+    {
+      "cli": ["fn", "add", "--script", "fn add_two(a: i32, b: i32) -> i32 { return a + b }"],
+      "expect": { "exit": 0 }
+    }
+  ],
+  "expect": { "program_json": "after.json" }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "fn_add_script_syntax_error",
+  "in_program": "before.json",
+  "steps": [
+    {
+      "cli": ["fn", "add", "--script", "fn broken() -> i32 { return"],
+      "expect": { "exit": 1 }
+    }
+  ]
+}

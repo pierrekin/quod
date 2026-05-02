@@ -1,0 +1,26 @@
+{
+  "constants": [],
+  "externs": [],
+  "functions": [
+    {
+      "name": "add_two",
+      "params": [
+        { "name": "a", "type": { "kind": "llvm.i32" } },
+        { "name": "b", "type": { "kind": "llvm.i32" } }
+      ],
+      "return_type": { "kind": "llvm.i32" },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "add",
+            "lhs": { "kind": "llvm.param_ref", "name": "a" },
+            "rhs": { "kind": "llvm.param_ref", "name": "b" }
+          }
+        }
+      ],
+      "claims": []
+    }
+  ]
+}
