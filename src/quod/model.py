@@ -960,7 +960,7 @@ def save_program(program: Program, path: Path) -> None:
     an external lock to prevent two writers from racing on load→save (last
     writer wins); see `_exclusive_lock` in cli.py.
     """
-    InputProgram(constants=program.constants, functions=program.functions)
+    InputProgram.model_validate(program.model_dump())
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(program.model_dump_json(indent=2))
     tmp.replace(path)
