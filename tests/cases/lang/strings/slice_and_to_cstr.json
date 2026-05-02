@@ -1,0 +1,53 @@
+{
+  "program": {
+    "imports": ["std.str"],
+    "constants": [
+      { "name": ".str.full", "value": "hello, world!" },
+      { "name": ".str.fmt",  "value": "got %s\n" }
+    ],
+    "externs": [
+      { "name": "printf", "param_types": [{ "kind": "llvm.i8_ptr" }], "varargs": true }
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": { "kind": "llvm.i32" },
+        "body": [
+          { "kind": "quod.let", "name": "src", "type": { "kind": "llvm.struct", "name": "std.str.String" },
+            "init": { "kind": "llvm.call", "function": "std.str.from_cstr",
+                      "args": [{ "kind": "quod.string_ref", "name": ".str.full" }] } },
+          { "kind": "quod.with_arena", "name": "a",
+            "capacity": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 4096 },
+            "body": [
+              { "kind": "quod.let", "name": "sliced", "type": { "kind": "llvm.struct", "name": "std.str.String" },
+                "init": { "kind": "llvm.call", "function": "std.str.slice",
+                          "args": [
+                            { "kind": "quod.local_ref", "name": "src" },
+                            { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 7 },
+                            { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 12 }
+                          ] } },
+              { "kind": "quod.let", "name": "cstr", "type": { "kind": "llvm.i8_ptr" },
+                "init": { "kind": "llvm.call", "function": "std.str.to_cstr_in",
+                          "args": [
+                            { "kind": "quod.local_ref", "name": "sliced" },
+                            { "kind": "quod.local_ref", "name": "a" }
+                          ] } },
+              { "kind": "quod.expr_stmt",
+                "value": { "kind": "llvm.call", "function": "printf",
+                           "args": [
+                             { "kind": "quod.string_ref", "name": ".str.fmt" },
+                             { "kind": "quod.local_ref", "name": "cstr" }
+                           ] } }
+            ] },
+          { "kind": "quod.return_int", "value": 0 }
+        ],
+        "claims": []
+      }
+    ]
+  },
+  "expect": {
+    "stdout": "got world\n",
+    "exit": 0
+  }
+}

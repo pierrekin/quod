@@ -1,0 +1,151 @@
+{
+  "structs": [
+    {
+      "name": "std.str.String",
+      "fields": [
+        { "name": "ptr", "type": { "kind": "llvm.i8_ptr" } },
+        { "name": "len", "type": { "kind": "llvm.i64" } }
+      ]
+    }
+  ],
+  "externs": [
+    { "name": "memcmp",
+      "param_types": [{ "kind": "llvm.i8_ptr" }, { "kind": "llvm.i8_ptr" }, { "kind": "llvm.i64" }],
+      "return_type": { "kind": "llvm.i32" } },
+    { "name": "memcpy",
+      "param_types": [{ "kind": "llvm.i8_ptr" }, { "kind": "llvm.i8_ptr" }, { "kind": "llvm.i64" }],
+      "return_type": { "kind": "llvm.i8_ptr" } },
+    { "name": "strlen",
+      "param_types": [{ "kind": "llvm.i8_ptr" }],
+      "return_type": { "kind": "llvm.i64" } },
+    { "name": "quod_arena_alloc",
+      "param_types": [{ "kind": "llvm.i8_ptr" }, { "kind": "llvm.i64" }],
+      "return_type": { "kind": "llvm.i8_ptr" } }
+  ],
+  "functions": [
+    {
+      "name": "std.str.eq",
+      "params": [
+        { "name": "a", "type": { "kind": "llvm.struct", "name": "std.str.String" } },
+        { "name": "b", "type": { "kind": "llvm.struct", "name": "std.str.String" } }
+      ],
+      "return_type": { "kind": "llvm.i1" },
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop", "op": "ne",
+            "lhs": { "kind": "quod.field", "value": { "kind": "llvm.param_ref", "name": "a" }, "name": "len" },
+            "rhs": { "kind": "quod.field", "value": { "kind": "llvm.param_ref", "name": "b" }, "name": "len" }
+          },
+          "then_body": [
+            { "kind": "quod.return_expr",
+              "value": { "kind": "llvm.const_int", "type": { "kind": "llvm.i1" }, "value": 0 } }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop", "op": "eq",
+            "lhs": {
+              "kind": "llvm.call", "function": "memcmp",
+              "args": [
+                { "kind": "quod.field", "value": { "kind": "llvm.param_ref", "name": "a" }, "name": "ptr" },
+                { "kind": "quod.field", "value": { "kind": "llvm.param_ref", "name": "b" }, "name": "ptr" },
+                { "kind": "quod.field", "value": { "kind": "llvm.param_ref", "name": "a" }, "name": "len" }
+              ]
+            },
+            "rhs": { "kind": "llvm.const_int", "type": { "kind": "llvm.i32" }, "value": 0 }
+          }
+        }
+      ],
+      "claims": []
+    },
+    {
+      "name": "std.str.slice",
+      "params": [
+        { "name": "s",  "type": { "kind": "llvm.struct", "name": "std.str.String" } },
+        { "name": "lo", "type": { "kind": "llvm.i64" } },
+        { "name": "hi", "type": { "kind": "llvm.i64" } }
+      ],
+      "return_type": { "kind": "llvm.struct", "name": "std.str.String" },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.struct_init", "type": "std.str.String",
+            "fields": [
+              { "name": "ptr",
+                "value": { "kind": "quod.ptr_offset",
+                           "base": { "kind": "quod.field", "value": { "kind": "llvm.param_ref", "name": "s" }, "name": "ptr" },
+                           "offset": { "kind": "llvm.param_ref", "name": "lo" } } },
+              { "name": "len",
+                "value": { "kind": "llvm.binop", "op": "sub",
+                           "lhs": { "kind": "llvm.param_ref", "name": "hi" },
+                           "rhs": { "kind": "llvm.param_ref", "name": "lo" } } }
+            ]
+          }
+        }
+      ],
+      "claims": []
+    },
+    {
+      "name": "std.str.from_cstr",
+      "params": [
+        { "name": "c", "type": { "kind": "llvm.i8_ptr" } }
+      ],
+      "return_type": { "kind": "llvm.struct", "name": "std.str.String" },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.struct_init", "type": "std.str.String",
+            "fields": [
+              { "name": "ptr", "value": { "kind": "llvm.param_ref", "name": "c" } },
+              { "name": "len",
+                "value": { "kind": "llvm.call", "function": "strlen",
+                           "args": [{ "kind": "llvm.param_ref", "name": "c" }] } }
+            ]
+          }
+        }
+      ],
+      "claims": []
+    },
+    {
+      "name": "std.str.to_cstr_in",
+      "params": [
+        { "name": "s",     "type": { "kind": "llvm.struct", "name": "std.str.String" } },
+        { "name": "arena", "type": { "kind": "llvm.i8_ptr" } }
+      ],
+      "return_type": { "kind": "llvm.i8_ptr" },
+      "body": [
+        {
+          "kind": "quod.let", "name": "p", "type": { "kind": "llvm.i8_ptr" },
+          "init": {
+            "kind": "llvm.call", "function": "quod_arena_alloc",
+            "args": [
+              { "kind": "llvm.param_ref", "name": "arena" },
+              { "kind": "llvm.binop", "op": "add",
+                "lhs": { "kind": "quod.field", "value": { "kind": "llvm.param_ref", "name": "s" }, "name": "len" },
+                "rhs": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 1 } }
+            ]
+          }
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call", "function": "memcpy",
+            "args": [
+              { "kind": "quod.local_ref", "name": "p" },
+              { "kind": "quod.field", "value": { "kind": "llvm.param_ref", "name": "s" }, "name": "ptr" },
+              { "kind": "quod.field", "value": { "kind": "llvm.param_ref", "name": "s" }, "name": "len" }
+            ]
+          }
+        },
+        { "kind": "quod.return_expr", "value": { "kind": "quod.local_ref", "name": "p" } }
+      ],
+      "claims": []
+    }
+  ]
+}

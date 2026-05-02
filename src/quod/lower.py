@@ -20,6 +20,7 @@ from llvmlite import ir
 
 from quod.analysis import derive_lattice_claims, elaborate
 from quod.runtime import build_runtime_archive
+from quod.stdlib import resolve_imports
 from quod.model import (
     Assign,
     BinOp,
@@ -791,8 +792,16 @@ def lower(
     for sd in program.structs:
         struct_tys[sd.name] = module.context.get_identified_type(sd.name)
     for sd in program.structs:
+        ty = struct_tys[sd.name]
+        # llvmlite shares one LLVMContext across every Module in a Python
+        # process, so identified types interned by name persist between
+        # builds. The same struct identity coming back is fine — the body
+        # was set on a prior pass, and we've already verified our model
+        # rejects redefinitions with conflicting layouts.
+        if not ty.is_opaque:
+            continue
         body = [_type_to_llvm(f.type, struct_tys) for f in sd.fields]
-        struct_tys[sd.name].set_body(*body)
+        ty.set_body(*body)
 
     constants: dict[str, ir.GlobalVariable] = {}
     for c in program.constants:
@@ -1012,6 +1021,10 @@ def compile_program(
     if not 0 <= profile <= 3:
         raise ValueError(f"profile must be 0..3, got {profile}")
     build_dir.mkdir(parents=True, exist_ok=True)
+
+    # Resolve imports first: stdlib functions (e.g. std.str) need to be
+    # visible to the analysis pass and to lowering, just like user functions.
+    program = resolve_imports(program)
 
     # Elaborate: derive lattice claims and merge them into the program before
     # lowering. Override flags (--enforce-lattice etc.) apply uniformly to

@@ -636,13 +636,38 @@ class _ProgramBase(_Node):
     functions: tuple[Function, ...] = ()
     externs: tuple[ExternFunction, ...] = ()
     structs: tuple[StructDef, ...] = ()
+    imports: tuple[str, ...] = ()
 
     @model_serializer(mode="wrap")
-    def _drop_empty_structs(self, handler, info):
+    def _drop_empty_collections(self, handler, info):
         data = handler(self)
         if not self.structs:
             data.pop("structs", None)
+        if not self.imports:
+            data.pop("imports", None)
         return data
+
+    @field_validator("imports")
+    @classmethod
+    def _validate_import_names(cls, names: tuple[str, ...]) -> tuple[str, ...]:
+        # Sanitize: only allow [A-Za-z0-9_.] so imports can't path-traverse
+        # to disk locations outside the stdlib directory. Names map to file
+        # paths via `stdlib/<name>.json` — no slashes, no leading/trailing
+        # dots, no empty segments.
+        seen: set[str] = set()
+        for n in names:
+            if not n or not all(c.isalnum() or c in "._" for c in n):
+                raise ValueError(
+                    f"invalid import name {n!r}: must match [A-Za-z0-9_.] only"
+                )
+            if n.startswith(".") or n.endswith(".") or ".." in n:
+                raise ValueError(
+                    f"invalid import name {n!r}: no leading/trailing/empty segments"
+                )
+            if n in seen:
+                raise ValueError(f"duplicate import {n!r}")
+            seen.add(n)
+        return names
 
 
 def _validate_structs(program: "_ProgramBase") -> None:
@@ -655,6 +680,11 @@ def _validate_structs(program: "_ProgramBase") -> None:
       resolves to a defined struct.
     - Every `StructInit` covers exactly the fields of the named def, with
       no missing or extra names and no duplicates.
+
+    When `program.imports` is non-empty, struct refs reachable from
+    function bodies / params / externs are deferred — the imported module
+    may bring the struct in, and we can't tell from this side. The fully
+    resolved Program (with imports cleared) gets the complete check.
     """
     seen_names: set[str] = set()
     for sd in program.structs:
@@ -675,6 +705,9 @@ def _validate_structs(program: "_ProgramBase") -> None:
     # fields; a path that revisits the start is a cycle.
     for sd in program.structs:
         _check_no_struct_cycle(sd.name, by_name)
+
+    if program.imports:
+        return
 
     # Validate every struct ref reachable from the program is defined.
     for sd in program.structs:
@@ -945,6 +978,10 @@ _NO_LABEL: NodeLabel = lambda _node: ""
 
 def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
     lines: list[str] = ["program {"]
+    if program.imports:
+        lines.append("  imports:")
+        for name in program.imports:
+            lines.append(f"    {name}")
     if program.constants:
         lines.append("  constants:")
         for c in program.constants:
@@ -966,7 +1003,10 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
         lines.append("  functions:")
         for fn in program.functions:
             lines.extend("    " + line for line in format_function(fn, label=label).splitlines())
-    if not program.constants and not program.functions and not program.externs and not program.structs:
+    if (
+        not program.constants and not program.functions
+        and not program.externs and not program.structs and not program.imports
+    ):
         lines.append("  (empty)")
     lines.append("}")
     return "\n".join(lines)

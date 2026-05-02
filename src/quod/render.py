@@ -530,6 +530,10 @@ def _struct_def_line(sd: StructDef, indent: int) -> Line:
 
 def format_program_lines(program: Program) -> Iterator[Line]:
     yield Line(program, 0, (Span("program", "keyword"), Span(" {", "punct")))
+    if program.imports:
+        yield Line(None, 2, (Span("imports:", "section"),))
+        for name in program.imports:
+            yield Line(None, 4, (Span(name, "const_name"),))
     if program.constants:
         yield Line(None, 2, (Span("constants:", "section"),))
         for c in program.constants:
@@ -549,6 +553,7 @@ def format_program_lines(program: Program) -> Iterator[Line]:
     if (
         not program.constants and not program.functions
         and not program.externs and not program.structs
+        and not program.imports
     ):
         yield Line(None, 2, (Span("(empty)", "comment"),))
     yield Line(None, 0, (Span("}", "punct"),))
