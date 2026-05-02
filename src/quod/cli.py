@@ -186,7 +186,18 @@ def _selected_program():
         raise typer.Exit(1)
 
 
+def _file_override() -> Path | None:
+    """The --file / -f override, if any. When set, all CLI commands
+    that load/save a program operate on this file directly — no
+    quod.toml or [[program]] entry required. Useful for inspecting
+    standalone .json files (e.g. stdlib modules in src/quod/stdlib/)."""
+    return _state.get("file_path")  # type: ignore[return-value]
+
+
 def _path() -> Path:
+    f = _file_override()
+    if f is not None:
+        return f
     cfg = _cfg()
     return cfg.resolve(_selected_program().file)
 
@@ -194,7 +205,10 @@ def _path() -> Path:
 def _load() -> Program:
     p = _path()
     if not p.exists():
-        typer.echo(f"error: {p} does not exist (run `quod init` first)", err=True)
+        if _file_override() is not None:
+            typer.echo(f"error: {p} does not exist", err=True)
+        else:
+            typer.echo(f"error: {p} does not exist (run `quod init` first)", err=True)
         raise typer.Exit(1)
     return load_program(p)
 
@@ -267,13 +281,27 @@ def root(
         help="Which [[program]] to operate on (omit if quod.toml has only one).",
         autocompletion=_comp.program_names,
     ),
+    file: Path | None = typer.Option(
+        None, "--file", "-f",
+        help=(
+            "Operate on this program.json file directly, bypassing "
+            "quod.toml. Useful for inspecting standalone modules "
+            "(e.g. stdlib files in src/quod/stdlib/). Mutually "
+            "exclusive with --config / --program; build / run still "
+            "require a quod.toml since they need bin entries."
+        ),
+    ),
     no_color: bool = typer.Option(
         False, "--no-color",
         help="Disable ANSI color even on a TTY. NO_COLOR env var also works.",
     ),
 ) -> None:
+    if file is not None and program is not None:
+        typer.echo("error: --file and --program are mutually exclusive", err=True)
+        raise typer.Exit(2)
     _state["config_path"] = config
     _state["program_name"] = program
+    _state["file_path"] = file
     _state["no_color"] = no_color
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
