@@ -111,6 +111,15 @@ file    = "json/phase3_parse_number/program.json"
   name  = "json_v1_phase3"
   entry = "main"
 
+[[program]]
+name    = "json_v1_phase4"
+version = "0.1.0"
+file    = "json/phase4_parse_string/program.json"
+
+  [[program.bin]]
+  name  = "json_v1_phase4"
+  entry = "main"
+
 # ---------- strings ----------
 
 [[program]]
