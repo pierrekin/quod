@@ -1,0 +1,7 @@
+{
+  "c_file": "loop_walk.c",
+  "expect": {
+    "stdout": "abcdef\ncdef\nef\n",
+    "exit": 0
+  }
+}

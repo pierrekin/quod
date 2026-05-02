@@ -48,6 +48,7 @@ from quod.model import (
     Statement,
     Type,
     While,
+    Widen,
 )
 
 
@@ -532,9 +533,12 @@ class _FunctionTranslator:
 
     def _i64_offset(self, cursor: cx.Cursor) -> Expr:
         """Translate an offset expression into an i64-typed Expr suitable
-        for `quod.ptr_offset`. Until the language gains a widening node,
-        we restrict offsets to integer literals (which we can emit as i64
-        directly) — variables would need a sext that quod can't yet express.
+        for `quod.ptr_offset`.
+
+        Literal `int`s become i64 IntLits directly (no IR cost). Variable
+        offsets — e.g. a loop counter — get wrapped in `quod.widen(…, i64)`,
+        which lowers to a single `sext` instruction. The C `int` type is
+        signed, so sign-extension matches C's promotion rules.
         """
         c = _unwrap(cursor)
         if c.kind == cx.CursorKind.INTEGER_LITERAL:
@@ -553,12 +557,8 @@ class _FunctionTranslator:
             ):
                 lit_tokens = [t.spelling for t in _unwrap(inner[0]).get_tokens()]
                 return IntLit(type=_I64, value=-int(lit_tokens[0], 0))
-        raise _refuse(
-            c,
-            "pointer-arithmetic offset must be an integer literal in v1; "
-            "variable offsets need an i32→i64 widening that quod doesn't "
-            "yet expose. Track the offset as a constant or compute outside the C source."
-        )
+        # Variable offset: translate as an int expression and widen to i64.
+        return Widen(value=self.expr(cursor), target=_I64, signed=True)
 
 
 def _translate_function(

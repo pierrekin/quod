@@ -63,6 +63,7 @@ from quod.model import (
     StructType,
     While,
     PtrOffset,
+    Widen,
     WithArena,
     Z3Justification,
 )
@@ -232,6 +233,20 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "offset": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 7},
         },
         "see_also": ["quod.string_ref", "llvm.i8_ptr"],
+    },
+    "quod.widen": {
+        "class": Widen,
+        "summary": (
+            "Cast an integer between widths. Narrower→wider sign-extends "
+            "(or zero-extends when signed=false); wider→narrower truncates. "
+            "Lowered to LLVM `sext` / `zext` / `trunc`."
+        ),
+        "example": {
+            "kind": "quod.widen",
+            "value": {"kind": "llvm.param_ref", "name": "k"},
+            "target": {"kind": "llvm.i64"},
+        },
+        "see_also": ["quod.ptr_offset"],
     },
 
     # ---------- statement ----------
@@ -484,7 +499,7 @@ _CATEGORIES: dict[str, list[str]] = {
     "expression": [
         "llvm.const_int", "llvm.param_ref", "quod.local_ref", "llvm.binop",
         "quod.sc_or", "quod.sc_and", "llvm.call", "quod.string_ref",
-        "quod.struct_init", "quod.field", "quod.ptr_offset",
+        "quod.struct_init", "quod.field", "quod.ptr_offset", "quod.widen",
     ],
     "statement": [
         "quod.return_int", "quod.return_expr", "quod.if",

@@ -56,6 +56,7 @@ from quod.model import (
     StructInit,
     StructType,
     While,
+    Widen,
     WithArena,
 )
 
@@ -248,6 +249,19 @@ def _lower_expr(
                     f"ptr_offset offset must be i64, got {off_val.type}"
                 )
             return builder.gep(base_val, [off_val], inbounds=True)
+        case Widen(value=v, target=t, signed=signed):
+            val = go(v)
+            target_ty = _type_to_llvm(t)
+            if not isinstance(val.type, ir.IntType):
+                raise ValueError(f"widen source must be an integer, got {val.type}")
+            if not isinstance(target_ty, ir.IntType):
+                raise ValueError(f"widen target must be an int type, got {t!r}")
+            src_w, dst_w = val.type.width, target_ty.width
+            if src_w == dst_w:
+                return val
+            if src_w < dst_w:
+                return builder.sext(val, target_ty) if signed else builder.zext(val, target_ty)
+            return builder.trunc(val, target_ty)
     raise ValueError(f"unhandled expr: {expr!r}")
 
 

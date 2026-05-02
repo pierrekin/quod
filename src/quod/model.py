@@ -156,10 +156,32 @@ class PtrOffset(_Node):
     offset: "Expr"   # must lower to i64
 
 
+class Widen(_Node):
+    """Cast an integer value between widths.
+
+    Lowers to `sext` (default) / `zext` / `trunc` depending on the
+    relationship between the source type's width and `target`'s. When
+    `signed=True` (default) and the target is wider, the high bits get
+    sign-extended; when `signed=False`, zero-extended. Truncation is
+    width-only and ignores `signed`. A no-op cast (same width) returns
+    the value unchanged.
+
+    Quod's convention is signed integers, so `signed=True` matches the
+    common case (`int x; (int64_t)x;` → sign-extend). Reach for
+    `signed=False` only when the source value is genuinely unsigned in
+    intent (e.g., a byte read from a buffer being widened to i64 for
+    arithmetic).
+    """
+    kind: Literal["quod.widen"] = "quod.widen"
+    value: "Expr"
+    target: "IntType"
+    signed: bool = True
+
+
 Expr = Annotated[
     Union[
         IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
-        Call, StringRef, FieldRead, StructInit, PtrOffset,
+        Call, StringRef, FieldRead, StructInit, PtrOffset, Widen,
     ],
     Field(discriminator="kind"),
 ]
@@ -493,6 +515,8 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
             case PtrOffset(base=b, offset=o):
                 visit_expr(b)
                 visit_expr(o)
+            case Widen(value=v):
+                visit_expr(v)
             case _:
                 pass
 
@@ -830,6 +854,8 @@ def _check_struct_uses_in_expr(expr, by_name: dict[str, "StructDef"], *, where: 
         case PtrOffset(base=b, offset=o):
             _check_struct_uses_in_expr(b, by_name, where=where)
             _check_struct_uses_in_expr(o, by_name, where=where)
+        case Widen(value=v):
+            _check_struct_uses_in_expr(v, by_name, where=where)
 
 
 class Program(_ProgramBase):
@@ -1166,4 +1192,7 @@ def _format_expr(expr) -> str:
             return f"{tname} {{ {inner} }}"
         case PtrOffset(base=b, offset=o):
             return f"({_format_expr(b)} + {_format_expr(o)})"
+        case Widen(value=v, target=t, signed=signed):
+            kind = "" if signed else "u"
+            return f"{kind}widen({_format_expr(v)} to {_format_type(t)})"
     raise ValueError(f"unhandled expr: {expr!r}")

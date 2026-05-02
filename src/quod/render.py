@@ -60,6 +60,7 @@ from quod.model import (
     StructInit,
     StructType,
     While,
+    Widen,
     WithArena,
     _Node,
     format_claim,
@@ -267,6 +268,15 @@ def _expr_spans(expr) -> tuple[Span, ...]:
                 *_expr_spans(b),
                 Span(" + ", "op"),
                 *_expr_spans(o),
+                Span(")", "punct"),
+            )
+        case Widen(value=v, target=t, signed=signed):
+            kind = "widen" if signed else "uwiden"
+            return (
+                Span(kind, "fn_name"), Span("(", "punct"),
+                *_expr_spans(v),
+                Span(" to ", "keyword"),
+                type_span(t),
                 Span(")", "punct"),
             )
     raise ValueError(f"unhandled expr: {expr!r}")

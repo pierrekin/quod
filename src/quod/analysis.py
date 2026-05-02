@@ -31,6 +31,7 @@ from quod.model import (
     Let,
     Program,
     PtrOffset,
+    Widen,
     ReturnExpr,
     ShortCircuitAnd,
     ShortCircuitOr,
@@ -153,4 +154,6 @@ def _walk_calls_in_expr(expr) -> Iterator[Call]:
         case PtrOffset(base=b, offset=o):
             yield from _walk_calls_in_expr(b)
             yield from _walk_calls_in_expr(o)
+        case Widen(value=v):
+            yield from _walk_calls_in_expr(v)
         # IntLit, ParamRef, LocalRef, StringRef carry no nested Calls.

@@ -1,0 +1,30 @@
+{
+  "program": {
+    "constants": [{ "name": ".fmt", "value": "got %d\n" }],
+    "externs": [
+      { "name": "printf", "param_types": [{ "kind": "llvm.i8_ptr" }], "varargs": true }
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": { "kind": "llvm.i32" },
+        "body": [
+          { "kind": "quod.let", "name": "wide", "type": { "kind": "llvm.i64" },
+            "init": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 4294967296 } },
+          { "kind": "quod.let", "name": "narrow", "type": { "kind": "llvm.i32" },
+            "init": { "kind": "quod.widen",
+                      "value": { "kind": "quod.local_ref", "name": "wide" },
+                      "target": { "kind": "llvm.i32" } } },
+          { "kind": "quod.expr_stmt",
+            "value": { "kind": "llvm.call", "function": "printf",
+                       "args": [{ "kind": "quod.string_ref", "name": ".fmt" },
+                                { "kind": "quod.local_ref", "name": "narrow" }] } },
+          { "kind": "quod.return_int", "value": 0 }
+        ],
+        "claims": []
+      }
+    ]
+  },
+  "expect": { "stdout": "got 0\n", "exit": 0 }
+}
