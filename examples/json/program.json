@@ -1,0 +1,122 @@
+{
+  "constants": [],
+  "functions": [
+    {
+      "name": "main",
+      "params": [],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": [
+        {
+          "kind": "quod.return_int",
+          "value": 0
+        }
+      ],
+      "claims": []
+    }
+  ],
+  "externs": [],
+  "structs": [
+    {
+      "name": "Parser",
+      "fields": [
+        {
+          "name": "input_ptr",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "input_len",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "cursor",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "arena",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "had_error",
+          "type": {
+            "kind": "llvm.i8"
+          }
+        }
+      ]
+    },
+    {
+      "name": "JsonValue",
+      "fields": [
+        {
+          "name": "tag",
+          "type": {
+            "kind": "llvm.i8"
+          }
+        },
+        {
+          "name": "b",
+          "type": {
+            "kind": "llvm.i8"
+          }
+        },
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "str_ptr",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "str_len",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "arr_ptr",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "arr_count",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "obj_keys",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "obj_values",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "obj_count",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ]
+    }
+  ]
+}
