@@ -60,6 +60,7 @@ from quod.model import (
     StructField,
     StructInit,
     StructType,
+    TryExpr,
     Widen,
     WithArena,
 )
@@ -706,3 +707,221 @@ def test_enum_round_trip_through_i8_ptr():
         enums=(inner, outer), functions=(main,),
     )
     assert _build_and_run(prog) == "66\n"
+
+
+# ---------- 12. ? happy path: returns the payload field ----------
+
+def _maybe_enum() -> EnumDef:
+    return EnumDef(
+        name="Maybe",
+        variants=(
+            EnumVariant(name="Some", fields=(EnumPayloadField(name="value", type=I64Type()),)),
+            EnumVariant(name="None"),
+        ),
+    )
+
+
+def test_try_happy_path_extracts_payload():
+    """`Some(42)? + 1` evaluates to 43 (payload + 1)."""
+    maybe = _maybe_enum()
+    inner_call = Function(
+        name="get_some", return_type=EnumType(name="Maybe"),
+        body=(ReturnExpr(value=EnumInit(
+            enum="Maybe", variant="Some",
+            fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=42)),),
+        )),),
+    )
+    use = Function(
+        name="use_it", return_type=EnumType(name="Maybe"),
+        body=(
+            Let(name="v", type=I64Type(), init=TryExpr(value=Call(function="get_some"))),
+            ReturnExpr(value=EnumInit(
+                enum="Maybe", variant="Some",
+                fields=(FieldInit(name="value", value=BinOp(
+                    op="add",
+                    lhs=LocalRef(name="v"),
+                    rhs=IntLit(type=I64Type(), value=1),
+                )),),
+            )),
+        ),
+    )
+    main = Function(
+        name="main", return_type=I32Type(),
+        body=(
+            Let(name="r", type=EnumType(name="Maybe"), init=Call(function="use_it")),
+            Match(scrutinee=LocalRef(name="r"), arms=(
+                MatchArm(variant="Some", bindings=("v",),
+                         body=(_print_int_call(LocalRef(name="v")),)),
+                MatchArm(variant="None",
+                         body=(_print_int_call(IntLit(type=I64Type(), value=-1)),)),
+            )),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    prog = Program(
+        constants=(_FMT_INT,), externs=(_PRINTF,), enums=(maybe,),
+        functions=(inner_call, use, main),
+    )
+    assert _build_and_run(prog) == "43\n"
+
+
+# ---------- 13. ? sad path: propagates the sad variant ----------
+
+def test_try_sad_path_propagates():
+    """`get_none()?` makes the calling function return None."""
+    maybe = _maybe_enum()
+    get_none = Function(
+        name="get_none", return_type=EnumType(name="Maybe"),
+        body=(ReturnExpr(value=EnumInit(enum="Maybe", variant="None")),),
+    )
+    use = Function(
+        name="use_it", return_type=EnumType(name="Maybe"),
+        body=(
+            Let(name="v", type=I64Type(), init=TryExpr(value=Call(function="get_none"))),
+            # Unreachable — the ? above propagates None back up.
+            ReturnExpr(value=EnumInit(
+                enum="Maybe", variant="Some",
+                fields=(FieldInit(name="value", value=LocalRef(name="v")),),
+            )),
+        ),
+    )
+    main = Function(
+        name="main", return_type=I32Type(),
+        body=(
+            Let(name="r", type=EnumType(name="Maybe"), init=Call(function="use_it")),
+            Match(scrutinee=LocalRef(name="r"), arms=(
+                MatchArm(variant="Some", bindings=("v",),
+                         body=(_print_int_call(LocalRef(name="v")),)),
+                MatchArm(variant="None",
+                         body=(_print_int_call(IntLit(type=I64Type(), value=-99)),)),
+            )),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    prog = Program(
+        constants=(_FMT_INT,), externs=(_PRINTF,), enums=(maybe,),
+        functions=(get_none, use, main),
+    )
+    assert _build_and_run(prog) == "-99\n"
+
+
+# ---------- 14. ? on enum-payload variant (the JSON parser shape) ----------
+
+def test_try_on_result_carrying_enum_payload():
+    """ParseResult { Ok(value: JsonValue), Err } — `?` should extract
+    the JsonValue payload on happy path, propagate Err otherwise."""
+    inner = EnumDef(name="Inner", variants=(
+        EnumVariant(name="N", fields=(EnumPayloadField(name="n", type=I64Type()),)),
+    ))
+    result = EnumDef(name="R", variants=(
+        EnumVariant(name="Ok", fields=(EnumPayloadField(name="value", type=EnumType(name="Inner")),)),
+        EnumVariant(name="Err"),
+    ))
+    make_ok = Function(
+        name="make_ok", return_type=EnumType(name="R"),
+        body=(ReturnExpr(value=EnumInit(
+            enum="R", variant="Ok",
+            fields=(FieldInit(name="value", value=EnumInit(
+                enum="Inner", variant="N",
+                fields=(FieldInit(name="n", value=IntLit(type=I64Type(), value=77)),),
+            )),),
+        )),),
+    )
+    use = Function(
+        name="use_it", return_type=EnumType(name="R"),
+        body=(
+            Let(name="i", type=EnumType(name="Inner"),
+                init=TryExpr(value=Call(function="make_ok"))),
+            ReturnExpr(value=EnumInit(
+                enum="R", variant="Ok",
+                fields=(FieldInit(name="value", value=LocalRef(name="i")),),
+            )),
+        ),
+    )
+    main = Function(
+        name="main", return_type=I32Type(),
+        body=(
+            Let(name="r", type=EnumType(name="R"), init=Call(function="use_it")),
+            Match(scrutinee=LocalRef(name="r"), arms=(
+                MatchArm(variant="Ok", bindings=("v",), body=(
+                    Match(scrutinee=LocalRef(name="v"), arms=(
+                        MatchArm(variant="N", bindings=("n",),
+                                 body=(_print_int_call(LocalRef(name="n")),)),
+                    )),
+                )),
+                MatchArm(variant="Err",
+                         body=(_print_int_call(IntLit(type=I64Type(), value=-1)),)),
+            )),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    prog = Program(
+        constants=(_FMT_INT,), externs=(_PRINTF,), enums=(inner, result),
+        functions=(make_ok, use, main),
+    )
+    assert _build_and_run(prog) == "77\n"
+
+
+# ---------- 15. validator rejects ?-ineligible enums ----------
+
+def test_try_rejects_ineligible_enum():
+    """Three-variant enum is not ?-eligible; lower must error."""
+    bad = EnumDef(name="Bad", variants=(
+        EnumVariant(name="A"),
+        EnumVariant(name="B"),
+        EnumVariant(name="C"),
+    ))
+    make = Function(
+        name="make", return_type=EnumType(name="Bad"),
+        body=(ReturnExpr(value=EnumInit(enum="Bad", variant="A")),),
+    )
+    use = Function(
+        name="use_it", return_type=EnumType(name="Bad"),
+        body=(
+            ExprStmt(value=TryExpr(value=Call(function="make"))),
+            ReturnExpr(value=EnumInit(enum="Bad", variant="A")),
+        ),
+    )
+    main = Function(
+        name="main", return_type=I32Type(),
+        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+    )
+    prog = Program(
+        constants=(_FMT_INT,), externs=(_PRINTF,), enums=(bad,),
+        functions=(make, use, main),
+    )
+    with pytest.raises(Exception, match="not \\?-eligible"):
+        _build_and_run(prog)
+
+
+def test_try_rejects_mismatched_return_type():
+    """Function returns Inner but ? is on R — should error."""
+    inner = _maybe_enum()
+    other = EnumDef(name="R", variants=(
+        EnumVariant(name="Ok", fields=(EnumPayloadField(name="value", type=I64Type()),)),
+        EnumVariant(name="Err"),
+    ))
+    make = Function(
+        name="make", return_type=EnumType(name="R"),
+        body=(ReturnExpr(value=EnumInit(
+            enum="R", variant="Ok",
+            fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=1)),),
+        )),),
+    )
+    bad_use = Function(
+        name="bad_use", return_type=EnumType(name="Maybe"),
+        body=(
+            Let(name="v", type=I64Type(), init=TryExpr(value=Call(function="make"))),
+            ReturnExpr(value=EnumInit(enum="Maybe", variant="None")),
+        ),
+    )
+    main = Function(
+        name="main", return_type=I32Type(),
+        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+    )
+    prog = Program(
+        constants=(_FMT_INT,), externs=(_PRINTF,), enums=(inner, other),
+        functions=(make, bad_use, main),
+    )
+    with pytest.raises(Exception, match="requires the enclosing function"):
+        _build_and_run(prog)

@@ -205,6 +205,27 @@ class NullPtr(_Node):
     kind: Literal["quod.null_ptr"] = "quod.null_ptr"
 
 
+class TryExpr(_Node):
+    """Postfix `?` propagation. `value` must produce a value of a
+    2-variant enum where exactly one variant has a single payload field
+    (the "happy" variant) and the other has no payload (the "sad"
+    variant). Variant names don't matter — Ok/Err, Some/None, Found/
+    Missing all qualify.
+
+    On evaluation: if value is the sad variant, the enclosing function
+    immediately returns the sad variant (function return type must be
+    the same enum). If happy, the expression evaluates to the payload
+    field value.
+
+    Lowered as: spill value to alloca, switch on tag; sad-arm
+    constructs the return type's sad variant and rets; happy-arm
+    bitcasts the payload to the variant struct, GEP+loads the single
+    field. The TryExpr's value is that loaded field.
+    """
+    kind: Literal["quod.try"] = "quod.try"
+    value: "Expr"
+
+
 class SizeOf(_Node):
     """Size in bytes of a quod type, computed at lower time from LLVM's
     target data layout. Returns i64. Useful for stride-correct pointer
@@ -265,7 +286,7 @@ Expr = Annotated[
     Union[
         IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
         Call, StringRef, FieldRead, StructInit, PtrOffset, Widen, Load,
-        NullPtr, CharLit, EnumInit, SizeOf,
+        NullPtr, CharLit, EnumInit, SizeOf, TryExpr,
     ],
     Field(discriminator="kind"),
 ]
@@ -686,6 +707,8 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
                 visit_expr(v)
             case Load(ptr=p):
                 visit_expr(p)
+            case TryExpr(value=v):
+                visit_expr(v)
             case _:
                 pass
 
@@ -820,6 +843,21 @@ class EnumDef(_Node):
         """Number of i64 slots needed to hold the largest variant's
         payload. At least 1 to avoid [0 x i64] arrays at lower time."""
         return max((len(v.fields) for v in self.variants), default=0) or 1
+
+    def try_variants(self) -> tuple["EnumVariant | None", "EnumVariant | None"]:
+        """If this enum is `?`-eligible, return (happy_variant, sad_variant);
+        otherwise (None, None). Eligible iff: exactly two variants, one with
+        exactly one payload field (happy), one with zero (sad). Variant
+        names are irrelevant — Ok/Err, Some/None, Found/Missing etc. all
+        qualify by shape."""
+        if len(self.variants) != 2:
+            return (None, None)
+        a, b = self.variants
+        if len(a.fields) == 1 and len(b.fields) == 0:
+            return (a, b)
+        if len(b.fields) == 1 and len(a.fields) == 0:
+            return (b, a)
+        return (None, None)
 
 
 class Param(_Node):
@@ -1266,6 +1304,8 @@ def _check_struct_uses_in_expr(
             _check_type_refs(t, by_name, enums_by_name, where=where)
         case SizeOf(type=t):
             _check_type_refs(t, by_name, enums_by_name, where=where)
+        case TryExpr(value=v):
+            _check_struct_uses_in_expr(v, by_name, enums_by_name, where=where)
 
 
 class Program(_ProgramBase):
@@ -1651,6 +1691,8 @@ def _format_expr(expr) -> str:
             return repr(v)
         case SizeOf(type=t):
             return f"sizeof[{_format_type(t)}]"
+        case TryExpr(value=v):
+            return f"{_format_expr(v)}?"
         case EnumInit(enum=ename, variant=vname, fields=field_inits):
             if field_inits:
                 inner = ", ".join(f"{fi.name}: {_format_expr(fi.value)}" for fi in field_inits)

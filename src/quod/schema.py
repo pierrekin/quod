@@ -57,6 +57,7 @@ from quod.model import (
     Match,
     MatchArm,
     SizeOf,
+    TryExpr,
     NonNegativeClaim,
     NullPtr,
     Param,
@@ -295,6 +296,22 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         ),
         "example": {"kind": "quod.char_lit", "value": "n"},
         "see_also": ["llvm.const_int"],
+    },
+    "quod.try": {
+        "class": TryExpr,
+        "summary": (
+            "Postfix `?` propagation. `value` must produce a value of "
+            "a 2-variant enum where one variant has a single payload "
+            "field (the happy variant) and the other has no payload "
+            "(the sad variant). On the sad value, the enclosing "
+            "function returns the same sad variant immediately. On the "
+            "happy value, evaluates to the payload field. Variant "
+            "names don't matter — Ok/Err, Some/None, Found/Missing all "
+            "qualify by shape. Function return type must be the same "
+            "enum (no cross-enum conversion in v1)."
+        ),
+        "example": {"kind": "quod.try", "value": {"kind": "llvm.call", "function": "alloc.json.parse", "args": []}},
+        "see_also": ["EnumDef", "quod.match"],
     },
     "quod.sizeof": {
         "class": SizeOf,
@@ -688,7 +705,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "quod.sc_or", "quod.sc_and", "llvm.call", "quod.string_ref",
         "quod.struct_init", "quod.field", "quod.ptr_offset", "quod.widen",
         "quod.load", "quod.null_ptr", "quod.char_lit", "quod.enum_init",
-        "quod.sizeof",
+        "quod.sizeof", "quod.try",
     ],
     "statement": [
         "quod.return_expr", "quod.return", "quod.if",

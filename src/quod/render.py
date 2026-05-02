@@ -66,6 +66,7 @@ from quod.model import (
     EnumType,
     Match,
     SizeOf,
+    TryExpr,
     StructDef,
     StructInit,
     StructType,
@@ -309,6 +310,8 @@ def _expr_spans(expr) -> tuple[Span, ...]:
                 Span("sizeof", "fn_name"), Span("[", "punct"),
                 type_span(t), Span("]", "punct"),
             )
+        case TryExpr(value=v):
+            return (*_expr_spans(v), Span("?", "op"))
         case EnumInit(enum=ename, variant=vname, fields=field_inits):
             head = (
                 Span(ename, "type"), Span("::", "op"), Span(vname, "fn_name"),

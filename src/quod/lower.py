@@ -58,6 +58,7 @@ from quod.model import (
     PtrOffset,
     ReturnExpr,
     SizeOf,
+    TryExpr,
     ReturnInRangeClaim,
     ShortCircuitAnd,
     ShortCircuitOr,
@@ -327,6 +328,67 @@ def _lower_expr(
         case SizeOf(type=t):
             size, _align = _size_of_quod_type(t, struct_defs, enum_defs)
             return ir.Constant(I64, size)
+        case TryExpr(value=inner):
+            inner_val = go(inner)
+            inner_ty = inner_val.type
+            if not isinstance(inner_ty, ir.IdentifiedStructType):
+                raise ValueError(
+                    f"? requires an enum value, got {inner_ty}"
+                )
+            src_ed = enum_defs.get(inner_ty.name)
+            if src_ed is None:
+                raise ValueError(f"? on unknown enum type {inner_ty.name!r}")
+            happy, sad = src_ed.try_variants()
+            if happy is None:
+                raise ValueError(
+                    f"? on enum {src_ed.name!r}: not ?-eligible "
+                    "(needs exactly two variants — one with a single "
+                    "payload field, one with no payload)"
+                )
+            llvm_fn_local = builder.block.parent
+            ret_ty = llvm_fn_local.function_type.return_type
+            if not (isinstance(ret_ty, ir.IdentifiedStructType)
+                    and ret_ty.name == src_ed.name):
+                raise ValueError(
+                    f"? on {src_ed.name!r} requires the enclosing function "
+                    f"to return {src_ed.name!r}, got {ret_ty}"
+                )
+            # Spill, switch on tag.
+            val_alloca = builder.alloca(inner_ty)
+            builder.store(inner_val, val_alloca)
+            tag_ptr = builder.gep(
+                val_alloca, [ir.Constant(I32, 0), ir.Constant(I32, 0)],
+            )
+            tag = builder.load(tag_ptr)
+            sad_bb = llvm_fn_local.append_basic_block("try_sad")
+            happy_bb = llvm_fn_local.append_basic_block("try_happy")
+            sw = builder.switch(tag, sad_bb)
+            sw.add_case(ir.Constant(I8, src_ed.variant_index(sad.name)), sad_bb)
+            sw.add_case(ir.Constant(I8, src_ed.variant_index(happy.name)), happy_bb)
+            # Sad path: build the same enum's sad variant and ret it.
+            builder.position_at_end(sad_bb)
+            sad_alloca = builder.alloca(inner_ty)
+            sad_tag_ptr = builder.gep(
+                sad_alloca, [ir.Constant(I32, 0), ir.Constant(I32, 0)],
+            )
+            builder.store(
+                ir.Constant(I8, src_ed.variant_index(sad.name)), sad_tag_ptr,
+            )
+            sad_val = builder.load(sad_alloca)
+            builder.ret(sad_val)
+            # Happy path: bitcast payload to variant struct, GEP+load
+            # the single field. Builder is left at happy_bb so callers
+            # continue from here.
+            builder.position_at_end(happy_bb)
+            payload_ptr = builder.gep(
+                val_alloca, [ir.Constant(I32, 0), ir.Constant(I32, 1)],
+            )
+            variant_ty = _variant_struct_ty(happy, struct_tys, enum_tys)
+            variant_ptr = builder.bitcast(payload_ptr, variant_ty.as_pointer())
+            field_ptr = builder.gep(
+                variant_ptr, [ir.Constant(I32, 0), ir.Constant(I32, 0)],
+            )
+            return builder.load(field_ptr)
         case EnumInit(enum=ename, variant=vname, fields=field_inits):
             ed = enum_defs.get(ename)
             ety = enum_tys.get(ename)

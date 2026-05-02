@@ -79,6 +79,7 @@ from quod.model import (
     EnumInit,
     EnumType,
     SizeOf,
+    TryExpr,
     ExprStmt,
     FieldInit,
     FieldRead,
@@ -140,7 +141,7 @@ _MULTI_OPS = (
     "->", "==", "!=", "<=", ">=", "<u", ">u", "<=u", ">=u", "/u",
     "||", "&&", "..", "::", "=>",
 )
-_SINGLE_OPS = "(){}[],:;=+-*/%<>.&|"
+_SINGLE_OPS = "(){}[],:;=+-*/%<>.&|?"
 
 
 class ScriptError(ValueError):
@@ -701,10 +702,16 @@ class Parser:
 
     def _postfix(self):
         e = self._primary()
-        while self.at("OP", ".") and self.peek(1).kind == "IDENT":
-            self.eat()
-            field = self.expect("IDENT").value
-            e = FieldRead(value=e, name=field)
+        while True:
+            if self.at("OP", ".") and self.peek(1).kind == "IDENT":
+                self.eat()
+                field = self.expect("IDENT").value
+                e = FieldRead(value=e, name=field)
+            elif self.at("OP", "?"):
+                self.eat()
+                e = TryExpr(value=e)
+            else:
+                break
         return e
 
     def _primary(self):
