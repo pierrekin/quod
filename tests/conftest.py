@@ -96,22 +96,37 @@ class CaseFile(pytest.File):
             yield CaseItem.from_parent(self, name=name, case=case)
 
 
+@pytest.hookimpl(trylast=True)
+def pytest_configure(config: pytest.Config) -> None:
+    """Patch the terminal reporter so its compact-mode progress display
+    groups items by *directory*, not by individual case JSON file. The
+    actual item nodeids are unchanged — `pytest tests/cases/lang/arena/
+    scratch.json::scratch` still selects correctly — but the per-line
+    fspath shown during a run collapses every case in a folder onto one
+    line (e.g. `tests/cases/lang/arena .....`) so the output stays scannable
+    as the corpus grows. trylast= so terminal's own pytest_configure (which
+    registers the reporter under that name) runs first."""
+    reporter = config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is None or not hasattr(reporter, "write_fspath_result"):
+        return
+    original = reporter.write_fspath_result
+
+    def grouped(nodeid: str, res, **markup):
+        parts = nodeid.split("::", 1)
+        file_part = parts[0]
+        if file_part.endswith(".json"):
+            file_part = str(Path(file_part).parent)
+        regrouped = file_part + (("::" + parts[1]) if len(parts) > 1 else "")
+        return original(regrouped, res, **markup)
+
+    reporter.write_fspath_result = grouped
+
+
 class CaseItem(pytest.Item):
     def __init__(self, *, case: dict[str, Any], **kw):
         super().__init__(**kw)
         self.case = case
         self._failure_blob: list[str] = []
-        # Group items by parent directory in pytest's progress display.
-        # Compact mode groups by the part of nodeid before '::'; rewriting
-        # it to the case's parent directory collapses every JSON file in a
-        # folder onto one progress line (e.g. `tests/cases/lang/arena .....`).
-        # The original per-file nodeid still works for selection by file
-        # path because pytest_collect_file is unchanged.
-        try:
-            rel = self.path.parent.relative_to(self.session.config.rootpath)
-        except ValueError:
-            rel = self.path.parent
-        self._nodeid = f"{rel}::{self.name}"
 
     def runtest(self) -> None:
         if "cli" in self.case or "steps" in self.case:
