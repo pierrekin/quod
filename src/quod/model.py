@@ -140,10 +140,26 @@ class StructInit(_Node):
     fields: tuple[FieldInit, ...]
 
 
+class PtrOffset(_Node):
+    """Pointer arithmetic on an i8* base. The result is `base + offset` as
+    another i8*, computed via a byte-stride GEP — no scaling for element
+    size, since the underlying type is always i8.
+
+    The result aliases the same allocation as `base`. Lifetime is the
+    caller's responsibility (a slice into an arena is valid until the arena
+    drops, and not after). Out-of-bounds offsets are undefined behaviour,
+    matching the LLVM `getelementptr inbounds` story; if you need a check,
+    add an int_range claim on the offset.
+    """
+    kind: Literal["quod.ptr_offset"] = "quod.ptr_offset"
+    base: "Expr"     # must lower to i8*
+    offset: "Expr"   # must lower to i64
+
+
 Expr = Annotated[
     Union[
         IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
-        Call, StringRef, FieldRead, StructInit,
+        Call, StringRef, FieldRead, StructInit, PtrOffset,
     ],
     Field(discriminator="kind"),
 ]
@@ -474,6 +490,9 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
             case StructInit(fields=field_inits):
                 for fi in field_inits:
                     visit_expr(fi.value)
+            case PtrOffset(base=b, offset=o):
+                visit_expr(b)
+                visit_expr(o)
             case _:
                 pass
 
@@ -775,6 +794,9 @@ def _check_struct_uses_in_expr(expr, by_name: dict[str, "StructDef"], *, where: 
         case Call(args=args):
             for a in args:
                 _check_struct_uses_in_expr(a, by_name, where=where)
+        case PtrOffset(base=b, offset=o):
+            _check_struct_uses_in_expr(b, by_name, where=where)
+            _check_struct_uses_in_expr(o, by_name, where=where)
 
 
 class Program(_ProgramBase):
@@ -1102,4 +1124,6 @@ def _format_expr(expr) -> str:
         case StructInit(type=tname, fields=field_inits):
             inner = ", ".join(f"{fi.name}: {_format_expr(fi.value)}" for fi in field_inits)
             return f"{tname} {{ {inner} }}"
+        case PtrOffset(base=b, offset=o):
+            return f"({_format_expr(b)} + {_format_expr(o)})"
     raise ValueError(f"unhandled expr: {expr!r}")

@@ -1,0 +1,34 @@
+{
+  "program": {
+    "constants": [
+      { "name": ".str.full", "value": "hello, world" },
+      { "name": ".str.fmt",  "value": "tail=%s\n" }
+    ],
+    "externs": [
+      { "name": "printf", "param_types": [{ "kind": "llvm.i8_ptr" }], "varargs": true }
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": { "kind": "llvm.i32" },
+        "body": [
+          { "kind": "quod.expr_stmt",
+            "value": { "kind": "llvm.call", "function": "printf",
+                       "args": [
+                         { "kind": "quod.string_ref", "name": ".str.fmt" },
+                         { "kind": "quod.ptr_offset",
+                           "base": { "kind": "quod.string_ref", "name": ".str.full" },
+                           "offset": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 7 } }
+                       ] } },
+          { "kind": "quod.return_int", "value": 0 }
+        ],
+        "claims": []
+      }
+    ]
+  },
+  "expect": {
+    "stdout": "tail=world\n",
+    "exit": 0
+  }
+}

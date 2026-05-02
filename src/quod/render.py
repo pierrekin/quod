@@ -48,6 +48,7 @@ from quod.model import (
     NonNegativeClaim,
     ParamRef,
     Program,
+    PtrOffset,
     ReturnExpr,
     ReturnInRangeClaim,
     ReturnInt,
@@ -260,6 +261,14 @@ def _expr_spans(expr) -> tuple[Span, ...]:
                 ))
             out.extend((Span(" ", "ws"), Span("}", "punct")))
             return tuple(out)
+        case PtrOffset(base=b, offset=o):
+            return (
+                Span("(", "punct"),
+                *_expr_spans(b),
+                Span(" + ", "op"),
+                *_expr_spans(o),
+                Span(")", "punct"),
+            )
     raise ValueError(f"unhandled expr: {expr!r}")
 
 

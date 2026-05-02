@@ -30,6 +30,7 @@ from quod.model import (
     IntRangeClaim,
     Let,
     Program,
+    PtrOffset,
     ReturnExpr,
     ShortCircuitAnd,
     ShortCircuitOr,
@@ -149,4 +150,7 @@ def _walk_calls_in_expr(expr) -> Iterator[Call]:
         case StructInit(fields=field_inits):
             for fi in field_inits:
                 yield from _walk_calls_in_expr(fi.value)
+        case PtrOffset(base=b, offset=o):
+            yield from _walk_calls_in_expr(b)
+            yield from _walk_calls_in_expr(o)
         # IntLit, ParamRef, LocalRef, StringRef carry no nested Calls.

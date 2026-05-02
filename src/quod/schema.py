@@ -62,6 +62,7 @@ from quod.model import (
     StructInit,
     StructType,
     While,
+    PtrOffset,
     WithArena,
     Z3Justification,
 )
@@ -217,6 +218,20 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "name": "x",
         },
         "see_also": ["quod.struct_init", "quod.field_set"],
+    },
+    "quod.ptr_offset": {
+        "class": PtrOffset,
+        "summary": (
+            "Pointer arithmetic on an i8* base: returns base + offset as i8*. "
+            "Lowered to a single byte-stride GEP. Out-of-bounds offsets are UB; "
+            "if you need a check, attach an int_range claim to the offset."
+        ),
+        "example": {
+            "kind": "quod.ptr_offset",
+            "base": {"kind": "quod.string_ref", "name": ".str.greeting"},
+            "offset": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 7},
+        },
+        "see_also": ["quod.string_ref", "llvm.i8_ptr"],
     },
 
     # ---------- statement ----------
@@ -469,7 +484,7 @@ _CATEGORIES: dict[str, list[str]] = {
     "expression": [
         "llvm.const_int", "llvm.param_ref", "quod.local_ref", "llvm.binop",
         "quod.sc_or", "quod.sc_and", "llvm.call", "quod.string_ref",
-        "quod.struct_init", "quod.field",
+        "quod.struct_init", "quod.field", "quod.ptr_offset",
     ],
     "statement": [
         "quod.return_int", "quod.return_expr", "quod.if",

@@ -44,6 +44,7 @@ from quod.model import (
     NonNegativeClaim,
     ParamRef,
     Program,
+    PtrOffset,
     ReturnExpr,
     ReturnInRangeClaim,
     ReturnInt,
@@ -234,6 +235,18 @@ def _lower_expr(
                 raise ValueError(f"field read on unknown struct {inner_ty.name!r}")
             idx = sd.field_index(fname)
             return builder.extract_value(inner_val, idx)
+        case PtrOffset(base=b, offset=o):
+            base_val = go(b)
+            off_val = go(o)
+            if not (isinstance(base_val.type, ir.PointerType) and base_val.type.pointee == I8):
+                raise ValueError(
+                    f"ptr_offset base must be i8*, got {base_val.type}"
+                )
+            if not (isinstance(off_val.type, ir.IntType) and off_val.type.width == 64):
+                raise ValueError(
+                    f"ptr_offset offset must be i64, got {off_val.type}"
+                )
+            return builder.gep(base_val, [off_val], inbounds=True)
     raise ValueError(f"unhandled expr: {expr!r}")
 
 
