@@ -178,10 +178,27 @@ class Widen(_Node):
     signed: bool = True
 
 
+class Load(_Node):
+    """Read a value of `type` from an i8* base pointer.
+
+    Lowered as `bitcast(ptr, type*)` + `load type, type* %`. The base must
+    lower to i8*; the value type can be any int width or a named struct.
+    Alignment isn't expressed at the model level — LLVM picks the natural
+    alignment for the type. If the underlying memory isn't actually so
+    aligned, that's the caller's problem (and undefined behaviour).
+
+    Pair with `quod.ptr_offset` to read from a non-zero offset of a buffer:
+    `load(ptr_offset(buf, k), i8)`.
+    """
+    kind: Literal["quod.load"] = "quod.load"
+    ptr: "Expr"   # must lower to i8*
+    type: "Type"  # the value type to return
+
+
 Expr = Annotated[
     Union[
         IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
-        Call, StringRef, FieldRead, StructInit, PtrOffset, Widen,
+        Call, StringRef, FieldRead, StructInit, PtrOffset, Widen, Load,
     ],
     Field(discriminator="kind"),
 ]
@@ -517,6 +534,8 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
                 visit_expr(o)
             case Widen(value=v):
                 visit_expr(v)
+            case Load(ptr=p):
+                visit_expr(p)
             case _:
                 pass
 
@@ -856,6 +875,9 @@ def _check_struct_uses_in_expr(expr, by_name: dict[str, "StructDef"], *, where: 
             _check_struct_uses_in_expr(o, by_name, where=where)
         case Widen(value=v):
             _check_struct_uses_in_expr(v, by_name, where=where)
+        case Load(ptr=p, type=t):
+            _check_struct_uses_in_expr(p, by_name, where=where)
+            _check_type_refs(t, by_name, where=where)
 
 
 class Program(_ProgramBase):
@@ -1195,4 +1217,6 @@ def _format_expr(expr) -> str:
         case Widen(value=v, target=t, signed=signed):
             kind = "" if signed else "u"
             return f"{kind}widen({_format_expr(v)} to {_format_type(t)})"
+        case Load(ptr=p, type=t):
+            return f"load[{_format_type(t)}]({_format_expr(p)})"
     raise ValueError(f"unhandled expr: {expr!r}")

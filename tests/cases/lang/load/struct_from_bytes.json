@@ -1,0 +1,104 @@
+{
+  "program": {
+    "constants": [
+      {
+        "name": ".buf",
+        "value": "        \u0007\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
+      },
+      {
+        "name": ".fmt",
+        "value": "len=%lld\n"
+      }
+    ],
+    "structs": [
+      {
+        "name": "Str",
+        "fields": [
+          {
+            "name": "ptr",
+            "type": {
+              "kind": "llvm.i8_ptr"
+            }
+          },
+          {
+            "name": "len",
+            "type": {
+              "kind": "llvm.i64"
+            }
+          }
+        ]
+      }
+    ],
+    "externs": [
+      {
+        "name": "printf",
+        "param_types": [
+          {
+            "kind": "llvm.i8_ptr"
+          }
+        ],
+        "varargs": true
+      }
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": {
+          "kind": "llvm.i32"
+        },
+        "body": [
+          {
+            "kind": "quod.let",
+            "name": "s",
+            "type": {
+              "kind": "llvm.struct",
+              "name": "Str"
+            },
+            "init": {
+              "kind": "quod.load",
+              "ptr": {
+                "kind": "quod.string_ref",
+                "name": ".buf"
+              },
+              "type": {
+                "kind": "llvm.struct",
+                "name": "Str"
+              }
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".fmt"
+                },
+                {
+                  "kind": "quod.field",
+                  "value": {
+                    "kind": "quod.local_ref",
+                    "name": "s"
+                  },
+                  "name": "len"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_int",
+            "value": 0
+          }
+        ],
+        "claims": []
+      }
+    ]
+  },
+  "expect": {
+    "stdout": "len=7\n",
+    "exit": 0
+  }
+}

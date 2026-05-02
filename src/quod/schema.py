@@ -62,6 +62,7 @@ from quod.model import (
     StructInit,
     StructType,
     While,
+    Load,
     PtrOffset,
     Widen,
     WithArena,
@@ -247,6 +248,20 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "target": {"kind": "llvm.i64"},
         },
         "see_also": ["quod.ptr_offset"],
+    },
+    "quod.load": {
+        "class": Load,
+        "summary": (
+            "Read a value of `type` from an i8* base pointer. Lowered to a "
+            "bitcast to the target pointer type plus an LLVM `load`. Compose "
+            "with `quod.ptr_offset` to read at a non-zero offset."
+        ),
+        "example": {
+            "kind": "quod.load",
+            "ptr": {"kind": "quod.string_ref", "name": ".str.greeting"},
+            "type": {"kind": "llvm.i8"},
+        },
+        "see_also": ["quod.ptr_offset", "quod.widen"],
     },
 
     # ---------- statement ----------
@@ -500,6 +515,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "llvm.const_int", "llvm.param_ref", "quod.local_ref", "llvm.binop",
         "quod.sc_or", "quod.sc_and", "llvm.call", "quod.string_ref",
         "quod.struct_init", "quod.field", "quod.ptr_offset", "quod.widen",
+        "quod.load",
     ],
     "statement": [
         "quod.return_int", "quod.return_expr", "quod.if",

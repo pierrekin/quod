@@ -41,6 +41,7 @@ from quod.model import (
     IntLit,
     IntRangeClaim,
     Let,
+    Load,
     LocalRef,
     NonNegativeClaim,
     ParamRef,
@@ -262,6 +263,13 @@ def _lower_expr(
             if src_w < dst_w:
                 return builder.sext(val, target_ty) if signed else builder.zext(val, target_ty)
             return builder.trunc(val, target_ty)
+        case Load(ptr=p, type=t):
+            base = go(p)
+            if not (isinstance(base.type, ir.PointerType) and base.type.pointee == I8):
+                raise ValueError(f"load base must be i8*, got {base.type}")
+            target_ty = _type_to_llvm(t, struct_tys)
+            casted = builder.bitcast(base, target_ty.as_pointer())
+            return builder.load(casted)
     raise ValueError(f"unhandled expr: {expr!r}")
 
 

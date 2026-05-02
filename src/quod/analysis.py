@@ -29,6 +29,7 @@ from quod.model import (
     IntLit,
     IntRangeClaim,
     Let,
+    Load,
     Program,
     PtrOffset,
     Widen,
@@ -156,4 +157,6 @@ def _walk_calls_in_expr(expr) -> Iterator[Call]:
             yield from _walk_calls_in_expr(o)
         case Widen(value=v):
             yield from _walk_calls_in_expr(v)
+        case Load(ptr=p):
+            yield from _walk_calls_in_expr(p)
         # IntLit, ParamRef, LocalRef, StringRef carry no nested Calls.
