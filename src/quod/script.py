@@ -374,7 +374,14 @@ class Parser:
 
     def parse_function(self) -> Function:
         self.expect("KW", "fn")
-        name = self.expect("IDENT").value
+        # Allow dotted function names so stdlib modules can author
+        # `fn alloc.json.parse_array(...)` directly. Same lookahead
+        # trick we use for dotted calls and dotted types.
+        parts = [self.expect("IDENT").value]
+        while self.at("OP", ".") and self.peek(1).kind == "IDENT":
+            self.eat()
+            parts.append(self.eat().value)
+        name = ".".join(parts)
         self.expect("OP", "(")
         params: list[Param] = []
         if not self.at("OP", ")"):
