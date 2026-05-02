@@ -46,6 +46,7 @@ from quod.model import (
     IntRangeClaim,
     Let,
     LocalRef,
+    CharLit,
     ManualJustification,
     NonNegativeClaim,
     NullPtr,
@@ -274,6 +275,17 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         ),
         "example": {"kind": "quod.null_ptr"},
         "see_also": ["quod.struct_init", "llvm.i8_ptr"],
+    },
+    "quod.char_lit": {
+        "class": CharLit,
+        "summary": (
+            "A byte literal written as a single-character string, lowered "
+            "to `const_int i8 ord(value)`. Use instead of a numeric "
+            "const_int when you mean a character: `'l'` reads better than "
+            "`108`. JSON's native escapes work — `\"\\n\"` is one byte."
+        ),
+        "example": {"kind": "quod.char_lit", "value": "n"},
+        "see_also": ["llvm.const_int"],
     },
 
     # ---------- statement ----------
@@ -541,7 +553,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "llvm.const_int", "llvm.param_ref", "quod.local_ref", "llvm.binop",
         "quod.sc_or", "quod.sc_and", "llvm.call", "quod.string_ref",
         "quod.struct_init", "quod.field", "quod.ptr_offset", "quod.widen",
-        "quod.load", "quod.null_ptr",
+        "quod.load", "quod.null_ptr", "quod.char_lit",
     ],
     "statement": [
         "quod.return_int", "quod.return_expr", "quod.if",

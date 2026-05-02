@@ -44,6 +44,7 @@ from quod.model import (
     IntLit,
     IntRangeClaim,
     Let,
+    CharLit,
     Load,
     LocalRef,
     NonNegativeClaim,
@@ -292,6 +293,8 @@ def _expr_spans(expr) -> tuple[Span, ...]:
             )
         case NullPtr():
             return (Span("null", "keyword"),)
+        case CharLit(value=v):
+            return (Span(repr(v), "literal_int"),)
     raise ValueError(f"unhandled expr: {expr!r}")
 
 

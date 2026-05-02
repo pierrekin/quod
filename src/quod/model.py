@@ -205,11 +205,39 @@ class NullPtr(_Node):
     kind: Literal["quod.null_ptr"] = "quod.null_ptr"
 
 
+class CharLit(_Node):
+    """A byte literal written as a single-character string. Lowers to
+    `const_int i8 ord(value)`.
+
+    `value` must be a single character with codepoint < 256 (Latin-1
+    range). JSON's native string escapes work — `"\\n"` is one byte 10.
+    Use this instead of `{"kind": "llvm.const_int", "type": "i8",
+    "value": 110}` when you mean `'n'`.
+    """
+    kind: Literal["quod.char_lit"] = "quod.char_lit"
+    value: str
+
+    @field_validator("value")
+    @classmethod
+    def _one_byte(cls, v: str) -> str:
+        if len(v) != 1:
+            raise ValueError(
+                f"char_lit value must be exactly 1 character, got {v!r} "
+                f"(length {len(v)})"
+            )
+        if ord(v) > 255:
+            raise ValueError(
+                f"char_lit value must fit in a byte (codepoint < 256), "
+                f"got {v!r} (codepoint {ord(v)})"
+            )
+        return v
+
+
 Expr = Annotated[
     Union[
         IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
         Call, StringRef, FieldRead, StructInit, PtrOffset, Widen, Load,
-        NullPtr,
+        NullPtr, CharLit,
     ],
     Field(discriminator="kind"),
 ]
@@ -1255,4 +1283,6 @@ def _format_expr(expr) -> str:
             return f"load[{_format_type(t)}]({_format_expr(p)})"
         case NullPtr():
             return "null"
+        case CharLit(value=v):
+            return repr(v)
     raise ValueError(f"unhandled expr: {expr!r}")

@@ -41,6 +41,7 @@ from quod.model import (
     IntLit,
     IntRangeClaim,
     Let,
+    CharLit,
     Load,
     LocalRef,
     NonNegativeClaim,
@@ -274,6 +275,8 @@ def _lower_expr(
             return builder.load(casted)
         case NullPtr():
             return ir.Constant(I8.as_pointer(), None)
+        case CharLit(value=v):
+            return ir.Constant(I8, ord(v))
     raise ValueError(f"unhandled expr: {expr!r}")
 
 
