@@ -32,6 +32,7 @@ from quod.model import (
     Load,
     Program,
     PtrOffset,
+    Store,
     Widen,
     ReturnExpr,
     ShortCircuitAnd,
@@ -123,6 +124,9 @@ def _walk_calls_in_stmt(stmt) -> Iterator[Call]:
                 yield from _walk_calls_in_stmt(s)
         case Let(init=expr) | Assign(value=expr) | FieldSet(value=expr):
             yield from _walk_calls_in_expr(expr)
+        case Store(ptr=p, value=v):
+            yield from _walk_calls_in_expr(p)
+            yield from _walk_calls_in_expr(v)
         case While(cond=cond, body=body):
             yield from _walk_calls_in_expr(cond)
             for s in body:

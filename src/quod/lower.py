@@ -53,6 +53,7 @@ from quod.model import (
     ShortCircuitAnd,
     ShortCircuitOr,
     StringRef,
+    Store,
     StructDef,
     StructInit,
     StructType,
@@ -397,6 +398,14 @@ def _lower_stmt(
                 raise ValueError(f"assign to undeclared local {name!r}")
             val = lower_expr(v)
             builder.store(val, locals_[name])
+            return
+        case Store(ptr=p, value=v):
+            base = lower_expr(p)
+            val = lower_expr(v)
+            if not (isinstance(base.type, ir.PointerType) and base.type.pointee == I8):
+                raise ValueError(f"store base must be i8*, got {base.type}")
+            casted = builder.bitcast(base, val.type.as_pointer())
+            builder.store(val, casted)
             return
         case FieldSet(local=lname, name=fname, value=v):
             if lname not in locals_:

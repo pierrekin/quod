@@ -354,6 +354,21 @@ class FieldSet(_Node):
     value: Expr
 
 
+class Store(_Node):
+    """Write `value` to the memory at the i8* pointer `ptr`.
+
+    Lowered as `bitcast(ptr, T*)` + an LLVM `store` of `value` (which has
+    type T). The store happens at the natural alignment of T; mismatched
+    underlying memory is undefined behaviour, same caveat as `quod.load`.
+
+    Pair with `quod.ptr_offset` to write at a non-zero offset of a buffer:
+    `store(ptr_offset(buf, k), 0x42 as i8)`.
+    """
+    kind: Literal["quod.store"] = "quod.store"
+    ptr: Expr     # must lower to i8*
+    value: Expr   # iN or named struct value
+
+
 class WithArena(_Node):
     """Bracket a body with an arena that's freed automatically.
 
@@ -375,7 +390,7 @@ class WithArena(_Node):
 
 
 Statement = Annotated[
-    Union[ReturnInt, ReturnExpr, If, Let, Assign, While, For, ExprStmt, FieldSet, WithArena],
+    Union[ReturnInt, ReturnExpr, If, Let, Assign, While, For, ExprStmt, FieldSet, Store, WithArena],
     Field(discriminator="kind"),
 ]
 
@@ -551,6 +566,9 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
                     visit_stmt(x)
             case Let(init=expr) | Assign(value=expr) | FieldSet(value=expr):
                 visit_expr(expr)
+            case Store(ptr=p, value=v):
+                visit_expr(p)
+                visit_expr(v)
             case While(cond=cond, body=body):
                 visit_expr(cond)
                 for x in body:
@@ -818,6 +836,9 @@ def _check_struct_uses_in_stmt(stmt, by_name: dict[str, "StructDef"], *, where: 
             _check_struct_uses_in_expr(expr, by_name, where=where)
         case Assign(value=expr) | FieldSet(value=expr):
             _check_struct_uses_in_expr(expr, by_name, where=where)
+        case Store(ptr=p, value=v):
+            _check_struct_uses_in_expr(p, by_name, where=where)
+            _check_struct_uses_in_expr(v, by_name, where=where)
         case While(cond=cond, body=body):
             _check_struct_uses_in_expr(cond, by_name, where=where)
             for s in body:
@@ -1160,6 +1181,8 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
             return f"{pad}{prefix}{n} = {_format_expr(v)}"
         case FieldSet(local=loc, name=fname, value=v):
             return f"{pad}{prefix}{loc}.{fname} = {_format_expr(v)}"
+        case Store(ptr=p, value=v):
+            return f"{pad}{prefix}store({_format_expr(p)}, {_format_expr(v)})"
         case While(cond=cond, body=body):
             body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body)
             return f"{pad}{prefix}while ({_format_expr(cond)}) {{\n{body_lines}\n{pad}}}"

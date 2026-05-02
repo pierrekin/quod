@@ -1,0 +1,48 @@
+{
+  "program": {
+    "constants": [{ "name": ".fmt", "value": "byte=%d\n" }],
+    "externs": [
+      { "name": "printf", "param_types": [{ "kind": "llvm.i8_ptr" }], "varargs": true },
+      { "name": "quod_arena_alloc",
+        "param_types": [{ "kind": "llvm.i8_ptr" }, { "kind": "llvm.i64" }],
+        "return_type": { "kind": "llvm.i8_ptr" } }
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": { "kind": "llvm.i32" },
+        "body": [
+          { "kind": "quod.with_arena", "name": "a",
+            "capacity": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 64 },
+            "body": [
+              { "kind": "quod.let", "name": "buf", "type": { "kind": "llvm.i8_ptr" },
+                "init": { "kind": "llvm.call", "function": "quod_arena_alloc",
+                          "args": [
+                            { "kind": "quod.local_ref", "name": "a" },
+                            { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 4 }
+                          ] } },
+              { "kind": "quod.store",
+                "ptr": { "kind": "quod.local_ref", "name": "buf" },
+                "value": { "kind": "llvm.const_int", "type": { "kind": "llvm.i8" }, "value": 65 } },
+              { "kind": "quod.let", "name": "b", "type": { "kind": "llvm.i8" },
+                "init": { "kind": "quod.load",
+                          "ptr": { "kind": "quod.local_ref", "name": "buf" },
+                          "type": { "kind": "llvm.i8" } } },
+              { "kind": "quod.expr_stmt",
+                "value": { "kind": "llvm.call", "function": "printf",
+                           "args": [
+                             { "kind": "quod.string_ref", "name": ".fmt" },
+                             { "kind": "quod.widen",
+                               "value": { "kind": "quod.local_ref", "name": "b" },
+                               "target": { "kind": "llvm.i32" }, "signed": false }
+                           ] } }
+            ] },
+          { "kind": "quod.return_int", "value": 0 }
+        ],
+        "claims": []
+      }
+    ]
+  },
+  "expect": { "stdout": "byte=65\n", "exit": 0 }
+}

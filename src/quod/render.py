@@ -57,6 +57,7 @@ from quod.model import (
     ShortCircuitOr,
     StringConstant,
     StringRef,
+    Store,
     StructDef,
     StructInit,
     StructType,
@@ -337,6 +338,14 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
                 Span(loc, "local"), Span(".", "op"), Span(fname, "param"),
                 Span(" ", "ws"), Span("=", "op"), Span(" ", "ws"),
                 *_expr_spans(v),
+            ))
+        case Store(ptr=p, value=v):
+            yield Line(stmt, indent, (
+                Span("store", "fn_name"), Span("(", "punct"),
+                *_expr_spans(p),
+                Span(", ", "punct"),
+                *_expr_spans(v),
+                Span(")", "punct"),
             ))
         case While(cond=c, body=body):
             yield Line(stmt, indent, (

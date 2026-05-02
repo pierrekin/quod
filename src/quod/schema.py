@@ -64,6 +64,7 @@ from quod.model import (
     While,
     Load,
     PtrOffset,
+    Store,
     Widen,
     WithArena,
     Z3Justification,
@@ -360,6 +361,20 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         },
         "see_also": ["quod.struct_init", "quod.field"],
     },
+    "quod.store": {
+        "class": Store,
+        "summary": (
+            "Write `value` to memory at the i8* pointer `ptr`. Lowered to a "
+            "bitcast + LLVM `store`. Pair with `quod.ptr_offset` for non-zero "
+            "offsets and with `quod.load` for round-trips through arena memory."
+        ),
+        "example": {
+            "kind": "quod.store",
+            "ptr": {"kind": "quod.local_ref", "name": "buf"},
+            "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 65},
+        },
+        "see_also": ["quod.load", "quod.ptr_offset"],
+    },
     "quod.with_arena": {
         "class": WithArena,
         "summary": (
@@ -520,7 +535,7 @@ _CATEGORIES: dict[str, list[str]] = {
     "statement": [
         "quod.return_int", "quod.return_expr", "quod.if",
         "quod.let", "quod.assign", "quod.while", "quod.for", "quod.expr_stmt",
-        "quod.field_set", "quod.with_arena",
+        "quod.field_set", "quod.store", "quod.with_arena",
     ],
     "type": [
         "llvm.i1", "llvm.i8", "llvm.i16", "llvm.i32", "llvm.i64",
