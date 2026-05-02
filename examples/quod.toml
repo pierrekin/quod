@@ -177,6 +177,19 @@ file    = "json_v3/program.json"
   name  = "json_v3"
   entry = "main"
 
+# Consumer demo for the lifted stdlib version: imports alloc.json and
+# parses the same helloworld.json. Proves the stdlib path works end-
+# to-end without dropping back to per-program copies of the parser.
+
+[[program]]
+name    = "json_demo"
+version = "0.1.0"
+file    = "json_demo/program.json"
+
+  [[program.bin]]
+  name  = "json_demo"
+  entry = "main"
+
 # ---------- strings ----------
 
 [[program]]

@@ -1363,20 +1363,35 @@ def compile_program(
     libraries: tuple[str, ...] = (),
     target: str | None = None,
     overrides: dict[str, str] | None = None,
+    disabled_tiers: frozenset[str] = frozenset(),
 ) -> CompileResult:
     """Compile `program` into one binary per bin.
 
     `bins` is a tuple of (name, entry) pairs: `name` is the output binary
     filename, `entry` is the program function used as the entry point. The
     default ((`"main"`, `"main"`),) preserves pre-config behavior.
+
+    `disabled_tiers` is forwarded to import resolution; it short-circuits
+    builds that try to import from a tier the profile excludes (e.g.
+    `--no-std` → frozenset({"std"})).
     """
     if not 0 <= profile <= 3:
         raise ValueError(f"profile must be 0..3, got {profile}")
     build_dir.mkdir(parents=True, exist_ok=True)
 
+    # `--no-alloc` blocks `with_arena` too, since it desugars to allocator
+    # calls. Surface the friendlier message before lowering.
+    if "alloc" in disabled_tiers:
+        for fn in program.functions:
+            if _function_uses_with_arena(fn):
+                raise ValueError(
+                    f"function {fn.name!r} uses `with_arena`, which requires "
+                    f"the 'alloc' tier — disabled by --no-alloc"
+                )
+
     # Resolve imports first: stdlib functions (e.g. std.str) need to be
     # visible to the analysis pass and to lowering, just like user functions.
-    program = resolve_imports(program)
+    program = resolve_imports(program, disabled_tiers=disabled_tiers)
 
     # Elaborate: derive lattice claims and merge them into the program before
     # lowering. Override flags (--enforce-lattice etc.) apply uniformly to

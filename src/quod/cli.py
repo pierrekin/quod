@@ -442,6 +442,9 @@ def _build_impl(
     enforce_axiom: str | None,
     enforce_witness: str | None,
     enforce_lattice: str | None,
+    *,
+    no_std: bool = False,
+    no_alloc: bool = False,
 ) -> tuple[Config, tuple[lower_mod.BinResult, ...]]:
     cfg = _cfg()
     cfg = with_overrides(
@@ -482,6 +485,14 @@ def _build_impl(
         raise typer.Exit(1)
 
     target_or_none = cfg.build.target or None
+    # --no-alloc subsumes --no-std (alloc < std in the dependency stack).
+    disabled_tiers: set[str] = set()
+    if no_std:
+        disabled_tiers.add("std")
+    if no_alloc:
+        disabled_tiers.add("alloc")
+        disabled_tiers.add("std")
+    disabled_tiers_fz = frozenset(disabled_tiers)
     all_results: list[lower_mod.BinResult] = []
     for prog in targets:
         if not prog.bins:
@@ -502,6 +513,7 @@ def _build_impl(
                 libraries=cfg.link.libraries,
                 target=target_or_none,
                 overrides=overrides,
+                disabled_tiers=disabled_tiers_fz,
             )
         except subprocess.CalledProcessError as e:
             typer.echo(f"error: link step failed (exit {e.returncode})", err=True)
@@ -549,6 +561,16 @@ def build(
                                                 autocompletion=_comp.enforcements),
     enforce_lattice: str | None = typer.Option(None, "--enforce-lattice", help=_ENFORCE_HELP,
                                                 autocompletion=_comp.enforcements),
+    no_std: bool = typer.Option(
+        False, "--no-std",
+        help="Refuse to resolve imports from the std.* tier (OS-dependent). "
+             "core.* and alloc.* still available.",
+    ),
+    no_alloc: bool = typer.Option(
+        False, "--no-alloc",
+        help="Refuse to resolve imports from alloc.* and std.*; refuse "
+             "with_arena. Bare-metal mode — only core.* available.",
+    ),
 ) -> None:
     """Lower -> optimize -> object -> link, every [[program.bin]] in quod.toml.
 
@@ -557,7 +579,8 @@ def build(
     """
     if profile is not None and not 0 <= profile <= 3:
         raise typer.BadParameter("--profile must be in 0..3")
-    _build_impl(profile, target, link, show_ir, enforce_axiom, enforce_witness, enforce_lattice)
+    _build_impl(profile, target, link, show_ir, enforce_axiom, enforce_witness,
+                enforce_lattice, no_std=no_std, no_alloc=no_alloc)
 
 
 @app.command(
@@ -576,6 +599,8 @@ def run(
                                                 autocompletion=_comp.enforcements),
     enforce_lattice: str | None = typer.Option(None, "--enforce-lattice", help=_ENFORCE_HELP,
                                                 autocompletion=_comp.enforcements),
+    no_std: bool = typer.Option(False, "--no-std"),
+    no_alloc: bool = typer.Option(False, "--no-alloc"),
 ) -> None:
     """Build and execute a binary. Like `cargo run`.
 
@@ -597,6 +622,7 @@ def run(
     cfg, bin_results = _build_impl(
         profile, target, link=True, show_ir=False,
         enforce_axiom=enforce_axiom, enforce_witness=enforce_witness, enforce_lattice=enforce_lattice,
+        no_std=no_std, no_alloc=no_alloc,
     )
     if bin_name is None:
         if len(bin_results) != 1:
@@ -812,12 +838,19 @@ def fn_add(
         try:
             if script is not None or script_file is not None:
                 from quod.script import parse_function as _parse_script
+                from quod.stdlib import resolve_imports as _resolve_imports
                 if script_file is not None:
                     text = (sys.stdin.read() if script_file == "-"
                             else Path(script_file).read_text())
                 else:
                     text = sys.stdin.read() if script == "-" else script
-                enum_names = frozenset(ed.name for ed in program.enums)
+                # Resolve imports transiently so the script parser knows
+                # which dotted type names are enums vs structs. The
+                # resolved program is discarded — we only save the
+                # user's view (`program`), not the inlined stdlib.
+                enum_names = frozenset(
+                    ed.name for ed in _resolve_imports(program).enums
+                )
                 fn = _parse_script(text, enum_names=enum_names)
             else:
                 fn = parse_function_spec(read_json_arg(spec))

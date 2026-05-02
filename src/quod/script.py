@@ -427,9 +427,16 @@ class Parser:
             return self._PRIM_TYPE_MAP[t.value]()
         if t.kind == "IDENT":
             self.eat()
-            if t.value in self.enum_names:
-                return EnumType(name=t.value)
-            return StructType(name=t.value)
+            # Allow dotted type names like `core.str.String` or
+            # `alloc.json.JsonValue`.
+            parts = [t.value]
+            while self.at("OP", ".") and self.peek(1).kind == "IDENT":
+                self.eat()
+                parts.append(self.eat().value)
+            full = ".".join(parts)
+            if full in self.enum_names:
+                return EnumType(name=full)
+            return StructType(name=full)
         raise ScriptError(f"expected a type, got {t.kind} {t.value!r}", t.line, t.col)
 
     # -- statements --
@@ -757,11 +764,30 @@ class Parser:
                     return self._ptr_offset()
                 case "sizeof":
                     return self._sizeof()
-        # Identifier — could be call, struct_init, enum_init, or local/param ref.
+        # Identifier — could be call (incl. dotted `core.bytes.eq(...)`),
+        # struct_init, enum_init, or local/param ref.
         if t.kind == "IDENT":
             self.eat()
             if self.at("OP", "::"):
                 return self._enum_init(t.value)
+            # Lookahead for a dotted name followed by call / struct-init /
+            # variant constructor: `a.b.c(...)`, `a.b.c { ... }`,
+            # `a.b.c::Variant(...)`. Distinguish from a field-read chain
+            # like `parser.input_ptr` by what terminates the dotted chain.
+            if self.at("OP", ".") and self.peek(1).kind == "IDENT":
+                save = self.pos
+                parts = [t.value]
+                while self.at("OP", ".") and self.peek(1).kind == "IDENT":
+                    self.eat()
+                    parts.append(self.eat().value)
+                full = ".".join(parts)
+                if self.at("OP", "("):
+                    return self._call_args(full)
+                if self.at("OP", "::"):
+                    return self._enum_init(full)
+                if self.at("OP", "{") and self._struct_init_allowed:
+                    return self._struct_init(full)
+                self.pos = save
             if self.at("OP", "("):
                 return self._call_args(t.value)
             if self.at("OP", "{") and self._struct_init_allowed:

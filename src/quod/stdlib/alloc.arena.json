@@ -1,0 +1,19 @@
+{
+  "externs": [
+    {
+      "name": "quod_arena_new",
+      "param_types": [{ "kind": "llvm.i64" }],
+      "return_type": { "kind": "llvm.i8_ptr" }
+    },
+    {
+      "name": "quod_arena_alloc",
+      "param_types": [{ "kind": "llvm.i8_ptr" }, { "kind": "llvm.i64" }],
+      "return_type": { "kind": "llvm.i8_ptr" }
+    },
+    {
+      "name": "quod_arena_drop",
+      "param_types": [{ "kind": "llvm.i8_ptr" }],
+      "return_type": { "kind": "llvm.void" }
+    }
+  ]
+}

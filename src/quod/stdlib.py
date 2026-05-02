@@ -36,11 +36,29 @@ class ImportError_(Exception):
     that one would lose the quod-specific error context."""
 
 
-def resolve_imports(program: Program) -> Program:
+def module_tier(name: str) -> str:
+    """Classify a module name by its top-level namespace.
+
+    `core.*`  -> "core"  (pure quod, no runtime deps)
+    `alloc.*` -> "alloc" (needs an allocator)
+    `std.*`   -> "std"   (needs a hosted OS / libc)
+    anything else -> "core" (treated as user-facing / unrestricted)
+    """
+    head = name.split(".", 1)[0]
+    if head in ("core", "alloc", "std"):
+        return head
+    return "core"
+
+
+def resolve_imports(program: Program, *, disabled_tiers: frozenset[str] = frozenset()) -> Program:
     """Walk `program.imports` (and any nested imports declared by those
     modules), fold their constants/structs/enums/externs/functions into
     `program`, and clear `program.imports`. First-wins dedupe by name —
-    user-declared items always shadow imports."""
+    user-declared items always shadow imports.
+
+    `disabled_tiers` lists tiers that must NOT be resolved (e.g.
+    `frozenset({"std"})` for --no-std). If a transitive import lives in
+    a disabled tier, raise ImportError_ pointing at the offender."""
     if not program.imports:
         return program
 
@@ -62,6 +80,12 @@ def resolve_imports(program: Program) -> Program:
         if name in visited:
             continue
         visited.add(name)
+        tier = module_tier(name)
+        if tier in disabled_tiers:
+            raise ImportError_(
+                f"import {name!r} requires the {tier!r} tier, which is "
+                f"disabled by the build profile (e.g. --no-{tier})"
+            )
         mod = _load_module(name)
         for nested in mod.imports:
             if nested not in visited:
