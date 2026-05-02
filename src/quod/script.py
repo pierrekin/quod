@@ -241,6 +241,16 @@ def tokenize(src: str) -> list[Token]:
             j = i
             while j < n and src[j].isdigit():
                 j += 1
+            # Optional type suffix on integer literals: 0i8, 42i32, etc.
+            # Longest first so 'i16' beats 'i1'. The suffix only counts when
+            # the next character isn't an identifier char — '42i8x' stays a
+            # single literal that will fail to parse cleanly downstream.
+            for suf in ("i64", "i32", "i16", "i8", "i1"):
+                end = j + len(suf)
+                if (src[j:end] == suf
+                        and (end >= n or not (src[end].isalnum() or src[end] == "_"))):
+                    j = end
+                    break
             tokens.append(Token("INT", src[i:j], line, start_col))
             col += j - i
             i = j
@@ -276,6 +286,30 @@ def tokenize(src: str) -> list[Token]:
 
 # ---------- Parser ----------
 
+_INT_TYPE_BY_SUFFIX = {
+    "i1": I1Type, "i8": I8Type, "i16": I16Type, "i32": I32Type, "i64": I64Type,
+}
+
+
+def _split_int_suffix(text: str) -> tuple[str, str | None]:
+    """Split '42i8' into ('42', 'i8'); '42' into ('42', None)."""
+    for suf in ("i64", "i32", "i16", "i8", "i1"):
+        if text.endswith(suf):
+            return text[:-len(suf)], suf
+    return text, None
+
+
+def _int_lit_from_token(text: str, *, negate: bool = False) -> "IntLit":
+    """Build an IntLit from a lexed INT token. Suffix-less defaults to i64;
+    typed suffixes (`42i8`) carry their explicit width."""
+    digits, suf = _split_int_suffix(text)
+    ty = _INT_TYPE_BY_SUFFIX[suf]() if suf else I64Type()
+    value = int(digits)
+    if negate:
+        value = -value
+    return IntLit(type=ty, value=value)
+
+
 # Comparison ops -> BinOp.op
 _CMP_OPS = {
     "==": "eq", "!=": "ne",
@@ -294,6 +328,9 @@ class Parser:
         # struct-literal-in-cond restriction; parens force the issue when
         # you really do want a literal there: `if (Foo({a: 1}).b == 2) {..}`
         self._struct_init_allowed = True
+        # Captured at function entry; used by _return to retype a bare
+        # integer literal to whatever the function actually returns.
+        self._return_type = None
 
     # -- cursor helpers --
 
@@ -341,6 +378,7 @@ class Parser:
         self.expect("OP", "->")
         ret_ty = self._type(allow_void=True)
         self.param_names = frozenset(p.name for p in params)
+        self._return_type = ret_ty
         body = self._block()
         # The model's Function has `claims: tuple[Claim, ...] = ()` and
         # `notes: tuple[str, ...] = ()`; both default. We don't author either
@@ -496,12 +534,28 @@ class Parser:
         self.expect("KW", "return")
         if not self._is_expr_start():
             return Return()
-        e = self._expr()
-        # Sugar: a bare integer literal collapses to ReturnInt — both forms
-        # exist in the model and quod show emits ReturnInt for it.
-        if isinstance(e, IntLit):
-            return ReturnInt(value=e.value)
-        return ReturnExpr(value=e)
+        # Special path: when the entire return expression is a single
+        # integer literal (with optional unary minus), retype it to the
+        # function's declared return type so `return 0` works for any
+        # int-returning function. Composite expressions (binops, calls,
+        # etc.) follow normal type rules.
+        save = self.pos
+        sign = 1
+        if self.at("OP", "-") and self.peek(1).kind == "INT":
+            self.eat()
+            sign = -1
+        if (
+            self.peek().kind == "INT"
+            and self.peek(1).kind == "OP" and self.peek(1).value in ("}", ";")
+            and isinstance(self._return_type,
+                           (I1Type, I8Type, I16Type, I32Type, I64Type))
+        ):
+            tok = self.eat()
+            digits, _ = _split_int_suffix(tok.value)
+            return ReturnExpr(value=IntLit(type=self._return_type,
+                                           value=sign * int(digits)))
+        self.pos = save
+        return ReturnExpr(value=self._expr())
 
     def _store_stmt(self) -> Store:
         self.expect("KW", "store")
@@ -587,7 +641,7 @@ class Parser:
         if self.at("OP", "-") and self.peek(1).kind == "INT":
             self.eat()
             tok = self.eat()
-            return IntLit(type=I64Type(), value=-int(tok.value))
+            return _int_lit_from_token(tok.value, negate=True)
         return self._postfix()
 
     def _postfix(self):
@@ -623,10 +677,12 @@ class Parser:
                 self.eat()
                 full += "." + self.expect("IDENT").value
             return StringRef(name=full)
-        # Integer
+        # Integer — optional type suffix (e.g. 42i8) carries the int width;
+        # otherwise the literal defaults to i64. Suffix-less literals at
+        # return position get retyped to the function's return_type later.
         if t.kind == "INT":
             self.eat()
-            return IntLit(type=I64Type(), value=int(t.value))
+            return _int_lit_from_token(t.value)
         # Char literal
         if t.kind == "CHAR":
             self.eat()

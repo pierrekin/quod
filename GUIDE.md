@@ -415,6 +415,13 @@ calls (`fn(a, b)`), struct literals (`Parser { input_ptr: ..., ... }`),
 `load[T](ptr)`, `widen(e to T)` / `uwiden(e to T)`, `ptr_offset(base,
 off)`, all binops, short-circuit `&&` / `||`, parens.
 
+Integer literals default to `i64`. Use a width suffix to opt into a
+narrower type — `0i8`, `42i32`, `-3i8` — which is essential for writes
+into narrower struct fields (e.g. `Parser.had_error` is `i8`, so write
+`Parser { had_error: 0i8, ... }`). Bare `return 0` is a special case:
+the literal adopts the function's declared return type, so `return 0`
+works from any int-returning function without a suffix.
+
 What it deliberately doesn't do: claims (`@`-style annotations are
 out — claims have their own surface), struct definitions, externs,
 string constants, imports. Those stay on the existing `quod struct

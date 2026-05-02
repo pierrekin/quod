@@ -33,7 +33,6 @@ from quod.model import (
     PtrOffset,
     Return,
     ReturnExpr,
-    ReturnInt,
     ShortCircuitAnd,
     ShortCircuitOr,
     Store,
@@ -155,8 +154,10 @@ def test_if_with_else():
     )
     iff = fn.body[0]
     assert isinstance(iff, If)
-    assert isinstance(iff.then_body[0], ReturnInt) and iff.then_body[0].value == 1
-    assert isinstance(iff.else_body[0], ReturnInt) and iff.else_body[0].value == 2
+    assert isinstance(iff.then_body[0], ReturnExpr)
+    assert isinstance(iff.then_body[0].value, IntLit) and iff.then_body[0].value.value == 1
+    assert isinstance(iff.else_body[0], ReturnExpr)
+    assert isinstance(iff.else_body[0].value, IntLit) and iff.else_body[0].value.value == 2
 
 
 def test_if_without_else():
@@ -184,15 +185,26 @@ def test_for_loop():
 
 
 def test_return_void_vs_int_vs_expr():
+    # Bare void return.
     fn = parse_function("fn a() -> void { return }")
     assert isinstance(fn.body[0], Return)
 
+    # Bare int literal at return position retypes to the function's
+    # return_type — `return 7` from an i32 fn carries i32, not the script's
+    # default i64.
     fn = parse_function("fn a() -> i32 { return 7 }")
-    assert isinstance(fn.body[0], ReturnInt) and fn.body[0].value == 7
+    r = fn.body[0]
+    assert isinstance(r, ReturnExpr)
+    assert isinstance(r.value, IntLit) and r.value.value == 7
+    assert isinstance(r.value.type, I32Type)
 
     fn = parse_function("fn a() -> i32 { return -7 }")
-    assert isinstance(fn.body[0], ReturnInt) and fn.body[0].value == -7
+    r = fn.body[0]
+    assert isinstance(r, ReturnExpr)
+    assert isinstance(r.value, IntLit) and r.value.value == -7
+    assert isinstance(r.value.type, I32Type)
 
+    # Composite expression — normal type rules.
     fn = parse_function("fn a(x: i32) -> i32 { return x + 1 }")
     assert isinstance(fn.body[0], ReturnExpr)
 
@@ -242,10 +254,12 @@ def test_expr_char_lit_and_null_and_bools():
     assert isinstance(fn.body[1].init, NullPtr)
     blit = fn.body[2].init
     assert isinstance(blit, IntLit) and isinstance(blit.type, I1Type) and blit.value == 1
-    # `return false` sugars to ReturnInt (the model's value-less return
-    # shortcut whose width follows the function's declared return_type).
+    # `return false` is ReturnExpr(IntLit(i1, 0)) — booleans are typed at
+    # the source so they don't go through the bare-int retype path.
     ret = fn.body[3]
-    assert isinstance(ret, ReturnInt) and ret.value == 0
+    assert isinstance(ret, ReturnExpr)
+    assert isinstance(ret.value, IntLit) and ret.value.value == 0
+    assert isinstance(ret.value.type, I1Type)
 
 
 def test_expr_string_ref_dotted():
@@ -324,6 +338,48 @@ def test_expr_paren_grouping():
     e = fn.body[0].value
     assert e.op == "mul"
     assert isinstance(e.lhs, BinOp) and e.lhs.op == "add"
+
+
+# ---------- Typed integer literals (i8 / i16 / i32 / i64 / i1 suffixes) ----------
+
+def test_typed_int_literal_suffix():
+    fn = parse_function(
+        "fn f() -> i32 { let a: i8 = 0i8 let b: i32 = 7i32 let c: i64 = 9i64 return 0 }"
+    )
+    assert isinstance(fn.body[0].init, IntLit) and isinstance(fn.body[0].init.type, I8Type)
+    assert isinstance(fn.body[1].init, IntLit) and isinstance(fn.body[1].init.type, I32Type)
+    assert isinstance(fn.body[2].init, IntLit) and isinstance(fn.body[2].init.type, I64Type)
+
+
+def test_typed_int_literal_negative():
+    fn = parse_function("fn f() -> i32 { let x: i8 = -3i8 return 0 }")
+    init = fn.body[0].init
+    assert isinstance(init, IntLit) and isinstance(init.type, I8Type)
+    assert init.value == -3
+
+
+def test_typed_int_literal_in_field_set():
+    fn = parse_function(
+        "fn f(p: i8*) -> i32 { let v: Parser = load[Parser](p) "
+        "v.had_error = 1i8 store(p, v) return 0 }"
+    )
+    fs = fn.body[1]
+    assert isinstance(fs, FieldSet) and fs.name == "had_error"
+    assert isinstance(fs.value, IntLit) and isinstance(fs.value.type, I8Type)
+
+
+def test_unsuffixed_int_defaults_to_i64():
+    fn = parse_function("fn f() -> i32 { let x: i64 = 42 return 0 }")
+    init = fn.body[0].init
+    assert isinstance(init, IntLit) and isinstance(init.type, I64Type)
+
+
+def test_int_suffix_does_not_eat_following_identifier():
+    # `42i8x` should stay a single (malformed) token, not split into 42i8 + x.
+    # The parser will reject it; we only check the lexer doesn't silently
+    # consume i8 as a suffix here.
+    toks = [t for t in tokenize("42i8x") if t.kind != "EOF"]
+    assert toks[0].kind == "INT" and toks[0].value == "42"  # suffix not greedy
 
 
 # ---------- Param vs local disambiguation ----------
