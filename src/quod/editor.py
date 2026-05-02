@@ -191,6 +191,53 @@ def _type_names(t) -> str | None:
     return t.name if isinstance(t, StructType) else None
 
 
+def add_enum_to_program(program: Program, enum_def) -> Program:
+    """Append an enum definition. Errors if the name collides with an
+    existing enum or struct. Cross-cutting validation (variant uniqueness,
+    field types) is enforced by the Program-level model_validator."""
+    if any(ed.name == enum_def.name for ed in program.enums):
+        raise ValueError(f"enum {enum_def.name!r} already declared")
+    if any(sd.name == enum_def.name for sd in program.structs):
+        raise ValueError(
+            f"enum {enum_def.name!r} collides with a struct of the same name"
+        )
+    return program.model_copy(update={"enums": program.enums + (enum_def,)})
+
+
+def remove_enum_from_program(program: Program, name: str) -> Program:
+    """Drop an enum definition. Strict: refuses if any function param,
+    return type, or local references it via EnumType."""
+    if not any(ed.name == name for ed in program.enums):
+        raise KeyError(f"no enum named {name!r}")
+    refs = _enum_references(program, name)
+    if refs:
+        raise ValueError(
+            f"refusing to remove enum {name!r}: still referenced by "
+            f"{', '.join(refs)}"
+        )
+    kept = tuple(ed for ed in program.enums if ed.name != name)
+    return program.model_copy(update={"enums": kept})
+
+
+def _enum_references(program: Program, name: str) -> tuple[str, ...]:
+    """Best-effort: report function/extern signatures that name this enum."""
+    from quod.model import EnumType
+    out: list[str] = []
+    for fn in program.functions:
+        if isinstance(fn.return_type, EnumType) and fn.return_type.name == name:
+            out.append(f"function {fn.name} return type")
+        for p in fn.params:
+            if isinstance(p.type, EnumType) and p.type.name == name:
+                out.append(f"function {fn.name} param {p.name}")
+    for ext in program.externs:
+        if isinstance(ext.return_type, EnumType) and ext.return_type.name == name:
+            out.append(f"extern {ext.name} return type")
+        for t in ext.param_types:
+            if isinstance(t, EnumType) and t.name == name:
+                out.append(f"extern {ext.name} param")
+    return tuple(out)
+
+
 # ---------- JSON ingest ----------
 
 # Hint shown after pydantic validation errors so an agent knows where to look.
@@ -218,6 +265,15 @@ def parse_statement_spec(raw: str) -> Statement:
         return _StatementAdapter.validate_json(raw)
     except ValidationError as e:
         raise ValueError(f"invalid statement spec:\n{e}{_SCHEMA_HINT}") from e
+
+
+def parse_enum_spec(raw: str):
+    """Parse a JSON EnumDef spec."""
+    from quod.model import EnumDef
+    try:
+        return EnumDef.model_validate_json(raw)
+    except ValidationError as e:
+        raise ValueError(f"invalid enum spec:\n{e}{_SCHEMA_HINT}") from e
 
 
 def read_json_arg(arg: str) -> str:

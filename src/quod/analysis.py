@@ -37,6 +37,8 @@ from quod.model import (
     ReturnExpr,
     ShortCircuitAnd,
     ShortCircuitOr,
+    EnumInit,
+    Match,
     StructInit,
     While,
     WithArena,
@@ -140,6 +142,11 @@ def _walk_calls_in_stmt(stmt) -> Iterator[Call]:
             yield from _walk_calls_in_expr(cap)
             for s in body:
                 yield from _walk_calls_in_stmt(s)
+        case Match(scrutinee=scrut, arms=arms):
+            yield from _walk_calls_in_expr(scrut)
+            for arm in arms:
+                for s in arm.body:
+                    yield from _walk_calls_in_stmt(s)
 
 
 def _walk_calls_in_expr(expr) -> Iterator[Call]:
@@ -154,6 +161,9 @@ def _walk_calls_in_expr(expr) -> Iterator[Call]:
         case FieldRead(value=inner):
             yield from _walk_calls_in_expr(inner)
         case StructInit(fields=field_inits):
+            for fi in field_inits:
+                yield from _walk_calls_in_expr(fi.value)
+        case EnumInit(fields=field_inits):
             for fi in field_inits:
                 yield from _walk_calls_in_expr(fi.value)
         case PtrOffset(base=b, offset=o):

@@ -29,6 +29,11 @@ from quod.model import (
     Call,
     CharLit,
     DerivedJustification,
+    EnumDef,
+    EnumInit,
+    EnumPayloadField,
+    EnumType,
+    EnumVariant,
     ExprStmt,
     ExternFunction,
     FieldInit,
@@ -49,6 +54,8 @@ from quod.model import (
     Load,
     LocalRef,
     ManualJustification,
+    Match,
+    MatchArm,
     NonNegativeClaim,
     NullPtr,
     Param,
@@ -288,6 +295,25 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "example": {"kind": "quod.char_lit", "value": "n"},
         "see_also": ["llvm.const_int"],
     },
+    "quod.enum_init": {
+        "class": EnumInit,
+        "summary": (
+            "Construct an enum value by selecting a variant and "
+            "initializing its payload fields. `enum` names an EnumDef, "
+            "`variant` names one of its variants, and `fields` covers "
+            "exactly the variant's payload fields by name."
+        ),
+        "example": {
+            "kind": "quod.enum_init",
+            "enum": "Maybe",
+            "variant": "Some",
+            "fields": [
+                {"name": "value", "value": {"kind": "llvm.const_int",
+                                            "type": {"kind": "llvm.i64"}, "value": 42}},
+            ],
+        },
+        "see_also": ["EnumDef", "quod.match"],
+    },
 
     # ---------- statement ----------
     "quod.return_expr": {
@@ -466,6 +492,16 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "example": {"kind": "llvm.struct", "name": "Point"},
         "see_also": ["StructDef"],
     },
+    "llvm.enum": {
+        "class": EnumType,
+        "summary": (
+            "Reference to a named EnumDef by name. Lowered as an LLVM "
+            "identified struct `{i8 tag, [N x i64] payload}` where each "
+            "variant's payload fields share the same i64-slot array."
+        ),
+        "example": {"kind": "llvm.enum", "name": "Maybe"},
+        "see_also": ["EnumDef", "quod.enum_init", "quod.match"],
+    },
     "llvm.void": {
         "class": VoidType,
         "summary": (
@@ -561,9 +597,77 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     },
     "FieldInit": {
         "class": FieldInit,
-        "summary": "One field's value in a quod.struct_init.",
+        "summary": "One field's value in a quod.struct_init or quod.enum_init.",
         "example": {"name": "x", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 3}},
     },
+    "EnumDef": {
+        "class": EnumDef,
+        "summary": (
+            "A named tagged-union type. Variants are ordered (first variant "
+            "gets discriminant 0). Lowered to `{i8 tag, [N x i64] payload}` "
+            "where N = max variant payload field count."
+        ),
+        "example": {
+            "name": "Maybe",
+            "variants": [
+                {"name": "None", "fields": []},
+                {"name": "Some", "fields": [{"name": "value", "type": {"kind": "llvm.i64"}}]},
+            ],
+        },
+        "see_also": ["llvm.enum", "quod.enum_init", "quod.match"],
+    },
+    "EnumVariant": {
+        "class": EnumVariant,
+        "summary": "One variant of an EnumDef. Empty fields means a unit variant.",
+        "example": {"name": "Some", "fields": [{"name": "value", "type": {"kind": "llvm.i64"}}]},
+    },
+    "EnumPayloadField": {
+        "class": EnumPayloadField,
+        "summary": (
+            "One payload field of an EnumVariant. Restricted to scalar "
+            "types (int widths up to i64, plus i8*) so each field fits "
+            "in a single i64 slot."
+        ),
+        "example": {"name": "value", "type": {"kind": "llvm.i64"}},
+    },
+    "MatchArm": {
+        "class": MatchArm,
+        "summary": (
+            "One arm of a quod.match. Names a variant, binds its payload "
+            "fields to locals (one binding name per field, in declaration "
+            "order), and runs `body`."
+        ),
+        "example": {
+            "variant": "Some",
+            "bindings": ["v"],
+            "body": [{"kind": "quod.return_expr",
+                      "value": {"kind": "quod.local_ref", "name": "v"}}],
+        },
+        "see_also": ["quod.match"],
+    },
+}
+
+
+_KIND_INFO["quod.match"] = {
+    "class": Match,
+    "summary": (
+        "Pattern-match on an enum value. One arm per variant, exhaustive. "
+        "scrutinee must lower to a value of an EnumType. Lowered to a "
+        "switch on the discriminant byte."
+    ),
+    "example": {
+        "kind": "quod.match",
+        "scrutinee": {"kind": "quod.local_ref", "name": "m"},
+        "arms": [
+            {"variant": "None", "bindings": [], "body": [
+                {"kind": "quod.return_expr",
+                 "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}}]},
+            {"variant": "Some", "bindings": ["v"], "body": [
+                {"kind": "quod.return_expr",
+                 "value": {"kind": "quod.local_ref", "name": "v"}}]},
+        ],
+    },
+    "see_also": ["EnumDef", "quod.enum_init"],
 }
 
 
@@ -572,22 +676,23 @@ _CATEGORIES: dict[str, list[str]] = {
         "llvm.const_int", "llvm.param_ref", "quod.local_ref", "llvm.binop",
         "quod.sc_or", "quod.sc_and", "llvm.call", "quod.string_ref",
         "quod.struct_init", "quod.field", "quod.ptr_offset", "quod.widen",
-        "quod.load", "quod.null_ptr", "quod.char_lit",
+        "quod.load", "quod.null_ptr", "quod.char_lit", "quod.enum_init",
     ],
     "statement": [
         "quod.return_expr", "quod.return", "quod.if",
         "quod.let", "quod.assign", "quod.while", "quod.for", "quod.expr_stmt",
-        "quod.field_set", "quod.store", "quod.with_arena",
+        "quod.field_set", "quod.store", "quod.with_arena", "quod.match",
     ],
     "type": [
         "llvm.i1", "llvm.i8", "llvm.i16", "llvm.i32", "llvm.i64",
-        "llvm.i8_ptr", "llvm.struct", "llvm.void",
+        "llvm.i8_ptr", "llvm.struct", "llvm.enum", "llvm.void",
     ],
     "claim": ["non_negative", "int_range", "return_in_range"],
     "justification": ["z3", "manual", "derived"],
     "program": [
         "StringConstant", "ExternFunction", "Function", "Param",
         "StructDef", "StructField", "FieldInit",
+        "EnumDef", "EnumVariant", "EnumPayloadField", "MatchArm",
     ],
 }
 

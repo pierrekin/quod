@@ -25,6 +25,9 @@ from quod.model import (
     Assign,
     BinOp,
     Call,
+    EnumDef,
+    EnumInit,
+    EnumType,
     ExprStmt,
     ExternFunction,
     FieldRead,
@@ -44,6 +47,7 @@ from quod.model import (
     CharLit,
     Load,
     LocalRef,
+    Match,
     NonNegativeClaim,
     NullPtr,
     Return,
@@ -73,13 +77,19 @@ I32 = ir.IntType(32)
 I64 = ir.IntType(64)
 
 
-def _type_to_llvm(t, struct_tys: dict[str, "ir.IdentifiedStructType"] | None = None):
+def _type_to_llvm(
+    t,
+    struct_tys: dict[str, "ir.IdentifiedStructType"] | None = None,
+    enum_tys: dict[str, "ir.IdentifiedStructType"] | None = None,
+):
     """Lower a quod type to its LLVM equivalent.
 
     `struct_tys` is the per-module registry of identified struct types,
     threaded through every site that lowers a Type. None is allowed for
     legacy callers that operate on int-only contexts; passing None when
     the type IS a struct raises.
+
+    `enum_tys` is the parallel registry for enums. Same None semantics.
     """
     match t:
         case I1Type():
@@ -98,6 +108,10 @@ def _type_to_llvm(t, struct_tys: dict[str, "ir.IdentifiedStructType"] | None = N
             if struct_tys is None or name not in struct_tys:
                 raise ValueError(f"struct type {name!r} not registered with the module")
             return struct_tys[name]
+        case EnumType(name=name):
+            if enum_tys is None or name not in enum_tys:
+                raise ValueError(f"enum type {name!r} not registered with the module")
+            return enum_tys[name]
         case VoidType():
             return ir.VoidType()
     raise ValueError(f"unhandled quod.Type: {t!r}")
@@ -168,12 +182,15 @@ def _lower_expr(
     locals_: dict[str, ir.AllocaInstr],
     struct_defs: dict[str, StructDef],
     struct_tys: dict[str, "ir.IdentifiedStructType"],
+    enum_defs: dict[str, EnumDef],
+    enum_tys: dict[str, "ir.IdentifiedStructType"],
 ) -> ir.Value:
     def go(e):
         return _lower_expr(
             builder, e, params, module,
             constants=constants, extern_sigs=extern_sigs, locals_=locals_,
             struct_defs=struct_defs, struct_tys=struct_tys,
+            enum_defs=enum_defs, enum_tys=enum_tys,
         )
 
     match expr:
@@ -273,14 +290,61 @@ def _lower_expr(
             base = go(p)
             if not (isinstance(base.type, ir.PointerType) and base.type.pointee == I8):
                 raise ValueError(f"load base must be i8*, got {base.type}")
-            target_ty = _type_to_llvm(t, struct_tys)
+            target_ty = _type_to_llvm(t, struct_tys, enum_tys)
             casted = builder.bitcast(base, target_ty.as_pointer())
             return builder.load(casted)
         case NullPtr():
             return ir.Constant(I8.as_pointer(), None)
         case CharLit(value=v):
             return ir.Constant(I8, ord(v))
+        case EnumInit(enum=ename, variant=vname, fields=field_inits):
+            ed = enum_defs.get(ename)
+            ety = enum_tys.get(ename)
+            if ed is None or ety is None:
+                raise ValueError(f"enum_init for undefined enum {ename!r}")
+            var = ed.variant(vname)
+            if var is None:
+                raise ValueError(f"enum_init: enum {ename!r} has no variant {vname!r}")
+            init_by_name = {fi.name: fi.value for fi in field_inits}
+            val: ir.Value = ir.Constant(ety, ir.Undefined)
+            tag = ir.Constant(I8, ed.variant_index(vname))
+            val = builder.insert_value(val, tag, 0)
+            for i, f in enumerate(var.fields):
+                if f.name not in init_by_name:
+                    raise ValueError(
+                        f"enum_init for {ename}::{vname} missing field {f.name!r}"
+                    )
+                field_val = go(init_by_name[f.name])
+                slot_val = _pack_to_i64_slot(builder, field_val, f.type)
+                val = builder.insert_value(val, slot_val, [1, i])
+            return val
     raise ValueError(f"unhandled expr: {expr!r}")
+
+
+def _pack_to_i64_slot(builder: ir.IRBuilder, val: ir.Value, declared_ty) -> ir.Value:
+    """Coerce a payload field value into the i64 slot it's stored in within
+    an enum's payload array. Integers narrower than i64 zero-extend (the
+    bit-pattern is what we round-trip on extract); pointers ptrtoint."""
+    if isinstance(val.type, ir.IntType):
+        if val.type.width == 64:
+            return val
+        return builder.zext(val, I64)
+    if isinstance(val.type, ir.PointerType):
+        return builder.ptrtoint(val, I64)
+    raise ValueError(f"unsupported enum payload field type {declared_ty!r}: lowered to {val.type}")
+
+
+def _unpack_from_i64_slot(builder: ir.IRBuilder, slot: ir.Value, declared_ty, struct_tys, enum_tys) -> ir.Value:
+    """Inverse of `_pack_to_i64_slot`: pull the declared field value back
+    out of an i64 slot. Trunc for narrower ints, inttoptr for pointers."""
+    target_ty = _type_to_llvm(declared_ty, struct_tys, enum_tys)
+    if isinstance(target_ty, ir.IntType):
+        if target_ty.width == 64:
+            return slot
+        return builder.trunc(slot, target_ty)
+    if isinstance(target_ty, ir.PointerType):
+        return builder.inttoptr(slot, target_ty)
+    raise ValueError(f"unsupported enum payload field type {declared_ty!r}: lowers to {target_ty}")
 
 
 def _lower_short_circuit(builder: ir.IRBuilder, lhs, rhs, *, kind: str, lower) -> ir.Value:
@@ -315,14 +379,17 @@ def _lower_short_circuit(builder: ir.IRBuilder, lhs, rhs, *, kind: str, lower) -
 
 
 def _collect_local_bindings(
-    stmts, struct_tys: dict[str, "ir.IdentifiedStructType"],
+    stmts,
+    struct_tys: dict[str, "ir.IdentifiedStructType"],
+    enum_tys: dict[str, "ir.IdentifiedStructType"],
+    enum_defs: dict[str, EnumDef],
 ) -> list[tuple[str, "ir.Type"]]:
     """Pre-walk the body and return every (name, llvm_type) pair introduced by
-    `Let` or `For`. Allocas for these are emitted at the top of the function's
-    entry block, the canonical mem2reg layout: `alloca` lives in entry; `store`
-    happens at the binding point. Names must be unique within the function
-    (no shadowing between Lets, between Fors, or across scopes); two `For`s
-    with the same loop variable name aren't supported in this round."""
+    `Let`, `For`, or a `Match` arm binding. Allocas for these are emitted at
+    the top of the function's entry block, the canonical mem2reg layout:
+    `alloca` lives in entry; `store` happens at the binding point. Names must
+    be unique within the function (no shadowing — match arms with the same
+    binding name across arms collide too; rename them differently for now)."""
     out: list[tuple[str, ir.Type]] = []
     seen: set[str] = set()
 
@@ -333,17 +400,44 @@ def _collect_local_bindings(
                     if name in seen:
                         raise ValueError(f"local {name!r} declared twice in the same function")
                     seen.add(name)
-                    out.append((name, _type_to_llvm(ty, struct_tys)))
+                    out.append((name, _type_to_llvm(ty, struct_tys, enum_tys)))
                 case For(var=var, type=ty, body=for_body):
                     if var in seen:
                         raise ValueError(f"for-loop var {var!r} conflicts with another local")
                     seen.add(var)
-                    out.append((var, _type_to_llvm(ty, struct_tys)))
+                    out.append((var, _type_to_llvm(ty, struct_tys, enum_tys)))
                     visit(for_body)
                 case If(then_body=t, else_body=e):
                     visit(t); visit(e)
                 case While(body=w_body):
                     visit(w_body)
+                case Match(arms=arms):
+                    # Each arm's bindings become locals at function scope
+                    # (alloca'd at entry, populated when the arm is taken).
+                    for arm in arms:
+                        # Find the variant's payload field declarations to
+                        # know each binding's declared type. We don't know
+                        # the scrutinee's enum statically here, so we walk
+                        # every enum and look for a matching variant by name.
+                        # Safe because validator already checked exhaustiveness.
+                        var_decl = None
+                        for ed in enum_defs.values():
+                            v = ed.variant(arm.variant)
+                            if v is not None:
+                                var_decl = v
+                                break
+                        if var_decl is None:
+                            raise ValueError(
+                                f"match arm references unknown variant {arm.variant!r}"
+                            )
+                        for binding, field in zip(arm.bindings, var_decl.fields):
+                            if binding in seen:
+                                raise ValueError(
+                                    f"match binding {binding!r} conflicts with another local"
+                                )
+                            seen.add(binding)
+                            out.append((binding, _type_to_llvm(field.type, struct_tys, enum_tys)))
+                        visit(arm.body)
     visit(stmts)
     return out
 
@@ -363,6 +457,8 @@ def _lower_stmt(
     extern_sigs: dict[str, ExternFunction],
     struct_defs: dict[str, StructDef],
     struct_tys: dict[str, "ir.IdentifiedStructType"],
+    enum_defs: dict[str, EnumDef],
+    enum_tys: dict[str, "ir.IdentifiedStructType"],
 ) -> None:
     """Lower a statement. `return_claims` are emitted as llvm.assume / runtime
     check at every ret, so callers (after inlining) see the bound."""
@@ -371,6 +467,7 @@ def _lower_stmt(
             builder, e, params, module,
             constants=constants, extern_sigs=extern_sigs, locals_=locals_,
             struct_defs=struct_defs, struct_tys=struct_tys,
+            enum_defs=enum_defs, enum_tys=enum_tys,
         )
 
     def lower_body(body):
@@ -381,6 +478,7 @@ def _lower_stmt(
                 return_claims=return_claims, overrides=overrides,
                 extern_sigs=extern_sigs,
                 struct_defs=struct_defs, struct_tys=struct_tys,
+                enum_defs=enum_defs, enum_tys=enum_tys,
             )
 
     match stmt:
@@ -462,6 +560,7 @@ def _lower_stmt(
                     return_claims=return_claims, overrides=overrides,
                     extern_sigs=extern_sigs,
                     struct_defs=struct_defs, struct_tys=struct_tys,
+                    enum_defs=enum_defs, enum_tys=enum_tys,
                 )
             if not builder.block.is_terminated:
                 builder.branch(ensure_merge())
@@ -474,6 +573,7 @@ def _lower_stmt(
                     return_claims=return_claims, overrides=overrides,
                     extern_sigs=extern_sigs,
                     struct_defs=struct_defs, struct_tys=struct_tys,
+                    enum_defs=enum_defs, enum_tys=enum_tys,
                 )
             if not builder.block.is_terminated:
                 builder.branch(ensure_merge())
@@ -527,6 +627,60 @@ def _lower_stmt(
                 builder.branch(header_bb)
 
             builder.position_at_end(exit_bb)
+            return
+        case Match(scrutinee=scrut, arms=arms):
+            scrut_val = lower_expr(scrut)
+            scrut_ty = scrut_val.type
+            if not isinstance(scrut_ty, ir.IdentifiedStructType):
+                raise ValueError(f"match scrutinee must be an enum value, got {scrut_ty}")
+            ed = enum_defs.get(scrut_ty.name)
+            if ed is None:
+                raise ValueError(f"match scrutinee of unknown enum type {scrut_ty.name!r}")
+            tag = builder.extract_value(scrut_val, 0)
+            unreachable_bb = llvm_fn.append_basic_block("match_unreach")
+            sw = builder.switch(tag, unreachable_bb)
+            builder.position_at_end(unreachable_bb)
+            builder.unreachable()
+            # Lazily create the merge block — only needed if some arm falls
+            # through. If every arm terminates (ret/unreachable), the match
+            # statement has no successor and we leave the builder pointing
+            # at an empty trailing block (placed there for any subsequent
+            # statements; if none follow, _lower_function_body's
+            # is_terminated check covers it).
+            end_bb: ir.Block | None = None
+            def ensure_end() -> ir.Block:
+                nonlocal end_bb
+                if end_bb is None:
+                    end_bb = llvm_fn.append_basic_block("match_end")
+                return end_bb
+            for arm in arms:
+                var = ed.variant(arm.variant)
+                if var is None:
+                    raise ValueError(f"match arm references unknown variant {ed.name}::{arm.variant}")
+                arm_bb = llvm_fn.append_basic_block(f"match_{arm.variant}")
+                sw.add_case(ir.Constant(I8, ed.variant_index(arm.variant)), arm_bb)
+                builder.position_at_end(arm_bb)
+                # Bind payload fields. Each binding's alloca was pre-emitted
+                # by _collect_local_bindings; here we just unpack the slot
+                # and store. zip stops at the shorter — validator already
+                # checked binding count == field count.
+                for i, (binding, field) in enumerate(zip(arm.bindings, var.fields)):
+                    slot = builder.extract_value(scrut_val, [1, i])
+                    bound = _unpack_from_i64_slot(builder, slot, field.type, struct_tys, enum_tys)
+                    builder.store(bound, locals_[binding])
+                for s in arm.body:
+                    _lower_stmt(
+                        builder, s, llvm_fn=llvm_fn, params=params, locals_=locals_,
+                        entry_bb=entry_bb, constants=constants, module=module,
+                        return_claims=return_claims, overrides=overrides,
+                        extern_sigs=extern_sigs,
+                        struct_defs=struct_defs, struct_tys=struct_tys,
+                        enum_defs=enum_defs, enum_tys=enum_tys,
+                    )
+                if not builder.block.is_terminated:
+                    builder.branch(ensure_end())
+            if end_bb is not None:
+                builder.position_at_end(end_bb)
             return
     raise ValueError(f"unhandled stmt: {stmt!r}")
 
@@ -607,9 +761,10 @@ def _lower_claim(
 def _declare_function(
     module: ir.Module, fn: Function,
     struct_tys: dict[str, "ir.IdentifiedStructType"],
+    enum_tys: dict[str, "ir.IdentifiedStructType"],
 ) -> ir.Function:
-    param_tys = [_type_to_llvm(p.type, struct_tys) for p in fn.params]
-    ret_ty = _type_to_llvm(fn.return_type, struct_tys)
+    param_tys = [_type_to_llvm(p.type, struct_tys, enum_tys) for p in fn.params]
+    ret_ty = _type_to_llvm(fn.return_type, struct_tys, enum_tys)
     fn_ty = ir.FunctionType(ret_ty, param_tys)
     return ir.Function(module, fn_ty, name=fn.name)
 
@@ -617,9 +772,10 @@ def _declare_function(
 def _declare_extern(
     module: ir.Module, ext: ExternFunction,
     struct_tys: dict[str, "ir.IdentifiedStructType"],
+    enum_tys: dict[str, "ir.IdentifiedStructType"],
 ) -> ir.Function:
-    param_types = [_type_to_llvm(t, struct_tys) for t in ext.effective_param_types()]
-    return_type = _type_to_llvm(ext.return_type, struct_tys)
+    param_types = [_type_to_llvm(t, struct_tys, enum_tys) for t in ext.effective_param_types()]
+    return_type = _type_to_llvm(ext.return_type, struct_tys, enum_tys)
     fn_ty = ir.FunctionType(return_type, param_types, var_arg=ext.varargs)
     return ir.Function(module, fn_ty, name=ext.name)
 
@@ -630,6 +786,8 @@ def _lower_function_body(
     extern_sigs: dict[str, ExternFunction],
     struct_defs: dict[str, StructDef],
     struct_tys: dict[str, "ir.IdentifiedStructType"],
+    enum_defs: dict[str, EnumDef],
+    enum_tys: dict[str, "ir.IdentifiedStructType"],
 ) -> None:
     llvm_fn = module.globals[fn.name]
     for arg, p in zip(llvm_fn.args, fn.params):
@@ -647,7 +805,7 @@ def _lower_function_body(
     # Allocas at the very top of entry, before any other instruction. mem2reg
     # promotes them to SSA values during the optimize pass.
     locals_: dict[str, ir.AllocaInstr] = {}
-    for name, ty in _collect_local_bindings(fn.body, struct_tys):
+    for name, ty in _collect_local_bindings(fn.body, struct_tys, enum_tys, enum_defs):
         if name in params:
             raise ValueError(f"local {name!r} shadows parameter of {fn.name!r}")
         locals_[name] = builder.alloca(ty, name=name)
@@ -663,6 +821,7 @@ def _lower_function_body(
             return_claims=return_claims, overrides=overrides,
             extern_sigs=extern_sigs,
             struct_defs=struct_defs, struct_tys=struct_tys,
+            enum_defs=enum_defs, enum_tys=enum_tys,
         )
 
     # Void functions get an implicit `ret void` if the body falls through;
@@ -855,6 +1014,22 @@ def lower(
         body = [_type_to_llvm(f.type, struct_tys) for f in sd.fields]
         ty.set_body(*body)
 
+    # Enums: each lowers to an identified `{i8, [N x i64]}` struct, where
+    # N is the max payload-field count across the enum's variants. Each
+    # payload field occupies one i64 slot — int values zero-extend to fit,
+    # pointers ptrtoint. Variant payload structures are virtual: there's
+    # no per-variant LLVM struct; encode/decode happens at the slot level.
+    enum_defs: dict[str, EnumDef] = {ed.name: ed for ed in program.enums}
+    enum_tys: dict[str, ir.IdentifiedStructType] = {}
+    for ed in program.enums:
+        enum_tys[ed.name] = module.context.get_identified_type(ed.name)
+    for ed in program.enums:
+        ty = enum_tys[ed.name]
+        if not ty.is_opaque:
+            continue
+        payload_slots = ed.max_payload_slots()
+        ty.set_body(I8, ir.ArrayType(I64, payload_slots))
+
     constants: dict[str, ir.GlobalVariable] = {}
     for c in program.constants:
         data = bytearray(c.value.encode("utf-8") + b"\0")
@@ -868,9 +1043,9 @@ def lower(
     # Pass 1: declare every user function and every extern so calls can
     # resolve regardless of order or definedness.
     for fn in program.functions:
-        _declare_function(module, fn, struct_tys)
+        _declare_function(module, fn, struct_tys, enum_tys)
     for ext in program.externs:
-        _declare_extern(module, ext, struct_tys)
+        _declare_extern(module, ext, struct_tys, enum_tys)
 
     extern_sigs: dict[str, ExternFunction] = {ext.name: ext for ext in program.externs}
 
@@ -880,6 +1055,7 @@ def lower(
             module, fn, constants=constants, overrides=overrides,
             extern_sigs=extern_sigs,
             struct_defs=struct_defs, struct_tys=struct_tys,
+            enum_defs=enum_defs, enum_tys=enum_tys,
         )
 
     if entry is not None:

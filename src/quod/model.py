@@ -205,6 +205,21 @@ class NullPtr(_Node):
     kind: Literal["quod.null_ptr"] = "quod.null_ptr"
 
 
+class EnumInit(_Node):
+    """Construct a value of an enum type by selecting a variant and
+    initializing its payload fields. Lowered to: store tag byte + bitcast
+    payload + insertvalue chain into the variant's struct shape.
+
+    Validation: `enum` must name an `EnumDef`, `variant` must name one of
+    its variants, and `fields` must cover exactly the variant's payload
+    fields by name with matching types.
+    """
+    kind: Literal["quod.enum_init"] = "quod.enum_init"
+    enum: str
+    variant: str
+    fields: tuple[FieldInit, ...] = ()
+
+
 class CharLit(_Node):
     """A byte literal written as a single-character string. Lowers to
     `const_int i8 ord(value)`.
@@ -237,7 +252,7 @@ Expr = Annotated[
     Union[
         IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
         Call, StringRef, FieldRead, StructInit, PtrOffset, Widen, Load,
-        NullPtr, CharLit,
+        NullPtr, CharLit, EnumInit,
     ],
     Field(discriminator="kind"),
 ]
@@ -284,6 +299,19 @@ class StructType(_Node):
     name: str
 
 
+class EnumType(_Node):
+    """Reference to a named EnumDef. Pass-by-value at the LLVM level.
+
+    Lowered as a tagged union: i8 discriminant + [N x i64] payload, where
+    N is `max(1, max(len(variant.fields)))` and each payload field occupies
+    one i64-sized slot (so payload field types are restricted to scalar
+    types — int widths up to i64, plus i8*; no struct or enum payload
+    fields in v1).
+    """
+    kind: Literal["llvm.enum"] = "llvm.enum"
+    name: str
+
+
 class VoidType(_Node):
     """The LLVM `void` type. Only valid as a function return type.
 
@@ -300,17 +328,25 @@ IntType = Annotated[
     Field(discriminator="kind"),
 ]
 
-# Full type union, including pointer and struct types — used for Let
-# bindings, struct fields, and other value-bearing contexts. Void is
+# Full type union, including pointer, struct, and enum types — used for
+# Let bindings, struct fields, and other value-bearing contexts. Void is
 # deliberately excluded; see ReturnType for return positions.
 Type = Annotated[
-    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType, StructType],
+    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType, StructType, EnumType],
     Field(discriminator="kind"),
 ]
 
 # Type that can appear at a function return position, including void.
 ReturnType = Annotated[
-    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType, StructType, VoidType],
+    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType, StructType, EnumType, VoidType],
+    Field(discriminator="kind"),
+]
+
+# Scalar types — the subset valid as enum-variant payload fields.
+# Restricted to int widths (up to i64) and i8* so each payload field
+# occupies one i64-sized slot in the tagged-union layout.
+ScalarPayloadType = Annotated[
+    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType],
     Field(discriminator="kind"),
 ]
 
@@ -444,8 +480,37 @@ class WithArena(_Node):
     body: tuple["Statement", ...]
 
 
+class MatchArm(_Node):
+    """One arm of a `Match`. Names a variant, binds its payload fields to
+    locals (one name per field, in declaration order), and runs `body`
+    with those locals in scope.
+
+    Bindings are scoped to `body` only — they don't leak into sibling
+    arms or out of the match.
+    """
+    variant: str
+    bindings: tuple[str, ...] = ()
+    body: tuple["Statement", ...]
+
+
+class Match(_Node):
+    """Pattern-match on an enum value. One arm per variant, exhaustive.
+
+    `scrutinee` must lower to a value of some `EnumType("E")`. Arms must
+    cover every variant of `E` exactly once, in any order. No wildcards,
+    no guards, no nested patterns yet.
+
+    Lowered to a `switch` on the discriminant byte; each arm's body
+    runs in its own basic block with the variant's payload fields
+    bound as locals.
+    """
+    kind: Literal["quod.match"] = "quod.match"
+    scrutinee: Expr
+    arms: tuple[MatchArm, ...]
+
+
 Statement = Annotated[
-    Union[ReturnExpr, Return, If, Let, Assign, While, For, ExprStmt, FieldSet, Store, WithArena],
+    Union[ReturnExpr, Return, If, Let, Assign, While, For, ExprStmt, FieldSet, Store, WithArena, Match],
     Field(discriminator="kind"),
 ]
 
@@ -599,6 +664,9 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
             case StructInit(fields=field_inits):
                 for fi in field_inits:
                     visit_expr(fi.value)
+            case EnumInit(fields=field_inits):
+                for fi in field_inits:
+                    visit_expr(fi.value)
             case PtrOffset(base=b, offset=o):
                 visit_expr(b)
                 visit_expr(o)
@@ -637,6 +705,11 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
                 visit_expr(cap)
                 for x in body:
                     visit_stmt(x)
+            case Match(scrutinee=scrut, arms=arms):
+                visit_expr(scrut)
+                for arm in arms:
+                    for x in arm.body:
+                        visit_stmt(x)
             case _:
                 pass
 
@@ -677,6 +750,63 @@ class StructDef(_Node):
             if f.name == name:
                 return i
         raise KeyError(f"struct {self.name!r} has no field {name!r}")
+
+
+class EnumPayloadField(_Node):
+    """One payload field of an EnumVariant. Restricted to scalar types
+    (int widths up to i64, plus i8*) so each field fits in a single
+    i64-sized slot of the variant's payload."""
+    name: str
+    type: ScalarPayloadType
+
+
+class EnumVariant(_Node):
+    """One variant of an EnumDef. The empty `fields` tuple means a unit
+    variant (no payload, like `JsonValue::Null`)."""
+    name: str
+    fields: tuple[EnumPayloadField, ...] = ()
+
+    def field(self, name: str) -> EnumPayloadField | None:
+        for f in self.fields:
+            if f.name == name:
+                return f
+        return None
+
+    def field_index(self, name: str) -> int:
+        for i, f in enumerate(self.fields):
+            if f.name == name:
+                return i
+        raise KeyError(f"variant {self.name!r} has no field {name!r}")
+
+
+class EnumDef(_Node):
+    """A named tagged-union type. Variants are ordered (first variant gets
+    discriminant 0) and uniquely named within the enum.
+
+    Lowered to an LLVM identified struct `{i8 tag, [N x i64] payload}`
+    where N = max(1, max(len(v.fields) for v in variants)). EnumInit
+    bitcasts payload to a per-variant LLVM struct type to set fields;
+    Match likewise bitcasts to extract bindings.
+    """
+    name: str
+    variants: tuple[EnumVariant, ...]
+
+    def variant(self, name: str) -> EnumVariant | None:
+        for v in self.variants:
+            if v.name == name:
+                return v
+        return None
+
+    def variant_index(self, name: str) -> int:
+        for i, v in enumerate(self.variants):
+            if v.name == name:
+                return i
+        raise KeyError(f"enum {self.name!r} has no variant {name!r}")
+
+    def max_payload_slots(self) -> int:
+        """Number of i64 slots needed to hold the largest variant's
+        payload. At least 1 to avoid [0 x i64] arrays at lower time."""
+        return max((len(v.fields) for v in self.variants), default=0) or 1
 
 
 class Param(_Node):
@@ -752,6 +882,7 @@ class _ProgramBase(_Node):
     functions: tuple[Function, ...] = ()
     externs: tuple[ExternFunction, ...] = ()
     structs: tuple[StructDef, ...] = ()
+    enums: tuple[EnumDef, ...] = ()
     imports: tuple[str, ...] = ()
 
     @model_serializer(mode="wrap")
@@ -759,6 +890,8 @@ class _ProgramBase(_Node):
         data = handler(self)
         if not self.structs:
             data.pop("structs", None)
+        if not self.enums:
+            data.pop("enums", None)
         if not self.imports:
             data.pop("imports", None)
         return data
@@ -787,8 +920,10 @@ class _ProgramBase(_Node):
 
 
 def _validate_structs(program: "_ProgramBase") -> None:
-    """Program-wide struct sanity. Runs on both Program and InputProgram.
+    """Program-wide struct + enum sanity. Runs on both Program and
+    InputProgram.
 
+    Structs:
     - Struct names are unique.
     - No struct field references an undefined struct.
     - No struct contains itself by value (direct or transitive).
@@ -797,9 +932,19 @@ def _validate_structs(program: "_ProgramBase") -> None:
     - Every `StructInit` covers exactly the fields of the named def, with
       no missing or extra names and no duplicates.
 
-    When `program.imports` is non-empty, struct refs reachable from
+    Enums:
+    - Enum names are unique (and don't collide with struct names).
+    - Variants within an enum are uniquely named; payload fields within a
+      variant are uniquely named.
+    - Every `EnumType` mentioned anywhere resolves to a defined enum.
+    - Every `EnumInit` references a defined (enum, variant) pair and
+      covers exactly the variant's fields.
+    - Every `Match` is exhaustive over its scrutinee's enum and each arm
+      binds the right number of payload locals.
+
+    When `program.imports` is non-empty, struct/enum refs reachable from
     function bodies / params / externs are deferred — the imported module
-    may bring the struct in, and we can't tell from this side. The fully
+    may bring the type in, and we can't tell from this side. The fully
     resolved Program (with imports cleared) gets the complete check.
     """
     seen_names: set[str] = set()
@@ -816,6 +961,31 @@ def _validate_structs(program: "_ProgramBase") -> None:
             field_names.add(f.name)
 
     by_name: dict[str, StructDef] = {sd.name: sd for sd in program.structs}
+    enums_by_name: dict[str, EnumDef] = {}
+    for ed in program.enums:
+        if ed.name in enums_by_name:
+            raise ValueError(f"duplicate enum definition {ed.name!r}")
+        if ed.name in by_name:
+            raise ValueError(
+                f"enum name {ed.name!r} collides with a struct of the same name"
+            )
+        enums_by_name[ed.name] = ed
+        seen_variants: set[str] = set()
+        for v in ed.variants:
+            if v.name in seen_variants:
+                raise ValueError(
+                    f"enum {ed.name!r} has duplicate variant {v.name!r}"
+                )
+            seen_variants.add(v.name)
+            seen_fields: set[str] = set()
+            for f in v.fields:
+                if f.name in seen_fields:
+                    raise ValueError(
+                        f"variant {ed.name!r}::{v.name} has duplicate field {f.name!r}"
+                    )
+                seen_fields.add(f.name)
+        if not ed.variants:
+            raise ValueError(f"enum {ed.name!r} has no variants")
 
     # Reject by-value cycles. Walk each struct's transitive struct-typed
     # fields; a path that revisits the start is a cycle.
@@ -825,20 +995,20 @@ def _validate_structs(program: "_ProgramBase") -> None:
     if program.imports:
         return
 
-    # Validate every struct ref reachable from the program is defined.
+    # Validate every type ref reachable from the program is defined.
     for sd in program.structs:
         for f in sd.fields:
-            _check_type_refs(f.type, by_name, where=f"struct {sd.name!r} field {f.name!r}")
+            _check_type_refs(f.type, by_name, enums_by_name, where=f"struct {sd.name!r} field {f.name!r}")
     for fn in program.functions:
-        _check_type_refs(fn.return_type, by_name, where=f"function {fn.name!r} return type")
+        _check_type_refs(fn.return_type, by_name, enums_by_name, where=f"function {fn.name!r} return type")
         for p in fn.params:
-            _check_type_refs(p.type, by_name, where=f"function {fn.name!r} param {p.name!r}")
+            _check_type_refs(p.type, by_name, enums_by_name, where=f"function {fn.name!r} param {p.name!r}")
         for stmt in fn.body:
-            _check_struct_uses_in_stmt(stmt, by_name, where=f"function {fn.name!r}")
+            _check_struct_uses_in_stmt(stmt, by_name, enums_by_name, where=f"function {fn.name!r}")
     for ext in program.externs:
-        _check_type_refs(ext.return_type, by_name, where=f"extern {ext.name!r} return type")
+        _check_type_refs(ext.return_type, by_name, enums_by_name, where=f"extern {ext.name!r} return type")
         for t in ext.param_types:
-            _check_type_refs(t, by_name, where=f"extern {ext.name!r} param")
+            _check_type_refs(t, by_name, enums_by_name, where=f"extern {ext.name!r} param")
 
 
 def _check_no_struct_cycle(start: str, by_name: dict[str, "StructDef"]) -> None:
@@ -871,45 +1041,128 @@ def _check_no_struct_cycle(start: str, by_name: dict[str, "StructDef"]) -> None:
             go(f.type.name, (start,))
 
 
-def _check_type_refs(t: "Type", by_name: dict[str, "StructDef"], *, where: str) -> None:
+def _check_type_refs(
+    t: "Type",
+    by_name: dict[str, "StructDef"],
+    enums_by_name: dict[str, "EnumDef"],
+    *,
+    where: str,
+) -> None:
     if isinstance(t, StructType) and t.name not in by_name:
         raise ValueError(f"{where}: references undefined struct {t.name!r}")
+    if isinstance(t, EnumType) and t.name not in enums_by_name:
+        raise ValueError(f"{where}: references undefined enum {t.name!r}")
 
 
-def _check_struct_uses_in_stmt(stmt, by_name: dict[str, "StructDef"], *, where: str) -> None:
+def _check_struct_uses_in_stmt(
+    stmt,
+    by_name: dict[str, "StructDef"],
+    enums_by_name: dict[str, "EnumDef"],
+    *,
+    where: str,
+) -> None:
     match stmt:
         case ReturnExpr(value=expr) | ExprStmt(value=expr):
-            _check_struct_uses_in_expr(expr, by_name, where=where)
+            _check_struct_uses_in_expr(expr, by_name, enums_by_name, where=where)
         case If(cond=cond, then_body=t_body, else_body=e_body):
-            _check_struct_uses_in_expr(cond, by_name, where=where)
+            _check_struct_uses_in_expr(cond, by_name, enums_by_name, where=where)
             for s in t_body:
-                _check_struct_uses_in_stmt(s, by_name, where=where)
+                _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
             for s in e_body:
-                _check_struct_uses_in_stmt(s, by_name, where=where)
+                _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
         case Let(type=ty, init=expr):
-            _check_type_refs(ty, by_name, where=f"{where}: let")
-            _check_struct_uses_in_expr(expr, by_name, where=where)
+            _check_type_refs(ty, by_name, enums_by_name, where=f"{where}: let")
+            _check_struct_uses_in_expr(expr, by_name, enums_by_name, where=where)
         case Assign(value=expr) | FieldSet(value=expr):
-            _check_struct_uses_in_expr(expr, by_name, where=where)
+            _check_struct_uses_in_expr(expr, by_name, enums_by_name, where=where)
         case Store(ptr=p, value=v):
-            _check_struct_uses_in_expr(p, by_name, where=where)
-            _check_struct_uses_in_expr(v, by_name, where=where)
+            _check_struct_uses_in_expr(p, by_name, enums_by_name, where=where)
+            _check_struct_uses_in_expr(v, by_name, enums_by_name, where=where)
         case While(cond=cond, body=body):
-            _check_struct_uses_in_expr(cond, by_name, where=where)
+            _check_struct_uses_in_expr(cond, by_name, enums_by_name, where=where)
             for s in body:
-                _check_struct_uses_in_stmt(s, by_name, where=where)
+                _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
         case For(lo=lo, hi=hi, body=body):
-            _check_struct_uses_in_expr(lo, by_name, where=where)
-            _check_struct_uses_in_expr(hi, by_name, where=where)
+            _check_struct_uses_in_expr(lo, by_name, enums_by_name, where=where)
+            _check_struct_uses_in_expr(hi, by_name, enums_by_name, where=where)
             for s in body:
-                _check_struct_uses_in_stmt(s, by_name, where=where)
+                _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
         case WithArena(capacity=cap, body=body):
-            _check_struct_uses_in_expr(cap, by_name, where=where)
+            _check_struct_uses_in_expr(cap, by_name, enums_by_name, where=where)
             for s in body:
-                _check_struct_uses_in_stmt(s, by_name, where=where)
+                _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
+        case Match(scrutinee=scrut, arms=arms):
+            _check_struct_uses_in_expr(scrut, by_name, enums_by_name, where=where)
+            # Need scrutinee's enum name to validate arms. We don't have full
+            # type inference here; the lower pass + per-EnumInit validation
+            # cover most error shapes. Here we only enforce per-arm structural
+            # rules that are independent of which enum is being matched —
+            # plus exhaustiveness is checked in _check_match_uses_in_expr
+            # when the scrutinee's enum is statically obvious (LocalRef or
+            # ParamRef of EnumType). For other shapes (Call returning enum,
+            # Load[Enum], etc.) we defer to the lower pass.
+            for arm in arms:
+                seen_binding: set[str] = set()
+                for b in arm.bindings:
+                    if b in seen_binding:
+                        raise ValueError(
+                            f"{where}: match arm for {arm.variant!r} binds "
+                            f"{b!r} more than once"
+                        )
+                    seen_binding.add(b)
+                for s in arm.body:
+                    _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
+            arm_variants = [a.variant for a in arms]
+            seen_arms: set[str] = set()
+            for v in arm_variants:
+                if v in seen_arms:
+                    raise ValueError(
+                        f"{where}: match has duplicate arm for variant {v!r}"
+                    )
+                seen_arms.add(v)
+            scrut_enum = _scrutinee_enum_name(scrut, enums_by_name)
+            if scrut_enum is not None:
+                ed = enums_by_name[scrut_enum]
+                declared = {v.name for v in ed.variants}
+                missing = declared - seen_arms
+                extra = seen_arms - declared
+                if missing:
+                    raise ValueError(
+                        f"{where}: match on {scrut_enum!r} non-exhaustive — "
+                        f"missing {sorted(missing)}"
+                    )
+                if extra:
+                    raise ValueError(
+                        f"{where}: match on {scrut_enum!r} has unknown "
+                        f"variant arms {sorted(extra)}"
+                    )
+                for arm in arms:
+                    var = ed.variant(arm.variant)
+                    if var is not None and len(arm.bindings) != len(var.fields):
+                        raise ValueError(
+                            f"{where}: match arm {scrut_enum}::{arm.variant} "
+                            f"binds {len(arm.bindings)} field(s), expected "
+                            f"{len(var.fields)}"
+                        )
 
 
-def _check_struct_uses_in_expr(expr, by_name: dict[str, "StructDef"], *, where: str) -> None:
+def _scrutinee_enum_name(expr, enums_by_name: dict[str, "EnumDef"]) -> str | None:
+    """Best-effort: if `expr` is statically an enum value of a known enum,
+    return its name. Used only for validator-time exhaustiveness checks;
+    runtime enum-type checking happens in the lower pass."""
+    match expr:
+        case EnumInit(enum=name) if name in enums_by_name:
+            return name
+    return None
+
+
+def _check_struct_uses_in_expr(
+    expr,
+    by_name: dict[str, "StructDef"],
+    enums_by_name: dict[str, "EnumDef"],
+    *,
+    where: str,
+) -> None:
     match expr:
         case StructInit(type=name, fields=field_inits):
             sd = by_name.get(name)
@@ -937,23 +1190,57 @@ def _check_struct_uses_in_expr(expr, by_name: dict[str, "StructDef"], *, where: 
                     f"{sorted(missing)}"
                 )
             for fi in field_inits:
-                _check_struct_uses_in_expr(fi.value, by_name, where=where)
+                _check_struct_uses_in_expr(fi.value, by_name, enums_by_name, where=where)
+        case EnumInit(enum=ename, variant=vname, fields=field_inits):
+            ed = enums_by_name.get(ename)
+            if ed is None:
+                raise ValueError(f"{where}: enum_init references undefined enum {ename!r}")
+            var = ed.variant(vname)
+            if var is None:
+                raise ValueError(
+                    f"{where}: enum_init references unknown variant "
+                    f"{ename}::{vname}"
+                )
+            init_names = [fi.name for fi in field_inits]
+            seen: set[str] = set()
+            for n in init_names:
+                if n in seen:
+                    raise ValueError(
+                        f"{where}: enum_init for {ename}::{vname} sets "
+                        f"field {n!r} twice"
+                    )
+                seen.add(n)
+            def_names = {f.name for f in var.fields}
+            extra = seen - def_names
+            if extra:
+                raise ValueError(
+                    f"{where}: enum_init for {ename}::{vname} sets unknown "
+                    f"field(s): {sorted(extra)}"
+                )
+            missing = def_names - seen
+            if missing:
+                raise ValueError(
+                    f"{where}: enum_init for {ename}::{vname} missing "
+                    f"field(s): {sorted(missing)}"
+                )
+            for fi in field_inits:
+                _check_struct_uses_in_expr(fi.value, by_name, enums_by_name, where=where)
         case FieldRead(value=inner):
-            _check_struct_uses_in_expr(inner, by_name, where=where)
+            _check_struct_uses_in_expr(inner, by_name, enums_by_name, where=where)
         case BinOp(lhs=l, rhs=r) | ShortCircuitOr(lhs=l, rhs=r) | ShortCircuitAnd(lhs=l, rhs=r):
-            _check_struct_uses_in_expr(l, by_name, where=where)
-            _check_struct_uses_in_expr(r, by_name, where=where)
+            _check_struct_uses_in_expr(l, by_name, enums_by_name, where=where)
+            _check_struct_uses_in_expr(r, by_name, enums_by_name, where=where)
         case Call(args=args):
             for a in args:
-                _check_struct_uses_in_expr(a, by_name, where=where)
+                _check_struct_uses_in_expr(a, by_name, enums_by_name, where=where)
         case PtrOffset(base=b, offset=o):
-            _check_struct_uses_in_expr(b, by_name, where=where)
-            _check_struct_uses_in_expr(o, by_name, where=where)
+            _check_struct_uses_in_expr(b, by_name, enums_by_name, where=where)
+            _check_struct_uses_in_expr(o, by_name, enums_by_name, where=where)
         case Widen(value=v):
-            _check_struct_uses_in_expr(v, by_name, where=where)
+            _check_struct_uses_in_expr(v, by_name, enums_by_name, where=where)
         case Load(ptr=p, type=t):
-            _check_struct_uses_in_expr(p, by_name, where=where)
-            _check_type_refs(t, by_name, where=where)
+            _check_struct_uses_in_expr(p, by_name, enums_by_name, where=where)
+            _check_type_refs(t, by_name, enums_by_name, where=where)
 
 
 class Program(_ProgramBase):
@@ -1114,6 +1401,10 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
         lines.append("  structs:")
         for sd in program.structs:
             lines.append(f"    {label(sd)}{format_struct_def(sd)}")
+    if program.enums:
+        lines.append("  enums:")
+        for ed in program.enums:
+            lines.extend("    " + line for line in format_enum_def(ed, label=label).splitlines())
     if program.externs:
         lines.append("  externs:")
         for ext in program.externs:
@@ -1129,7 +1420,8 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
             lines.extend("    " + line for line in format_function(fn, label=label).splitlines())
     if (
         not program.constants and not program.functions
-        and not program.externs and not program.structs and not program.imports
+        and not program.externs and not program.structs and not program.enums
+        and not program.imports
     ):
         lines.append("  (empty)")
     lines.append("}")
@@ -1139,6 +1431,18 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
 def format_struct_def(sd: StructDef) -> str:
     body = ", ".join(f"{f.name}: {_format_type(f.type)}" for f in sd.fields)
     return f"struct {sd.name} {{ {body} }}"
+
+
+def format_enum_def(ed: EnumDef, *, label: NodeLabel = _NO_LABEL) -> str:
+    lines = [f"{label(ed)}enum {ed.name} {{"]
+    for v in ed.variants:
+        if v.fields:
+            args = ", ".join(f"{f.name}: {_format_type(f.type)}" for f in v.fields)
+            lines.append(f"  {label(v)}{v.name}({args})")
+        else:
+            lines.append(f"  {label(v)}{v.name}")
+    lines.append("}")
+    return "\n".join(lines)
 
 
 def format_function(fn: Function, *, label: NodeLabel = _NO_LABEL) -> str:
@@ -1171,6 +1475,8 @@ def _format_type(t) -> str:
         case I8PtrType():
             return "i8*"
         case StructType(name=n):
+            return n
+        case EnumType(name=n):
             return n
         case VoidType():
             return "void"
@@ -1258,6 +1564,21 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
                 f"{pad}{prefix}with_arena {n} = arena_new({_format_expr(cap)}) {{\n"
                 f"{body_lines}\n{pad}}}"
             )
+        case Match(scrutinee=scrut, arms=arms):
+            arm_lines = []
+            for arm in arms:
+                arm_pad = " " * (indent + 2)
+                inner_pad = " " * (indent + 4)
+                if arm.bindings:
+                    head = f"{arm_pad}{arm.variant}({', '.join(arm.bindings)}) => {{"
+                else:
+                    head = f"{arm_pad}{arm.variant} => {{"
+                arm_lines.append(head)
+                for s in arm.body:
+                    arm_lines.append(_format_stmt(s, indent + 4, label=label))
+                arm_lines.append(f"{arm_pad}}}")
+            arms_text = "\n".join(arm_lines)
+            return f"{pad}{prefix}match {_format_expr(scrut)} {{\n{arms_text}\n{pad}}}"
     raise ValueError(f"unhandled stmt: {stmt!r}")
 
 
@@ -1303,4 +1624,9 @@ def _format_expr(expr) -> str:
             return "null"
         case CharLit(value=v):
             return repr(v)
+        case EnumInit(enum=ename, variant=vname, fields=field_inits):
+            if field_inits:
+                inner = ", ".join(f"{fi.name}: {_format_expr(fi.value)}" for fi in field_inits)
+                return f"{ename}::{vname}({inner})"
+            return f"{ename}::{vname}"
     raise ValueError(f"unhandled expr: {expr!r}")

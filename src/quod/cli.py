@@ -44,14 +44,17 @@ from quod.editor import (
     add_constant_to_program,
     add_function_to_program,
     add_statement_in_function,
+    add_enum_to_program,
     add_struct_to_program,
     find_function_ref,
+    parse_enum_spec,
     parse_function_spec,
     parse_statement_spec,
     read_json_arg,
     remove_constant_from_program,
     remove_extern_from_program,
     remove_statement_in_function,
+    remove_enum_from_program,
     remove_struct_from_program,
 )
 from quod.hashing import HASH_DISPLAY_LEN, find_by_prefix, node_hash, short_hash, walk
@@ -136,6 +139,7 @@ extern_app = typer.Typer(no_args_is_help=True, help="Operations on externs.")
 note_app = typer.Typer(no_args_is_help=True, help="Operations on notes.")
 const_app = typer.Typer(no_args_is_help=True, help="Operations on string constants.")
 struct_app = typer.Typer(no_args_is_help=True, help="Operations on struct definitions.")
+enum_app = typer.Typer(no_args_is_help=True, help="Operations on enum (sum-type) definitions.")
 provider_app = typer.Typer(no_args_is_help=True, help="Inspect registered claim providers.")
 
 app.add_typer(fn_app, name="fn")
@@ -145,6 +149,7 @@ app.add_typer(extern_app, name="extern")
 app.add_typer(note_app, name="note")
 app.add_typer(const_app, name="const")
 app.add_typer(struct_app, name="struct")
+app.add_typer(enum_app, name="enum")
 app.add_typer(provider_app, name="provider")
 
 
@@ -1557,18 +1562,26 @@ _TYPE_NAMES = {
 }
 
 
-def _parse_type_name(s: str, *, struct_names: tuple[str, ...] = ()):
-    """Parse a CLI type token. Accepts the built-in width names and any
-    `struct_names` passed in (which become `StructType(name=...)`). Pass
-    the program's current struct names to allow struct types in extern
-    or struct-field declarations; pass nothing for legacy (int-only)
-    callsites."""
+def _parse_type_name(
+    s: str,
+    *,
+    struct_names: tuple[str, ...] = (),
+    enum_names: tuple[str, ...] = (),
+):
+    """Parse a CLI type token. Accepts the built-in width names plus any
+    `struct_names` (-> StructType) and `enum_names` (-> EnumType) passed
+    in. Pass the program's current names to allow struct/enum types in
+    extern or struct-field declarations; pass nothing for legacy
+    (int-only) callsites."""
+    from quod.model import EnumType
     cls = _TYPE_NAMES.get(s)
     if cls is not None:
         return cls()
     if s in struct_names:
         return StructType(name=s)
-    choices = list(_TYPE_NAMES) + list(struct_names)
+    if s in enum_names:
+        return EnumType(name=s)
+    choices = list(_TYPE_NAMES) + list(struct_names) + list(enum_names)
     raise typer.BadParameter(
         f"unknown type {s!r}; choices: {', '.join(choices)}"
     )
@@ -1804,7 +1817,89 @@ def _format_field_type(t) -> str:
             return tok
     if isinstance(t, StructType):
         return t.name
+    from quod.model import EnumType
+    if isinstance(t, EnumType):
+        return t.name
     return repr(t)
+
+
+# ---------- enum sub-app ----------
+
+@enum_app.command("ls")
+def enum_ls(
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
+    """List declared enums with their variants."""
+    from quod.model import format_enum_def
+    program = _load()
+    if json_output:
+        _emit_json(list(program.enums))
+        return
+    if not program.enums:
+        typer.echo("(no enums)")
+        return
+    for ed in program.enums:
+        typer.echo(format_enum_def(ed))
+
+
+@enum_app.command("show")
+def enum_show(
+    name: str = typer.Argument(..., help="Enum name."),
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
+    """Print one enum definition."""
+    from quod.model import format_enum_def
+    program = _load()
+    ed = next((e for e in program.enums if e.name == name), None)
+    if ed is None:
+        typer.echo(f"error: no enum named {name!r}", err=True)
+        raise typer.Exit(1)
+    if json_output:
+        _emit_json(ed)
+        return
+    typer.echo(format_enum_def(ed))
+
+
+@enum_app.command("add")
+def enum_add(
+    spec: str = typer.Argument("-", help="Path to JSON EnumDef spec, or '-' for stdin."),
+) -> None:
+    """Append a new enum.
+
+    The CLI surface for enums is JSON-only (for now) — variant payloads
+    have enough structure that the shorthand `name:type` form for structs
+    doesn't generalize cleanly. Author the EnumDef as a JSON object and
+    pipe it in: `cat enum.json | quod enum add -`.
+
+    See `quod schema EnumDef` for the canonical shape.
+    """
+    with _exclusive_lock():
+        program = _load()
+        try:
+            ed = parse_enum_spec(read_json_arg(spec))
+            program = add_enum_to_program(program, ed)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    var_summary = ", ".join(v.name for v in ed.variants)
+    typer.echo(f"declared enum {ed.name} {{ {var_summary} }} (hash={short_hash(ed)})")
+
+
+@enum_app.command("rm")
+def enum_rm(
+    name: str = typer.Argument(..., help="Enum name to remove."),
+) -> None:
+    """Remove an enum definition. Strict: refuses if anything references it."""
+    with _exclusive_lock():
+        program = _load()
+        try:
+            program = remove_enum_from_program(program, name)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    typer.echo(f"removed enum {name}")
 
 
 # ---------- note sub-app ----------
