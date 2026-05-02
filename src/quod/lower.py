@@ -44,6 +44,7 @@ from quod.model import (
     Load,
     LocalRef,
     NonNegativeClaim,
+    NullPtr,
     ParamRef,
     Program,
     PtrOffset,
@@ -271,6 +272,8 @@ def _lower_expr(
             target_ty = _type_to_llvm(t, struct_tys)
             casted = builder.bitcast(base, target_ty.as_pointer())
             return builder.load(casted)
+        case NullPtr():
+            return ir.Constant(I8.as_pointer(), None)
     raise ValueError(f"unhandled expr: {expr!r}")
 
 

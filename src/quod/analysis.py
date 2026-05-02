@@ -163,4 +163,4 @@ def _walk_calls_in_expr(expr) -> Iterator[Call]:
             yield from _walk_calls_in_expr(v)
         case Load(ptr=p):
             yield from _walk_calls_in_expr(p)
-        # IntLit, ParamRef, LocalRef, StringRef carry no nested Calls.
+        # IntLit, ParamRef, LocalRef, StringRef, NullPtr carry no nested Calls.

@@ -47,6 +47,7 @@ from quod.model import (
     Load,
     LocalRef,
     NonNegativeClaim,
+    NullPtr,
     ParamRef,
     Program,
     PtrOffset,
@@ -289,6 +290,8 @@ def _expr_spans(expr) -> tuple[Span, ...]:
                 *_expr_spans(p),
                 Span(")", "punct"),
             )
+        case NullPtr():
+            return (Span("null", "keyword"),)
     raise ValueError(f"unhandled expr: {expr!r}")
 
 

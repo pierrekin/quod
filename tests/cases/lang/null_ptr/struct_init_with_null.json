@@ -1,0 +1,61 @@
+{
+  "program": {
+    "constants": [
+      { "name": ".fmt", "value": "n=%lld\n" }
+    ],
+    "structs": [
+      { "name": "Slot",
+        "fields": [
+          { "name": "ptr", "type": { "kind": "llvm.i8_ptr" } },
+          { "name": "n",   "type": { "kind": "llvm.i64" } }
+        ] }
+    ],
+    "externs": [
+      { "name": "printf", "param_types": [{ "kind": "llvm.i8_ptr" }], "varargs": true },
+      { "name": "quod_arena_alloc",
+        "param_types": [{ "kind": "llvm.i8_ptr" }, { "kind": "llvm.i64" }],
+        "return_type": { "kind": "llvm.i8_ptr" } }
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": { "kind": "llvm.i32" },
+        "body": [
+          { "kind": "quod.with_arena", "name": "a",
+            "capacity": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 64 },
+            "body": [
+              { "kind": "quod.let", "name": "buf", "type": { "kind": "llvm.i8_ptr" },
+                "init": { "kind": "llvm.call", "function": "quod_arena_alloc",
+                          "args": [
+                            { "kind": "quod.local_ref", "name": "a" },
+                            { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 32 }
+                          ] } },
+              { "kind": "quod.store",
+                "ptr": { "kind": "quod.local_ref", "name": "buf" },
+                "value": { "kind": "quod.struct_init", "type": "Slot",
+                           "fields": [
+                             { "name": "ptr", "value": { "kind": "quod.null_ptr" } },
+                             { "name": "n",   "value": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 7 } }
+                           ] } },
+              { "kind": "quod.let", "name": "s", "type": { "kind": "llvm.struct", "name": "Slot" },
+                "init": { "kind": "quod.load",
+                          "ptr": { "kind": "quod.local_ref", "name": "buf" },
+                          "type": { "kind": "llvm.struct", "name": "Slot" } } },
+              { "kind": "quod.expr_stmt",
+                "value": { "kind": "llvm.call", "function": "printf",
+                           "args": [
+                             { "kind": "quod.string_ref", "name": ".fmt" },
+                             { "kind": "quod.field",
+                               "value": { "kind": "quod.local_ref", "name": "s" },
+                               "name": "n" }
+                           ] } }
+            ] },
+          { "kind": "quod.return_int", "value": 0 }
+        ],
+        "claims": []
+      }
+    ]
+  },
+  "expect": { "stdout": "n=7\n", "exit": 0 }
+}

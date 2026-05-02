@@ -195,10 +195,21 @@ class Load(_Node):
     type: "Type"  # the value type to return
 
 
+class NullPtr(_Node):
+    """The null i8* literal. Lowers to `i8* null`.
+
+    Useful as the placeholder for unused pointer-typed struct fields
+    (e.g. JsonValue.str_ptr when tag != string), since `quod.struct_init`
+    requires every field to be initialised.
+    """
+    kind: Literal["quod.null_ptr"] = "quod.null_ptr"
+
+
 Expr = Annotated[
     Union[
         IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
         Call, StringRef, FieldRead, StructInit, PtrOffset, Widen, Load,
+        NullPtr,
     ],
     Field(discriminator="kind"),
 ]
@@ -1242,4 +1253,6 @@ def _format_expr(expr) -> str:
             return f"{kind}widen({_format_expr(v)} to {_format_type(t)})"
         case Load(ptr=p, type=t):
             return f"load[{_format_type(t)}]({_format_expr(p)})"
+        case NullPtr():
+            return "null"
     raise ValueError(f"unhandled expr: {expr!r}")

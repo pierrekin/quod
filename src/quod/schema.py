@@ -48,6 +48,7 @@ from quod.model import (
     LocalRef,
     ManualJustification,
     NonNegativeClaim,
+    NullPtr,
     Param,
     ParamRef,
     ReturnExpr,
@@ -263,6 +264,16 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "type": {"kind": "llvm.i8"},
         },
         "see_also": ["quod.ptr_offset", "quod.widen"],
+    },
+    "quod.null_ptr": {
+        "class": NullPtr,
+        "summary": (
+            "The null i8* literal. Lowers to `i8* null`. Useful for "
+            "placeholder values in `quod.struct_init` for pointer-typed "
+            "fields that aren't meaningful for the active variant."
+        ),
+        "example": {"kind": "quod.null_ptr"},
+        "see_also": ["quod.struct_init", "llvm.i8_ptr"],
     },
 
     # ---------- statement ----------
@@ -530,7 +541,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "llvm.const_int", "llvm.param_ref", "quod.local_ref", "llvm.binop",
         "quod.sc_or", "quod.sc_and", "llvm.call", "quod.string_ref",
         "quod.struct_init", "quod.field", "quod.ptr_offset", "quod.widen",
-        "quod.load",
+        "quod.load", "quod.null_ptr",
     ],
     "statement": [
         "quod.return_int", "quod.return_expr", "quod.if",
