@@ -71,14 +71,17 @@ file    = "arenas/with_arena_scratch.json"
 # The keystone for self-hosting: a JSON parser written in quod
 # that can read `program.json`. v1 is C-style: fat-struct
 # JsonValue, out-param + bool returns, arena-allocated.
+#
+# Each phase is preserved as its own program so the case study reads
+# as a tour: `quod -p json_v1_phase0 show`, `... phase1 show`, etc.
 
 [[program]]
-name    = "json_v1"
+name    = "json_v1_phase0"
 version = "0.1.0"
-file    = "json/program.json"
+file    = "json/phase0_skeleton/program.json"
 
   [[program.bin]]
-  name  = "json_v1"
+  name  = "json_v1_phase0"
   entry = "main"
 
 # ---------- strings ----------

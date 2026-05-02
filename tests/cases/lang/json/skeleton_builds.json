@@ -1,5 +1,5 @@
 {
-  "program_file": "../../../../examples/json/program.json",
+  "program_file": "../../../../examples/json/phase0_skeleton/program.json",
   "expect": {
     "stdout": "",
     "exit": 0
