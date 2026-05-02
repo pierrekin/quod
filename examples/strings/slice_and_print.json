@@ -1,6 +1,7 @@
 {
   "imports": [
-    "std.str"
+    "core.str",
+    "alloc.str"
   ],
   "constants": [
     {
@@ -36,11 +37,11 @@
           "name": "src",
           "type": {
             "kind": "llvm.struct",
-            "name": "std.str.String"
+            "name": "core.str.String"
           },
           "init": {
             "kind": "llvm.call",
-            "function": "std.str.from_cstr",
+            "function": "core.str.from_cstr",
             "args": [
               {
                 "kind": "quod.string_ref",
@@ -65,11 +66,11 @@
               "name": "head",
               "type": {
                 "kind": "llvm.struct",
-                "name": "std.str.String"
+                "name": "core.str.String"
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "std.str.slice",
+                "function": "core.str.slice",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -97,11 +98,11 @@
               "name": "tail",
               "type": {
                 "kind": "llvm.struct",
-                "name": "std.str.String"
+                "name": "core.str.String"
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "std.str.slice",
+                "function": "core.str.slice",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -132,7 +133,7 @@
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "std.str.to_cstr_in",
+                "function": "alloc.str.to_cstr_in",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -153,7 +154,7 @@
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "std.str.to_cstr_in",
+                "function": "alloc.str.to_cstr_in",
                 "args": [
                   {
                     "kind": "quod.local_ref",

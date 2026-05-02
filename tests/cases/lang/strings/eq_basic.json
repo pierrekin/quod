@@ -1,7 +1,7 @@
 {
   "program": {
     "imports": [
-      "std.str"
+      "core.str"
     ],
     "constants": [
       {
@@ -45,11 +45,11 @@
             "name": "a",
             "type": {
               "kind": "llvm.struct",
-              "name": "std.str.String"
+              "name": "core.str.String"
             },
             "init": {
               "kind": "llvm.call",
-              "function": "std.str.from_cstr",
+              "function": "core.str.from_cstr",
               "args": [
                 {
                   "kind": "quod.string_ref",
@@ -63,11 +63,11 @@
             "name": "b",
             "type": {
               "kind": "llvm.struct",
-              "name": "std.str.String"
+              "name": "core.str.String"
             },
             "init": {
               "kind": "llvm.call",
-              "function": "std.str.from_cstr",
+              "function": "core.str.from_cstr",
               "args": [
                 {
                   "kind": "quod.string_ref",
@@ -81,11 +81,11 @@
             "name": "c",
             "type": {
               "kind": "llvm.struct",
-              "name": "std.str.String"
+              "name": "core.str.String"
             },
             "init": {
               "kind": "llvm.call",
-              "function": "std.str.from_cstr",
+              "function": "core.str.from_cstr",
               "args": [
                 {
                   "kind": "quod.string_ref",
@@ -106,7 +106,7 @@
                 },
                 {
                   "kind": "llvm.call",
-                  "function": "std.str.eq",
+                  "function": "core.str.eq",
                   "args": [
                     {
                       "kind": "quod.local_ref",
@@ -120,7 +120,7 @@
                 },
                 {
                   "kind": "llvm.call",
-                  "function": "std.str.eq",
+                  "function": "core.str.eq",
                   "args": [
                     {
                       "kind": "quod.local_ref",

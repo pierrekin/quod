@@ -255,7 +255,7 @@ def _load_program(case: dict[str, Any], case_dir: Path) -> Program:
         path = (case_dir / case["c_file"]).resolve()
         program = ingest_c(path)
         # Post-ingest hook: a c_file case may declare extra `imports` so the
-        # ingested program can call into stdlib (std.str etc.) — the C source
+        # ingested program can call into stdlib (core.str etc.) — the C source
         # itself can't express that, but the resulting Program can.
         extra_imports = case.get("imports")
         if extra_imports:
