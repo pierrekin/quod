@@ -22,6 +22,8 @@ from quod.model import (
     Claim,
     DerivedJustification,
     ExprStmt,
+    FieldRead,
+    FieldSet,
     For,
     If,
     IntLit,
@@ -31,6 +33,7 @@ from quod.model import (
     ReturnExpr,
     ShortCircuitAnd,
     ShortCircuitOr,
+    StructInit,
     While,
 )
 
@@ -114,7 +117,7 @@ def _walk_calls_in_stmt(stmt) -> Iterator[Call]:
                 yield from _walk_calls_in_stmt(s)
             for s in e_body:
                 yield from _walk_calls_in_stmt(s)
-        case Let(init=expr) | Assign(value=expr):
+        case Let(init=expr) | Assign(value=expr) | FieldSet(value=expr):
             yield from _walk_calls_in_expr(expr)
         case While(cond=cond, body=body):
             yield from _walk_calls_in_expr(cond)
@@ -136,4 +139,9 @@ def _walk_calls_in_expr(expr) -> Iterator[Call]:
         case BinOp(lhs=l, rhs=r) | ShortCircuitOr(lhs=l, rhs=r) | ShortCircuitAnd(lhs=l, rhs=r):
             yield from _walk_calls_in_expr(l)
             yield from _walk_calls_in_expr(r)
+        case FieldRead(value=inner):
+            yield from _walk_calls_in_expr(inner)
+        case StructInit(fields=field_inits):
+            for fi in field_inits:
+                yield from _walk_calls_in_expr(fi.value)
         # IntLit, ParamRef, LocalRef, StringRef carry no nested Calls.

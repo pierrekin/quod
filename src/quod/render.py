@@ -30,6 +30,8 @@ from quod.model import (
     Call,
     ExprStmt,
     ExternFunction,
+    FieldRead,
+    FieldSet,
     For,
     Function,
     I1Type,
@@ -53,6 +55,9 @@ from quod.model import (
     ShortCircuitOr,
     StringConstant,
     StringRef,
+    StructDef,
+    StructInit,
+    StructType,
     While,
     _Node,
     format_claim,
@@ -175,6 +180,8 @@ _TYPE_NAMES: dict[type, str] = {
 
 
 def type_span(t) -> Span:
+    if isinstance(t, StructType):
+        return Span(t.name, "type")
     name = _TYPE_NAMES.get(type(t))
     if name is None:
         raise ValueError(f"unhandled type: {t!r}")
@@ -233,6 +240,25 @@ def _expr_spans(expr) -> tuple[Span, ...]:
             return tuple(out)
         case StringRef(name=n):
             return (Span("&", "op"), Span(n, "const_name"))
+        case FieldRead(value=inner, name=fname):
+            return (
+                *_expr_spans(inner),
+                Span(".", "op"),
+                Span(fname, "param"),
+            )
+        case StructInit(type=tname, fields=field_inits):
+            out: list[Span] = [
+                Span(tname, "type"), Span(" {", "punct"), Span(" ", "ws"),
+            ]
+            for i, fi in enumerate(field_inits):
+                if i > 0:
+                    out.append(Span(", ", "punct"))
+                out.extend((
+                    Span(fi.name, "param"), Span(": ", "punct"),
+                    *_expr_spans(fi.value),
+                ))
+            out.extend((Span(" ", "ws"), Span("}", "punct")))
+            return tuple(out)
     raise ValueError(f"unhandled expr: {expr!r}")
 
 
@@ -275,6 +301,12 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
             yield Line(stmt, indent, (
                 Span(n, "local"), Span(" ", "ws"),
                 Span("=", "op"), Span(" ", "ws"),
+                *_expr_spans(v),
+            ))
+        case FieldSet(local=loc, name=fname, value=v):
+            yield Line(stmt, indent, (
+                Span(loc, "local"), Span(".", "op"), Span(fname, "param"),
+                Span(" ", "ws"), Span("=", "op"), Span(" ", "ws"),
                 *_expr_spans(v),
             ))
         case While(cond=c, body=body):
@@ -428,6 +460,22 @@ def constant_spans(c: StringConstant) -> tuple[Span, ...]:
     )
 
 
+def struct_def_spans(sd: StructDef) -> tuple[Span, ...]:
+    """`struct Name { f1: t1, f2: t2 }` rendered as a single line."""
+    out: list[Span] = [
+        Span("struct", "keyword"), Span(" ", "ws"),
+        Span(sd.name, "type"), Span(" {", "punct"), Span(" ", "ws"),
+    ]
+    for i, f in enumerate(sd.fields):
+        if i > 0:
+            out.append(Span(", ", "punct"))
+        out.extend((
+            Span(f.name, "param"), Span(": ", "punct"), type_span(f.type),
+        ))
+    out.extend((Span(" ", "ws"), Span("}", "punct")))
+    return tuple(out)
+
+
 def paint(spans: Iterable[Span], theme: Theme = plain_theme) -> str:
     """Render a span sequence to a single string. The one-liner cousin of `render`."""
     return "".join(theme(s) for s in spans)
@@ -454,12 +502,20 @@ def _constant_line(c: StringConstant, indent: int) -> Line:
     return Line(c, indent, constant_spans(c))
 
 
+def _struct_def_line(sd: StructDef, indent: int) -> Line:
+    return Line(sd, indent, struct_def_spans(sd))
+
+
 def format_program_lines(program: Program) -> Iterator[Line]:
     yield Line(program, 0, (Span("program", "keyword"), Span(" {", "punct")))
     if program.constants:
         yield Line(None, 2, (Span("constants:", "section"),))
         for c in program.constants:
             yield _constant_line(c, 4)
+    if program.structs:
+        yield Line(None, 2, (Span("structs:", "section"),))
+        for sd in program.structs:
+            yield _struct_def_line(sd, 4)
     if program.externs:
         yield Line(None, 2, (Span("externs:", "section"),))
         for ext in program.externs:
@@ -468,7 +524,10 @@ def format_program_lines(program: Program) -> Iterator[Line]:
         yield Line(None, 2, (Span("functions:", "section"),))
         for fn in program.functions:
             yield from format_function_lines(fn, indent=4)
-    if not program.constants and not program.functions and not program.externs:
+    if (
+        not program.constants and not program.functions
+        and not program.externs and not program.structs
+    ):
         yield Line(None, 2, (Span("(empty)", "comment"),))
     yield Line(None, 0, (Span("}", "punct"),))
 

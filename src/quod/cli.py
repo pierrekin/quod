@@ -44,6 +44,7 @@ from quod.editor import (
     add_constant_to_program,
     add_function_to_program,
     add_statement_in_function,
+    add_struct_to_program,
     find_function_ref,
     parse_function_spec,
     parse_statement_spec,
@@ -51,6 +52,7 @@ from quod.editor import (
     remove_constant_from_program,
     remove_extern_from_program,
     remove_statement_in_function,
+    remove_struct_from_program,
 )
 from quod.hashing import HASH_DISPLAY_LEN, find_by_prefix, node_hash, short_hash, walk
 from quod.ingest import IngestError, ingest_c, ingest_header
@@ -73,6 +75,9 @@ from quod.model import (
     Program,
     ReturnInRangeClaim,
     StringConstant,
+    StructDef,
+    StructField,
+    StructType,
     Z3Justification,
     add_claim,
     claim_param,
@@ -106,6 +111,7 @@ from quod.render import (
     paint,
     plain_theme,
     render,
+    struct_def_spans,
 )
 from quod.schema import render_categories, render_category, render_kind
 from quod.templates import TEMPLATES
@@ -129,6 +135,7 @@ stmt_app = typer.Typer(no_args_is_help=True, help="Operations on statements.")
 extern_app = typer.Typer(no_args_is_help=True, help="Operations on externs.")
 note_app = typer.Typer(no_args_is_help=True, help="Operations on notes.")
 const_app = typer.Typer(no_args_is_help=True, help="Operations on string constants.")
+struct_app = typer.Typer(no_args_is_help=True, help="Operations on struct definitions.")
 provider_app = typer.Typer(no_args_is_help=True, help="Inspect registered claim providers.")
 
 app.add_typer(fn_app, name="fn")
@@ -137,6 +144,7 @@ app.add_typer(stmt_app, name="stmt")
 app.add_typer(extern_app, name="extern")
 app.add_typer(note_app, name="note")
 app.add_typer(const_app, name="const")
+app.add_typer(struct_app, name="struct")
 app.add_typer(provider_app, name="provider")
 
 
@@ -1412,11 +1420,21 @@ _TYPE_NAMES = {
 }
 
 
-def _parse_type_name(s: str):
+def _parse_type_name(s: str, *, struct_names: tuple[str, ...] = ()):
+    """Parse a CLI type token. Accepts the built-in width names and any
+    `struct_names` passed in (which become `StructType(name=...)`). Pass
+    the program's current struct names to allow struct types in extern
+    or struct-field declarations; pass nothing for legacy (int-only)
+    callsites."""
     cls = _TYPE_NAMES.get(s)
-    if cls is None:
-        raise typer.BadParameter(f"unknown type {s!r}; choices: {', '.join(_TYPE_NAMES)}")
-    return cls()
+    if cls is not None:
+        return cls()
+    if s in struct_names:
+        return StructType(name=s)
+    choices = list(_TYPE_NAMES) + list(struct_names)
+    raise typer.BadParameter(
+        f"unknown type {s!r}; choices: {', '.join(choices)}"
+    )
 
 
 @extern_app.command("ls")
@@ -1453,8 +1471,9 @@ def extern_add(
             raise typer.Exit(1)
         if param_type and arity:
             raise typer.BadParameter("pass either --arity or --param-type, not both")
-        param_types = tuple(_parse_type_name(t) for t in param_type)
-        ret_ty = _parse_type_name(return_type)
+        struct_names = tuple(sd.name for sd in program.structs)
+        param_types = tuple(_parse_type_name(t, struct_names=struct_names) for t in param_type)
+        ret_ty = _parse_type_name(return_type, struct_names=struct_names)
         ext = ExternFunction(
             name=name,
             arity=arity if not param_types else 0,
@@ -1527,6 +1546,114 @@ def extern_ingest(
         typer.echo(f"  skipped {len(skipped_unsupported)} (unsupported signatures)")
     if skipped_duplicate:
         typer.echo(f"  skipped {len(skipped_duplicate)} (already declared)")
+
+
+# ---------- struct sub-app ----------
+
+def _parse_struct_field_spec(spec: str, *, struct_names: tuple[str, ...]) -> StructField:
+    """Parse a `name:type` token into a StructField. Type is resolved
+    against the built-in widths plus any struct names already in the
+    program (a struct can reference other structs defined earlier)."""
+    if ":" not in spec:
+        raise typer.BadParameter(
+            f"field spec must be NAME:TYPE, got {spec!r}"
+        )
+    name, _, ty_token = spec.partition(":")
+    if not name:
+        raise typer.BadParameter(f"missing field name in {spec!r}")
+    return StructField(name=name, type=_parse_type_name(ty_token, struct_names=struct_names))
+
+
+@struct_app.command("ls")
+def struct_ls() -> None:
+    """List declared structs with their field signatures."""
+    program = _load()
+    if not program.structs:
+        typer.echo("(no structs)")
+        return
+    theme = _theme()
+    for sd in program.structs:
+        typer.echo(paint(struct_def_spans(sd), theme))
+
+
+@struct_app.command("show")
+def struct_show(
+    name: str = typer.Argument(..., help="Struct name.",
+                               autocompletion=_comp.struct_names),
+) -> None:
+    """Print one struct definition."""
+    program = _load()
+    sd = next((s for s in program.structs if s.name == name), None)
+    if sd is None:
+        typer.echo(f"error: no struct named {name!r}", err=True)
+        raise typer.Exit(1)
+    theme = _theme()
+    typer.echo(paint(struct_def_spans(sd), theme))
+
+
+@struct_app.command("add")
+def struct_add(
+    name: str = typer.Argument(..., help="Struct name (e.g. 'Arena')."),
+    fields: list[str] = typer.Argument(
+        ..., help="Fields as NAME:TYPE tokens, e.g. base:i8_ptr cur:i8_ptr.",
+    ),
+) -> None:
+    """Define a new struct.
+
+    Field types are int widths (i1/i8/i16/i32/i64), `i8_ptr`, or any struct
+    already defined in the program. The named struct is appended to the
+    program; the model validator catches dangling refs and cycles before
+    the file is written.
+    """
+    with _exclusive_lock():
+        program = _load()
+        if any(sd.name == name for sd in program.structs):
+            typer.echo(f"error: struct {name!r} already declared", err=True)
+            raise typer.Exit(1)
+        struct_names = tuple(sd.name for sd in program.structs)
+        try:
+            field_nodes = tuple(
+                _parse_struct_field_spec(s, struct_names=struct_names) for s in fields
+            )
+        except typer.BadParameter as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        try:
+            sd = StructDef(name=name, fields=field_nodes)
+            program = add_struct_to_program(program, sd)
+        except (ValueError, ValidationError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    field_summary = ", ".join(f"{f.name}:{_format_field_type(f.type)}" for f in field_nodes)
+    typer.echo(f"declared struct {name} {{ {field_summary} }}")
+
+
+@struct_app.command("rm")
+def struct_rm(
+    name: str = typer.Argument(..., help="Struct name to remove.",
+                               autocompletion=_comp.struct_names),
+) -> None:
+    """Remove a struct definition. Strict: refuses if anything references it."""
+    with _exclusive_lock():
+        program = _load()
+        try:
+            program = remove_struct_from_program(program, name)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    typer.echo(f"removed struct {name}")
+
+
+def _format_field_type(t) -> str:
+    """Short rendering of a struct field's type for the `quod struct add` ack."""
+    for tok, cls in _TYPE_NAMES.items():
+        if isinstance(t, cls):
+            return tok
+    if isinstance(t, StructType):
+        return t.name
+    return repr(t)
 
 
 # ---------- note sub-app ----------

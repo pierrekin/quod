@@ -35,6 +35,17 @@ file    = "basics/run_ls.json"
   name  = "run_ls"
   entry = "main"
 
+# ---------- structs ----------
+
+[[program]]
+name    = "point_dot"
+version = "0.1.0"
+file    = "structs/point_dot.json"
+
+  [[program.bin]]
+  name  = "point_dot"
+  entry = "main"
+
 # ---------- claims ----------
 
 [[program]]

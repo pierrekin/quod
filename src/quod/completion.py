@@ -237,6 +237,14 @@ def constant_names(ctx, incomplete: str) -> list[str]:
 
 
 @_traced
+def struct_names(ctx, incomplete: str) -> list[str]:
+    program = _safe_load_program(ctx)
+    if program is None:
+        return []
+    return [sd.name for sd in program.structs if sd.name.startswith(incomplete)]
+
+
+@_traced
 def param_names_for_function(ctx, incomplete: str) -> list[str]:
     """For `claim add FN KIND TARGET` — list FN's params.
 

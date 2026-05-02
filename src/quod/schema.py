@@ -30,6 +30,9 @@ from quod.model import (
     DerivedJustification,
     ExprStmt,
     ExternFunction,
+    FieldInit,
+    FieldRead,
+    FieldSet,
     For,
     Function,
     I1Type,
@@ -54,6 +57,10 @@ from quod.model import (
     ShortCircuitOr,
     StringConstant,
     StringRef,
+    StructDef,
+    StructField,
+    StructInit,
+    StructType,
     While,
     Z3Justification,
 )
@@ -188,6 +195,28 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "example": {"kind": "quod.string_ref", "name": ".str.greeting"},
         "see_also": ["StringConstant"],
     },
+    "quod.struct_init": {
+        "class": StructInit,
+        "summary": "Construct a struct value. Every field of the named def must be initialized exactly once.",
+        "example": {
+            "kind": "quod.struct_init", "type": "Point",
+            "fields": [
+                {"name": "x", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 3}},
+                {"name": "y", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 4}},
+            ],
+        },
+        "see_also": ["StructDef", "quod.field"],
+    },
+    "quod.field": {
+        "class": FieldRead,
+        "summary": "Read a named field from a struct-typed expression. Inner value must be of some StructType.",
+        "example": {
+            "kind": "quod.field",
+            "value": {"kind": "quod.local_ref", "name": "p"},
+            "name": "x",
+        },
+        "see_also": ["quod.struct_init", "quod.field_set"],
+    },
 
     # ---------- statement ----------
     "quod.return_int": {
@@ -276,6 +305,15 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
                       "args": [{"kind": "quod.string_ref", "name": ".str.greeting"}]},
         },
     },
+    "quod.field_set": {
+        "class": FieldSet,
+        "summary": "Mutate one field of a struct-typed local. Same scoping as quod.assign — `local` must be a Let-introduced struct local.",
+        "example": {
+            "kind": "quod.field_set", "local": "p", "name": "y",
+            "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 7},
+        },
+        "see_also": ["quod.struct_init", "quod.field"],
+    },
 
     # ---------- type ----------
     "llvm.i1": {
@@ -307,6 +345,12 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "class": I8PtrType,
         "summary": "Pointer to i8. Used for C-style strings (via quod.string_ref) and opaque buffers.",
         "example": {"kind": "llvm.i8_ptr"},
+    },
+    "llvm.struct": {
+        "class": StructType,
+        "summary": "Reference to a named StructDef by name. Pass-by-value at the LLVM level.",
+        "example": {"kind": "llvm.struct", "name": "Point"},
+        "see_also": ["StructDef"],
     },
 
     # ---------- claim ----------
@@ -370,8 +414,30 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     },
     "Param": {
         "class": Param,
-        "summary": "A typed function parameter. `type` is one of the IntType members (i1, i8, i16, i32, i64). Pointer params are not supported on user functions — use ExternFunction for those.",
+        "summary": "A typed function parameter. `type` is any Type (int width, i8_ptr, or named StructType). The argv main wrapper still requires int-only params on the entry function.",
         "example": {"name": "x", "type": {"kind": "llvm.i32"}},
+    },
+    "StructDef": {
+        "class": StructDef,
+        "summary": "A named record type with ordered, uniquely-named fields. Lowered to an LLVM identified struct type, passed and returned by value.",
+        "example": {
+            "name": "Point",
+            "fields": [
+                {"name": "x", "type": {"kind": "llvm.i32"}},
+                {"name": "y", "type": {"kind": "llvm.i32"}},
+            ],
+        },
+        "see_also": ["llvm.struct", "quod.struct_init", "quod.field", "quod.field_set"],
+    },
+    "StructField": {
+        "class": StructField,
+        "summary": "One field in a StructDef. Field types may be any Type, including other named structs (no recursion).",
+        "example": {"name": "x", "type": {"kind": "llvm.i32"}},
+    },
+    "FieldInit": {
+        "class": FieldInit,
+        "summary": "One field's value in a quod.struct_init.",
+        "example": {"name": "x", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 3}},
     },
 }
 
@@ -380,15 +446,23 @@ _CATEGORIES: dict[str, list[str]] = {
     "expression": [
         "llvm.const_int", "llvm.param_ref", "quod.local_ref", "llvm.binop",
         "quod.sc_or", "quod.sc_and", "llvm.call", "quod.string_ref",
+        "quod.struct_init", "quod.field",
     ],
     "statement": [
         "quod.return_int", "quod.return_expr", "quod.if",
         "quod.let", "quod.assign", "quod.while", "quod.for", "quod.expr_stmt",
+        "quod.field_set",
     ],
-    "type": ["llvm.i1", "llvm.i8", "llvm.i16", "llvm.i32", "llvm.i64", "llvm.i8_ptr"],
+    "type": [
+        "llvm.i1", "llvm.i8", "llvm.i16", "llvm.i32", "llvm.i64",
+        "llvm.i8_ptr", "llvm.struct",
+    ],
     "claim": ["non_negative", "int_range", "return_in_range"],
     "justification": ["z3", "manual", "derived"],
-    "program": ["StringConstant", "ExternFunction", "Function", "Param"],
+    "program": [
+        "StringConstant", "ExternFunction", "Function", "Param",
+        "StructDef", "StructField", "FieldInit",
+    ],
 }
 
 

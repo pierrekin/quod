@@ -11,7 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer, model_validator
 
 
 # ---------- Base ----------
@@ -116,8 +116,35 @@ class LocalRef(_Node):
     name: str
 
 
+class FieldRead(_Node):
+    """Read a named field from a struct-typed expression. The inner `value`
+    must produce a value of some `StructType("X")`, and `name` must be a
+    field of that struct's def."""
+    kind: Literal["quod.field"] = "quod.field"
+    value: "Expr"
+    name: str
+
+
+class FieldInit(_Node):
+    """One field's value in a `StructInit`."""
+    name: str
+    value: "Expr"
+
+
+class StructInit(_Node):
+    """Construct a struct value. v1: every field of the named def must be
+    initialized exactly once, in any order. Lowered to an `insertvalue`
+    chain on `undef`."""
+    kind: Literal["quod.struct_init"] = "quod.struct_init"
+    type: str
+    fields: tuple[FieldInit, ...]
+
+
 Expr = Annotated[
-    Union[IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd, Call, StringRef],
+    Union[
+        IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
+        Call, StringRef, FieldRead, StructInit,
+    ],
     Field(discriminator="kind"),
 ]
 
@@ -153,6 +180,16 @@ class I8PtrType(_Node):
     kind: Literal["llvm.i8_ptr"] = "llvm.i8_ptr"
 
 
+class StructType(_Node):
+    """Reference to a named StructDef. Pass-by-value at the LLVM level.
+
+    The `name` must match a `StructDef.name` in the same Program; the
+    Program-level validator catches dangling refs at load time.
+    """
+    kind: Literal["llvm.struct"] = "llvm.struct"
+    name: str
+
+
 # Integer-only sub-union: usable wherever a pointer would be nonsense
 # (IntLit, function params/return, For loop var, claim-bearing locals).
 IntType = Annotated[
@@ -160,10 +197,10 @@ IntType = Annotated[
     Field(discriminator="kind"),
 ]
 
-# Full type union, including pointer types — only meaningful for ExternFunction
-# signatures and Let bindings that hold non-int values.
+# Full type union, including pointer and struct types — used for ExternFunction
+# signatures, function params/return, Let bindings, and struct fields.
 Type = Annotated[
-    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType],
+    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType, StructType],
     Field(discriminator="kind"),
 ]
 
@@ -252,8 +289,18 @@ class ExprStmt(_Node):
     value: Expr
 
 
+class FieldSet(_Node):
+    """Mutate one field of a struct-typed local. Same scoping as `Assign`:
+    `local` must reference a Let-introduced local of some `StructType("X")`,
+    and `name` must be a field of that struct's def."""
+    kind: Literal["quod.field_set"] = "quod.field_set"
+    local: str
+    name: str
+    value: Expr
+
+
 Statement = Annotated[
-    Union[ReturnInt, ReturnExpr, If, Let, Assign, While, For, ExprStmt],
+    Union[ReturnInt, ReturnExpr, If, Let, Assign, While, For, ExprStmt, FieldSet],
     Field(discriminator="kind"),
 ]
 
@@ -402,6 +449,11 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
             case BinOp(lhs=l, rhs=r) | ShortCircuitOr(lhs=l, rhs=r) | ShortCircuitAnd(lhs=l, rhs=r):
                 visit_expr(l)
                 visit_expr(r)
+            case FieldRead(value=inner):
+                visit_expr(inner)
+            case StructInit(fields=field_inits):
+                for fi in field_inits:
+                    visit_expr(fi.value)
             case _:
                 pass
 
@@ -415,7 +467,7 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
                     visit_stmt(x)
                 for x in e_body:
                     visit_stmt(x)
-            case Let(init=expr) | Assign(value=expr):
+            case Let(init=expr) | Assign(value=expr) | FieldSet(value=expr):
                 visit_expr(expr)
             case While(cond=cond, body=body):
                 visit_expr(cond)
@@ -436,17 +488,49 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
 
 # ---------- Top-level ----------
 
-class Param(_Node):
-    """A typed function parameter. Pointer params are out of scope for user
-    functions; use `ExternFunction.param_types` for those."""
+class StructField(_Node):
+    """One field in a StructDef. Field types may be any `Type`, including
+    other structs (no recursion: a struct can't directly contain itself
+    by value)."""
     name: str
-    type: IntType
+    type: Type
+
+
+class StructDef(_Node):
+    """A named record type. Fields are ordered and uniquely named.
+
+    By-value semantics: lowered to an LLVM identified struct type, passed
+    and returned as values, no implicit pointer indirection. Pointers to
+    structs are out of v1 scope — opaque `i8*` if you need to hand one
+    to an extern.
+    """
+    name: str
+    fields: tuple[StructField, ...]
+
+    def field(self, name: str) -> StructField | None:
+        for f in self.fields:
+            if f.name == name:
+                return f
+        return None
+
+    def field_index(self, name: str) -> int:
+        for i, f in enumerate(self.fields):
+            if f.name == name:
+                return i
+        raise KeyError(f"struct {self.name!r} has no field {name!r}")
+
+
+class Param(_Node):
+    """A typed function parameter. Any `Type` is accepted (int widths,
+    `i8*`, named structs)."""
+    name: str
+    type: Type
 
 
 class Function(_Node):
     name: str
     params: tuple[Param, ...] = ()
-    return_type: IntType
+    return_type: Type
     body: tuple[Statement, ...]
     claims: tuple[Claim, ...] = ()
     notes: tuple[str, ...] = ()       # free-form developer/agent intent
@@ -508,6 +592,161 @@ class _ProgramBase(_Node):
     constants: tuple[StringConstant, ...] = ()
     functions: tuple[Function, ...] = ()
     externs: tuple[ExternFunction, ...] = ()
+    structs: tuple[StructDef, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_structs(self, handler, info):
+        data = handler(self)
+        if not self.structs:
+            data.pop("structs", None)
+        return data
+
+
+def _validate_structs(program: "_ProgramBase") -> None:
+    """Program-wide struct sanity. Runs on both Program and InputProgram.
+
+    - Struct names are unique.
+    - No struct field references an undefined struct.
+    - No struct contains itself by value (direct or transitive).
+    - Every `StructType` mentioned in a Param/return/Let/Field/StructInit
+      resolves to a defined struct.
+    - Every `StructInit` covers exactly the fields of the named def, with
+      no missing or extra names and no duplicates.
+    """
+    seen_names: set[str] = set()
+    for sd in program.structs:
+        if sd.name in seen_names:
+            raise ValueError(f"duplicate struct definition {sd.name!r}")
+        seen_names.add(sd.name)
+        field_names: set[str] = set()
+        for f in sd.fields:
+            if f.name in field_names:
+                raise ValueError(
+                    f"struct {sd.name!r} has duplicate field {f.name!r}"
+                )
+            field_names.add(f.name)
+
+    by_name: dict[str, StructDef] = {sd.name: sd for sd in program.structs}
+
+    # Reject by-value cycles. Walk each struct's transitive struct-typed
+    # fields; a path that revisits the start is a cycle.
+    for sd in program.structs:
+        _check_no_struct_cycle(sd.name, by_name)
+
+    # Validate every struct ref reachable from the program is defined.
+    for sd in program.structs:
+        for f in sd.fields:
+            _check_type_refs(f.type, by_name, where=f"struct {sd.name!r} field {f.name!r}")
+    for fn in program.functions:
+        _check_type_refs(fn.return_type, by_name, where=f"function {fn.name!r} return type")
+        for p in fn.params:
+            _check_type_refs(p.type, by_name, where=f"function {fn.name!r} param {p.name!r}")
+        for stmt in fn.body:
+            _check_struct_uses_in_stmt(stmt, by_name, where=f"function {fn.name!r}")
+    for ext in program.externs:
+        _check_type_refs(ext.return_type, by_name, where=f"extern {ext.name!r} return type")
+        for t in ext.param_types:
+            _check_type_refs(t, by_name, where=f"extern {ext.name!r} param")
+
+
+def _check_no_struct_cycle(start: str, by_name: dict[str, "StructDef"]) -> None:
+    """DFS: refuse if `start` reaches itself through StructType fields."""
+    visiting: set[str] = set()
+
+    def go(name: str, path: tuple[str, ...]) -> None:
+        if name == start and path:
+            chain = " -> ".join(path + (name,))
+            raise ValueError(
+                f"struct {start!r} contains itself by value (cycle: {chain}); "
+                f"v1 has no pointer-to-struct, so recursive structs are unrepresentable"
+            )
+        if name in visiting:
+            return
+        visiting.add(name)
+        sd = by_name.get(name)
+        if sd is None:
+            return
+        for f in sd.fields:
+            if isinstance(f.type, StructType):
+                go(f.type.name, path + (name,))
+        visiting.discard(name)
+
+    sd = by_name.get(start)
+    if sd is None:
+        return
+    for f in sd.fields:
+        if isinstance(f.type, StructType):
+            go(f.type.name, (start,))
+
+
+def _check_type_refs(t: "Type", by_name: dict[str, "StructDef"], *, where: str) -> None:
+    if isinstance(t, StructType) and t.name not in by_name:
+        raise ValueError(f"{where}: references undefined struct {t.name!r}")
+
+
+def _check_struct_uses_in_stmt(stmt, by_name: dict[str, "StructDef"], *, where: str) -> None:
+    match stmt:
+        case ReturnExpr(value=expr) | ExprStmt(value=expr):
+            _check_struct_uses_in_expr(expr, by_name, where=where)
+        case If(cond=cond, then_body=t_body, else_body=e_body):
+            _check_struct_uses_in_expr(cond, by_name, where=where)
+            for s in t_body:
+                _check_struct_uses_in_stmt(s, by_name, where=where)
+            for s in e_body:
+                _check_struct_uses_in_stmt(s, by_name, where=where)
+        case Let(type=ty, init=expr):
+            _check_type_refs(ty, by_name, where=f"{where}: let")
+            _check_struct_uses_in_expr(expr, by_name, where=where)
+        case Assign(value=expr) | FieldSet(value=expr):
+            _check_struct_uses_in_expr(expr, by_name, where=where)
+        case While(cond=cond, body=body):
+            _check_struct_uses_in_expr(cond, by_name, where=where)
+            for s in body:
+                _check_struct_uses_in_stmt(s, by_name, where=where)
+        case For(lo=lo, hi=hi, body=body):
+            _check_struct_uses_in_expr(lo, by_name, where=where)
+            _check_struct_uses_in_expr(hi, by_name, where=where)
+            for s in body:
+                _check_struct_uses_in_stmt(s, by_name, where=where)
+
+
+def _check_struct_uses_in_expr(expr, by_name: dict[str, "StructDef"], *, where: str) -> None:
+    match expr:
+        case StructInit(type=name, fields=field_inits):
+            sd = by_name.get(name)
+            if sd is None:
+                raise ValueError(f"{where}: struct_init references undefined struct {name!r}")
+            init_names = [fi.name for fi in field_inits]
+            seen: set[str] = set()
+            for n in init_names:
+                if n in seen:
+                    raise ValueError(
+                        f"{where}: struct_init for {name!r} sets field {n!r} twice"
+                    )
+                seen.add(n)
+            def_names = {f.name for f in sd.fields}
+            extra = seen - def_names
+            if extra:
+                raise ValueError(
+                    f"{where}: struct_init for {name!r} sets unknown field(s): "
+                    f"{sorted(extra)}"
+                )
+            missing = def_names - seen
+            if missing:
+                raise ValueError(
+                    f"{where}: struct_init for {name!r} missing field(s): "
+                    f"{sorted(missing)}"
+                )
+            for fi in field_inits:
+                _check_struct_uses_in_expr(fi.value, by_name, where=where)
+        case FieldRead(value=inner):
+            _check_struct_uses_in_expr(inner, by_name, where=where)
+        case BinOp(lhs=l, rhs=r) | ShortCircuitOr(lhs=l, rhs=r) | ShortCircuitAnd(lhs=l, rhs=r):
+            _check_struct_uses_in_expr(l, by_name, where=where)
+            _check_struct_uses_in_expr(r, by_name, where=where)
+        case Call(args=args):
+            for a in args:
+                _check_struct_uses_in_expr(a, by_name, where=where)
 
 
 class Program(_ProgramBase):
@@ -516,6 +755,11 @@ class Program(_ProgramBase):
     Permissive: any regime is allowed in fn.claims. This is what `lower()`
     consumes and what editor mutators return.
     """
+
+    @model_validator(mode="after")
+    def _check_structs(self) -> "Program":
+        _validate_structs(self)
+        return self
 
 
 class InputProgram(_ProgramBase):
@@ -538,6 +782,11 @@ class InputProgram(_ProgramBase):
                         f"function {fn.name!r} has stored claim {c!r}"
                     )
         return fns
+
+    @model_validator(mode="after")
+    def _check_structs(self) -> "InputProgram":
+        _validate_structs(self)
+        return self
 
 
 # ---------- File I/O ----------
@@ -650,6 +899,10 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
         lines.append("  constants:")
         for c in program.constants:
             lines.append(f"    {label(c)}{c.name} = {c.value!r}")
+    if program.structs:
+        lines.append("  structs:")
+        for sd in program.structs:
+            lines.append(f"    {label(sd)}{format_struct_def(sd)}")
     if program.externs:
         lines.append("  externs:")
         for ext in program.externs:
@@ -663,10 +916,15 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
         lines.append("  functions:")
         for fn in program.functions:
             lines.extend("    " + line for line in format_function(fn, label=label).splitlines())
-    if not program.constants and not program.functions and not program.externs:
+    if not program.constants and not program.functions and not program.externs and not program.structs:
         lines.append("  (empty)")
     lines.append("}")
     return "\n".join(lines)
+
+
+def format_struct_def(sd: StructDef) -> str:
+    body = ", ".join(f"{f.name}: {_format_type(f.type)}" for f in sd.fields)
+    return f"struct {sd.name} {{ {body} }}"
 
 
 def format_function(fn: Function, *, label: NodeLabel = _NO_LABEL) -> str:
@@ -698,6 +956,8 @@ def _format_type(t) -> str:
             return "i64"
         case I8PtrType():
             return "i8*"
+        case StructType(name=n):
+            return n
     raise ValueError(f"unhandled type: {t!r}")
 
 
@@ -760,6 +1020,8 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
             return f"{pad}{prefix}let {n}: {_format_type(ty)} = {_format_expr(init)}"
         case Assign(name=n, value=v):
             return f"{pad}{prefix}{n} = {_format_expr(v)}"
+        case FieldSet(local=loc, name=fname, value=v):
+            return f"{pad}{prefix}{loc}.{fname} = {_format_expr(v)}"
         case While(cond=cond, body=body):
             body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body)
             return f"{pad}{prefix}while ({_format_expr(cond)}) {{\n{body_lines}\n{pad}}}"
@@ -801,4 +1063,9 @@ def _format_expr(expr) -> str:
             return f"{fn_name}({', '.join(_format_expr(a) for a in args)})"
         case StringRef(name=n):
             return f"&{n}"
+        case FieldRead(value=inner, name=fname):
+            return f"{_format_expr(inner)}.{fname}"
+        case StructInit(type=tname, fields=field_inits):
+            inner = ", ".join(f"{fi.name}: {_format_expr(fi.value)}" for fi in field_inits)
+            return f"{tname} {{ {inner} }}"
     raise ValueError(f"unhandled expr: {expr!r}")

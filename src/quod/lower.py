@@ -25,6 +25,8 @@ from quod.model import (
     Call,
     ExprStmt,
     ExternFunction,
+    FieldRead,
+    FieldSet,
     For,
     Function,
     I1Type,
@@ -47,6 +49,9 @@ from quod.model import (
     ShortCircuitAnd,
     ShortCircuitOr,
     StringRef,
+    StructDef,
+    StructInit,
+    StructType,
     While,
 )
 
@@ -58,7 +63,14 @@ I32 = ir.IntType(32)
 I64 = ir.IntType(64)
 
 
-def _type_to_llvm(t):
+def _type_to_llvm(t, struct_tys: dict[str, "ir.IdentifiedStructType"] | None = None):
+    """Lower a quod type to its LLVM equivalent.
+
+    `struct_tys` is the per-module registry of identified struct types,
+    threaded through every site that lowers a Type. None is allowed for
+    legacy callers that operate on int-only contexts; passing None when
+    the type IS a struct raises.
+    """
     match t:
         case I1Type():
             return I1
@@ -72,6 +84,10 @@ def _type_to_llvm(t):
             return I64
         case I8PtrType():
             return I8.as_pointer()
+        case StructType(name=name):
+            if struct_tys is None or name not in struct_tys:
+                raise ValueError(f"struct type {name!r} not registered with the module")
+            return struct_tys[name]
     raise ValueError(f"unhandled quod.Type: {t!r}")
 
 
@@ -138,11 +154,14 @@ def _lower_expr(
     builder: ir.IRBuilder, expr, params: dict[str, ir.Value], module: ir.Module,
     *, constants: dict[str, ir.GlobalVariable], extern_sigs: dict[str, ExternFunction],
     locals_: dict[str, ir.AllocaInstr],
+    struct_defs: dict[str, StructDef],
+    struct_tys: dict[str, "ir.IdentifiedStructType"],
 ) -> ir.Value:
     def go(e):
         return _lower_expr(
             builder, e, params, module,
             constants=constants, extern_sigs=extern_sigs, locals_=locals_,
+            struct_defs=struct_defs, struct_tys=struct_tys,
         )
 
     match expr:
@@ -187,6 +206,32 @@ def _lower_expr(
                 raise ValueError(f"call to undeclared function {fname!r}")
             arg_vals = [go(a) for a in args]
             return builder.call(callee, arg_vals)
+        case StructInit(type=tname, fields=field_inits):
+            sd = struct_defs.get(tname)
+            sty = struct_tys.get(tname)
+            if sd is None or sty is None:
+                raise ValueError(f"struct_init for undefined struct {tname!r}")
+            init_by_name = {fi.name: fi.value for fi in field_inits}
+            val: ir.Value = ir.Constant(sty, ir.Undefined)
+            for i, f in enumerate(sd.fields):
+                if f.name not in init_by_name:
+                    raise ValueError(
+                        f"struct_init for {tname!r} missing field {f.name!r}"
+                    )
+                val = builder.insert_value(val, go(init_by_name[f.name]), i)
+            return val
+        case FieldRead(value=inner, name=fname):
+            inner_val = go(inner)
+            inner_ty = inner_val.type
+            if not isinstance(inner_ty, ir.IdentifiedStructType):
+                raise ValueError(
+                    f"field read {fname!r} on non-struct value of type {inner_ty}"
+                )
+            sd = struct_defs.get(inner_ty.name)
+            if sd is None:
+                raise ValueError(f"field read on unknown struct {inner_ty.name!r}")
+            idx = sd.field_index(fname)
+            return builder.extract_value(inner_val, idx)
     raise ValueError(f"unhandled expr: {expr!r}")
 
 
@@ -221,7 +266,9 @@ def _lower_short_circuit(builder: ir.IRBuilder, lhs, rhs, *, kind: str, lower) -
     return phi
 
 
-def _collect_local_bindings(stmts) -> list[tuple[str, "ir.Type"]]:
+def _collect_local_bindings(
+    stmts, struct_tys: dict[str, "ir.IdentifiedStructType"],
+) -> list[tuple[str, "ir.Type"]]:
     """Pre-walk the body and return every (name, llvm_type) pair introduced by
     `Let` or `For`. Allocas for these are emitted at the top of the function's
     entry block, the canonical mem2reg layout: `alloca` lives in entry; `store`
@@ -238,12 +285,12 @@ def _collect_local_bindings(stmts) -> list[tuple[str, "ir.Type"]]:
                     if name in seen:
                         raise ValueError(f"local {name!r} declared twice in the same function")
                     seen.add(name)
-                    out.append((name, _type_to_llvm(ty)))
+                    out.append((name, _type_to_llvm(ty, struct_tys)))
                 case For(var=var, type=ty, body=for_body):
                     if var in seen:
                         raise ValueError(f"for-loop var {var!r} conflicts with another local")
                     seen.add(var)
-                    out.append((var, _type_to_llvm(ty)))
+                    out.append((var, _type_to_llvm(ty, struct_tys)))
                     visit(for_body)
                 case If(then_body=t, else_body=e):
                     visit(t); visit(e)
@@ -266,6 +313,8 @@ def _lower_stmt(
     return_claims: tuple,
     overrides: dict[str, str],
     extern_sigs: dict[str, ExternFunction],
+    struct_defs: dict[str, StructDef],
+    struct_tys: dict[str, "ir.IdentifiedStructType"],
 ) -> None:
     """Lower a statement. `return_claims` are emitted as llvm.assume / runtime
     check at every ret, so callers (after inlining) see the bound."""
@@ -273,6 +322,7 @@ def _lower_stmt(
         return _lower_expr(
             builder, e, params, module,
             constants=constants, extern_sigs=extern_sigs, locals_=locals_,
+            struct_defs=struct_defs, struct_tys=struct_tys,
         )
 
     def lower_body(body):
@@ -282,6 +332,7 @@ def _lower_stmt(
                 entry_bb=entry_bb, constants=constants, module=module,
                 return_claims=return_claims, overrides=overrides,
                 extern_sigs=extern_sigs,
+                struct_defs=struct_defs, struct_tys=struct_tys,
             )
 
     match stmt:
@@ -309,6 +360,26 @@ def _lower_stmt(
             val = lower_expr(v)
             builder.store(val, locals_[name])
             return
+        case FieldSet(local=lname, name=fname, value=v):
+            if lname not in locals_:
+                raise ValueError(f"field-set on undeclared local {lname!r}")
+            alloca = locals_[lname]
+            pointee = alloca.type.pointee
+            if not isinstance(pointee, ir.IdentifiedStructType):
+                raise ValueError(
+                    f"field-set {fname!r} on non-struct local {lname!r} "
+                    f"(local type {pointee})"
+                )
+            sd = struct_defs.get(pointee.name)
+            if sd is None:
+                raise ValueError(f"field-set on unknown struct {pointee.name!r}")
+            idx = sd.field_index(fname)
+            val = lower_expr(v)
+            field_ptr = builder.gep(
+                alloca, [ir.Constant(I32, 0), ir.Constant(I32, idx)],
+            )
+            builder.store(val, field_ptr)
+            return
         case If(cond=cond, then_body=then_body, else_body=else_body):
             then_bb = llvm_fn.append_basic_block("then")
             else_bb = llvm_fn.append_basic_block("else")
@@ -330,6 +401,7 @@ def _lower_stmt(
                     entry_bb=entry_bb, constants=constants, module=module,
                     return_claims=return_claims, overrides=overrides,
                     extern_sigs=extern_sigs,
+                    struct_defs=struct_defs, struct_tys=struct_tys,
                 )
             if not builder.block.is_terminated:
                 builder.branch(ensure_merge())
@@ -341,6 +413,7 @@ def _lower_stmt(
                     entry_bb=entry_bb, constants=constants, module=module,
                     return_claims=return_claims, overrides=overrides,
                     extern_sigs=extern_sigs,
+                    struct_defs=struct_defs, struct_tys=struct_tys,
                 )
             if not builder.block.is_terminated:
                 builder.branch(ensure_merge())
@@ -471,16 +544,22 @@ def _lower_claim(
     raise ValueError(f"unhandled claim: {claim!r}")
 
 
-def _declare_function(module: ir.Module, fn: Function) -> ir.Function:
-    param_tys = [_type_to_llvm(p.type) for p in fn.params]
-    ret_ty = _type_to_llvm(fn.return_type)
+def _declare_function(
+    module: ir.Module, fn: Function,
+    struct_tys: dict[str, "ir.IdentifiedStructType"],
+) -> ir.Function:
+    param_tys = [_type_to_llvm(p.type, struct_tys) for p in fn.params]
+    ret_ty = _type_to_llvm(fn.return_type, struct_tys)
     fn_ty = ir.FunctionType(ret_ty, param_tys)
     return ir.Function(module, fn_ty, name=fn.name)
 
 
-def _declare_extern(module: ir.Module, ext: ExternFunction) -> ir.Function:
-    param_types = [_type_to_llvm(t) for t in ext.effective_param_types()]
-    return_type = _type_to_llvm(ext.return_type)
+def _declare_extern(
+    module: ir.Module, ext: ExternFunction,
+    struct_tys: dict[str, "ir.IdentifiedStructType"],
+) -> ir.Function:
+    param_types = [_type_to_llvm(t, struct_tys) for t in ext.effective_param_types()]
+    return_type = _type_to_llvm(ext.return_type, struct_tys)
     fn_ty = ir.FunctionType(return_type, param_types, var_arg=ext.varargs)
     return ir.Function(module, fn_ty, name=ext.name)
 
@@ -489,6 +568,8 @@ def _lower_function_body(
     module: ir.Module, fn: Function, *,
     constants: dict, overrides: dict[str, str],
     extern_sigs: dict[str, ExternFunction],
+    struct_defs: dict[str, StructDef],
+    struct_tys: dict[str, "ir.IdentifiedStructType"],
 ) -> None:
     llvm_fn = module.globals[fn.name]
     for arg, p in zip(llvm_fn.args, fn.params):
@@ -506,7 +587,7 @@ def _lower_function_body(
     # Allocas at the very top of entry, before any other instruction. mem2reg
     # promotes them to SSA values during the optimize pass.
     locals_: dict[str, ir.AllocaInstr] = {}
-    for name, ty in _collect_local_bindings(fn.body):
+    for name, ty in _collect_local_bindings(fn.body, struct_tys):
         if name in params:
             raise ValueError(f"local {name!r} shadows parameter of {fn.name!r}")
         locals_[name] = builder.alloca(ty, name=name)
@@ -521,6 +602,7 @@ def _lower_function_body(
             constants=constants, module=module,
             return_claims=return_claims, overrides=overrides,
             extern_sigs=extern_sigs,
+            struct_defs=struct_defs, struct_tys=struct_tys,
         )
 
 
@@ -541,6 +623,18 @@ def lower(
     module.triple = target or llvm.get_default_triple()
     overrides = overrides or {}
 
+    # Pass 0: register named struct types. Two phases (allocate, then set
+    # body) so a struct can mention another that's defined later in the
+    # list. Cycles are already rejected by the model validator, so the
+    # second pass terminates.
+    struct_defs: dict[str, StructDef] = {sd.name: sd for sd in program.structs}
+    struct_tys: dict[str, ir.IdentifiedStructType] = {}
+    for sd in program.structs:
+        struct_tys[sd.name] = module.context.get_identified_type(sd.name)
+    for sd in program.structs:
+        body = [_type_to_llvm(f.type, struct_tys) for f in sd.fields]
+        struct_tys[sd.name].set_body(*body)
+
     constants: dict[str, ir.GlobalVariable] = {}
     for c in program.constants:
         data = bytearray(c.value.encode("utf-8") + b"\0")
@@ -554,9 +648,9 @@ def lower(
     # Pass 1: declare every user function and every extern so calls can
     # resolve regardless of order or definedness.
     for fn in program.functions:
-        _declare_function(module, fn)
+        _declare_function(module, fn, struct_tys)
     for ext in program.externs:
-        _declare_extern(module, ext)
+        _declare_extern(module, ext, struct_tys)
 
     extern_sigs: dict[str, ExternFunction] = {ext.name: ext for ext in program.externs}
 
@@ -565,6 +659,7 @@ def lower(
         _lower_function_body(
             module, fn, constants=constants, overrides=overrides,
             extern_sigs=extern_sigs,
+            struct_defs=struct_defs, struct_tys=struct_tys,
         )
 
     if entry is not None:
@@ -597,6 +692,19 @@ def _emit_main_wrapper(module: ir.Module, program: Program, entry: str) -> None:
             "entry function 'main' cannot have parameters; the synthesized "
             "argv wrapper would collide. Rename your entry (e.g. to 'app' "
             "or 'run') and quod will wrap it."
+        )
+
+    for p in fn.params:
+        if not isinstance(p.type, (I1Type, I8Type, I16Type, I32Type, I64Type)):
+            raise ValueError(
+                f"entry function {entry!r} param {p.name!r} has non-int type "
+                f"{p.type!r}; the argv wrapper only knows how to parse integers. "
+                f"Use a nullary entry that constructs richer args internally."
+            )
+    if not isinstance(fn.return_type, (I1Type, I8Type, I16Type, I32Type, I64Type)):
+        raise ValueError(
+            f"entry function {entry!r} returns non-int type {fn.return_type!r}; "
+            f"main must return an integer exit code"
         )
 
     if any(f.name == "main" for f in program.functions):

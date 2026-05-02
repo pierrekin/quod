@@ -22,6 +22,7 @@ from quod.model import (
     Program,
     Statement,
     StringConstant,
+    StructDef,
     replace_function,
 )
 
@@ -126,6 +127,68 @@ def remove_extern_from_program(program: Program, name: str) -> Program:
     if kept == program.externs:
         raise KeyError(f"no extern named {name!r}")
     return program.model_copy(update={"externs": kept})
+
+
+def add_struct_to_program(program: Program, struct_def: StructDef) -> Program:
+    """Append a struct definition. Errors if the name collides with an
+    existing struct. Cross-cutting validation (dangling refs, cycles) is
+    enforced by the Program-level model_validator on the returned object."""
+    if any(sd.name == struct_def.name for sd in program.structs):
+        raise ValueError(f"struct {struct_def.name!r} already declared")
+    return program.model_copy(update={"structs": program.structs + (struct_def,)})
+
+
+def remove_struct_from_program(program: Program, name: str) -> Program:
+    """Drop a struct definition. Strict: refuses if any function param,
+    return type, local, struct field, or extern signature references it.
+    The model validator would catch some of these on save, but reporting
+    the specific reference here is much friendlier."""
+    if not any(sd.name == name for sd in program.structs):
+        raise KeyError(f"no struct named {name!r}")
+    refs = _struct_references(program, name)
+    if refs:
+        raise ValueError(
+            f"refusing to remove struct {name!r}: still referenced by "
+            f"{', '.join(refs)}"
+        )
+    kept = tuple(sd for sd in program.structs if sd.name != name)
+    return program.model_copy(update={"structs": kept})
+
+
+def _struct_references(program: Program, name: str) -> tuple[str, ...]:
+    """Return human-readable references to struct `name` in the program.
+
+    Covers: other structs' fields, function params/returns, extern
+    params/returns. StructInit/FieldRead/FieldSet inside function bodies
+    aren't enumerated here — they'd be unreachable without a typed
+    container, and the Program validator catches dangling StructInit names.
+    """
+    out: list[str] = []
+    for sd in program.structs:
+        if sd.name == name:
+            continue
+        for f in sd.fields:
+            if _type_names(f.type) == name:
+                out.append(f"struct {sd.name}.{f.name}")
+    for fn in program.functions:
+        if _type_names(fn.return_type) == name:
+            out.append(f"function {fn.name} return type")
+        for p in fn.params:
+            if _type_names(p.type) == name:
+                out.append(f"function {fn.name} param {p.name}")
+    for ext in program.externs:
+        if _type_names(ext.return_type) == name:
+            out.append(f"extern {ext.name} return type")
+        for t in ext.param_types:
+            if _type_names(t) == name:
+                out.append(f"extern {ext.name} param")
+    return tuple(out)
+
+
+def _type_names(t) -> str | None:
+    """Return the struct name if `t` is a StructType, else None."""
+    from quod.model import StructType
+    return t.name if isinstance(t, StructType) else None
 
 
 # ---------- JSON ingest ----------
