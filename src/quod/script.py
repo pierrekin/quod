@@ -370,18 +370,23 @@ class Parser:
         if self.at("OP", ";"):
             self.eat()
 
+    def _dotted_after(self, first: str) -> str:
+        """Consume a `.IDENT` chain following an already-eaten initial
+        IDENT and return the joined dotted name (`a.b.c`). Returns
+        `first` unchanged if no dotted continuation."""
+        parts = [first]
+        while self.at("OP", ".") and self.peek(1).kind == "IDENT":
+            self.eat()
+            parts.append(self.eat().value)
+        return ".".join(parts)
+
     # -- top-level --
 
     def parse_function(self) -> Function:
         self.expect("KW", "fn")
-        # Allow dotted function names so stdlib modules can author
-        # `fn alloc.json.parse_array(...)` directly. Same lookahead
-        # trick we use for dotted calls and dotted types.
-        parts = [self.expect("IDENT").value]
-        while self.at("OP", ".") and self.peek(1).kind == "IDENT":
-            self.eat()
-            parts.append(self.eat().value)
-        name = ".".join(parts)
+        # Dotted name supported so stdlib modules can author
+        # `fn alloc.json.parse_array(...)` directly.
+        name = self._dotted_after(self.expect("IDENT").value)
         self.expect("OP", "(")
         params: list[Param] = []
         if not self.at("OP", ")"):
@@ -437,11 +442,7 @@ class Parser:
             self.eat()
             # Allow dotted type names like `core.str.String` or
             # `alloc.json.JsonValue`.
-            parts = [t.value]
-            while self.at("OP", ".") and self.peek(1).kind == "IDENT":
-                self.eat()
-                parts.append(self.eat().value)
-            full = ".".join(parts)
+            full = self._dotted_after(t.value)
             if full in self.enum_names:
                 return EnumType(name=full)
             return StructType(name=full)
@@ -790,11 +791,7 @@ class Parser:
             # like `parser.input_ptr` by what terminates the dotted chain.
             if self.at("OP", ".") and self.peek(1).kind == "IDENT":
                 save = self.pos
-                parts = [t.value]
-                while self.at("OP", ".") and self.peek(1).kind == "IDENT":
-                    self.eat()
-                    parts.append(self.eat().value)
-                full = ".".join(parts)
+                full = self._dotted_after(t.value)
                 if self.at("OP", "("):
                     return self._call_args(full)
                 if self.at("OP", "::"):

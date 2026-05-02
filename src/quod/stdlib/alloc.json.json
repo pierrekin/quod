@@ -1,177 +1,5 @@
 {
-  "imports": [
-    "alloc.arena",
-    "core.bytes"
-  ],
-  "structs": [
-    {
-      "name": "alloc.json.Parser",
-      "fields": [
-        {
-          "name": "input_ptr",
-          "type": {
-            "kind": "llvm.i8_ptr"
-          }
-        },
-        {
-          "name": "input_len",
-          "type": {
-            "kind": "llvm.i64"
-          }
-        },
-        {
-          "name": "cursor",
-          "type": {
-            "kind": "llvm.i64"
-          }
-        },
-        {
-          "name": "arena",
-          "type": {
-            "kind": "llvm.i8_ptr"
-          }
-        },
-        {
-          "name": "had_error",
-          "type": {
-            "kind": "llvm.i8"
-          }
-        }
-      ]
-    }
-  ],
-  "enums": [
-    {
-      "name": "alloc.json.JsonValue",
-      "variants": [
-        {
-          "name": "Null",
-          "fields": []
-        },
-        {
-          "name": "Bool",
-          "fields": [
-            {
-              "name": "b",
-              "type": {
-                "kind": "llvm.i1"
-              }
-            }
-          ]
-        },
-        {
-          "name": "Number",
-          "fields": [
-            {
-              "name": "n",
-              "type": {
-                "kind": "llvm.i64"
-              }
-            }
-          ]
-        },
-        {
-          "name": "String",
-          "fields": [
-            {
-              "name": "ptr",
-              "type": {
-                "kind": "llvm.i8_ptr"
-              }
-            },
-            {
-              "name": "len",
-              "type": {
-                "kind": "llvm.i64"
-              }
-            }
-          ]
-        },
-        {
-          "name": "Array",
-          "fields": [
-            {
-              "name": "items",
-              "type": {
-                "kind": "llvm.i8_ptr"
-              }
-            },
-            {
-              "name": "count",
-              "type": {
-                "kind": "llvm.i64"
-              }
-            }
-          ]
-        },
-        {
-          "name": "Object",
-          "fields": [
-            {
-              "name": "keys",
-              "type": {
-                "kind": "llvm.i8_ptr"
-              }
-            },
-            {
-              "name": "values",
-              "type": {
-                "kind": "llvm.i8_ptr"
-              }
-            },
-            {
-              "name": "count",
-              "type": {
-                "kind": "llvm.i64"
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "alloc.json.ParseResult",
-      "variants": [
-        {
-          "name": "Ok",
-          "fields": [
-            {
-              "name": "value",
-              "type": {
-                "kind": "llvm.enum",
-                "name": "alloc.json.JsonValue"
-              }
-            }
-          ]
-        },
-        {
-          "name": "Err",
-          "fields": []
-        }
-      ]
-    },
-    {
-      "name": "alloc.json.JsonOpt",
-      "variants": [
-        {
-          "name": "Some",
-          "fields": [
-            {
-              "name": "value",
-              "type": {
-                "kind": "llvm.enum",
-                "name": "alloc.json.JsonValue"
-              }
-            }
-          ]
-        },
-        {
-          "name": "None",
-          "fields": []
-        }
-      ]
-    }
-  ],
+  "constants": [],
   "functions": [
     {
       "name": "alloc.json.peek_byte",
@@ -5441,5 +5269,179 @@
       ],
       "claims": []
     }
+  ],
+  "externs": [],
+  "structs": [
+    {
+      "name": "alloc.json.Parser",
+      "fields": [
+        {
+          "name": "input_ptr",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "input_len",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "cursor",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "arena",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "had_error",
+          "type": {
+            "kind": "llvm.i8"
+          }
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "name": "alloc.json.JsonValue",
+      "variants": [
+        {
+          "name": "Null",
+          "fields": []
+        },
+        {
+          "name": "Bool",
+          "fields": [
+            {
+              "name": "b",
+              "type": {
+                "kind": "llvm.i1"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Number",
+          "fields": [
+            {
+              "name": "n",
+              "type": {
+                "kind": "llvm.i64"
+              }
+            }
+          ]
+        },
+        {
+          "name": "String",
+          "fields": [
+            {
+              "name": "ptr",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              }
+            },
+            {
+              "name": "len",
+              "type": {
+                "kind": "llvm.i64"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Array",
+          "fields": [
+            {
+              "name": "items",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              }
+            },
+            {
+              "name": "count",
+              "type": {
+                "kind": "llvm.i64"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Object",
+          "fields": [
+            {
+              "name": "keys",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              }
+            },
+            {
+              "name": "values",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              }
+            },
+            {
+              "name": "count",
+              "type": {
+                "kind": "llvm.i64"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "alloc.json.ParseResult",
+      "variants": [
+        {
+          "name": "Ok",
+          "fields": [
+            {
+              "name": "value",
+              "type": {
+                "kind": "llvm.enum",
+                "name": "alloc.json.JsonValue"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Err",
+          "fields": []
+        }
+      ]
+    },
+    {
+      "name": "alloc.json.JsonOpt",
+      "variants": [
+        {
+          "name": "Some",
+          "fields": [
+            {
+              "name": "value",
+              "type": {
+                "kind": "llvm.enum",
+                "name": "alloc.json.JsonValue"
+              }
+            }
+          ]
+        },
+        {
+          "name": "None",
+          "fields": []
+        }
+      ]
+    }
+  ],
+  "imports": [
+    "alloc.arena",
+    "core.bytes"
   ]
 }
