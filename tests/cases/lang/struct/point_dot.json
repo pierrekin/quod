@@ -1,0 +1,7 @@
+{
+  "program_file": "../../../../examples/structs/point_dot.json",
+  "expect": {
+    "stdout": "dot = 45\n",
+    "exit": 0
+  }
+}

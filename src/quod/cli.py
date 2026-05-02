@@ -236,6 +236,20 @@ def _theme() -> Theme:
     return ansi_theme if _color_on() else plain_theme
 
 
+def _json_default(o):
+    if hasattr(o, "model_dump"):
+        return o.model_dump(mode="json")
+    raise TypeError(f"not JSON-serializable: {type(o).__name__}")
+
+
+def _emit_json(payload) -> None:
+    """Print a JSON payload. Pydantic models are serialized via model_dump."""
+    typer.echo(json.dumps(payload, default=_json_default, indent=2))
+
+
+_JSON_HELP = "Emit machine-readable JSON instead of human-readable output."
+
+
 @app.callback(invoke_without_command=True)
 def root(
     ctx: typer.Context,
@@ -607,9 +621,23 @@ def show(
         False, "--hashes",
         help="Dump every node and its short hash, instead of the program form.",
     ),
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
 ) -> None:
     """Print the program. Color follows TTY (disable with `quod --no-color`)."""
     program = _load()
+    if json_output:
+        if hashes:
+            seen: set[str] = set()
+            rows: list[dict] = []
+            for hn in walk(program):
+                if hn.hash in seen:
+                    continue
+                seen.add(hn.hash)
+                rows.append({"hash": hn.hash, "type": type(hn.node).__name__})
+            _emit_json(rows)
+        else:
+            _emit_json(program)
+        return
     theme = _theme()
     if hashes:
         seen: set[str] = set()
@@ -658,6 +686,7 @@ def schema(
 @app.command()
 def find(
     prefix: str = typer.Argument(..., autocompletion=_comp.hash_prefixes),
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
 ) -> None:
     """Resolve a hash prefix to a node and print it."""
     program = _load()
@@ -666,6 +695,16 @@ def find(
     except (KeyError, ValueError) as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
+
+    if json_output:
+        _emit_json({
+            "hash": node_hash(node),
+            "short": short_hash(node),
+            "type": type(node).__name__,
+            "node": node,
+        })
+        return
+
     theme = _theme()
 
     def row(label: str, value: str, value_style: str) -> str:
@@ -683,9 +722,23 @@ def find(
 # ---------- fn sub-app ----------
 
 @fn_app.command("ls")
-def fn_ls() -> None:
+def fn_ls(
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
     """List all functions with signatures and hashes."""
     program = _load()
+    if json_output:
+        _emit_json([
+            {
+                "name": fn.name,
+                "hash": node_hash(fn),
+                "params": [{"name": p.name, "type": p.type.model_dump(mode="json")} for p in fn.params],
+                "return_type": fn.return_type.model_dump(mode="json"),
+                "claim_count": len(fn.claims),
+            }
+            for fn in program.functions
+        ])
+        return
     if not program.functions:
         typer.echo("(no functions)")
         return
@@ -700,6 +753,7 @@ def fn_ls() -> None:
 @fn_app.command("show")
 def fn_show(
     ref: str = typer.Argument(..., autocompletion=_comp.function_or_hash),
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
 ) -> None:
     """Print a single function. Accepts a name or a content-hash prefix."""
     try:
@@ -707,6 +761,9 @@ def fn_show(
     except (KeyError, ValueError) as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
+    if json_output:
+        _emit_json(fn)
+        return
     typer.echo(render(format_function_lines(fn), theme=_theme(), mode="columnar"))
 
 
@@ -828,9 +885,30 @@ def _count_paramrefs(node, name: str) -> int:
 
 
 @fn_app.command("call-graph")
-def fn_call_graph() -> None:
+def fn_call_graph(
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
     """Print the static call graph."""
     program = _load()
+    if json_output:
+        defined = {fn.name for fn in program.functions}
+        extern_names = {ext.name for ext in program.externs}
+        edges = {fn.name: list(function_callees(fn)) for fn in program.functions}
+        called: set[str] = set()
+        for callees in edges.values():
+            called.update(callees)
+        roots = [name for name in edges if name not in called]
+        leaves = [name for name, cs in edges.items() if not cs]
+        dangling = sorted({c for cs in edges.values() for c in cs if c not in defined and c not in extern_names})
+        externs = sorted({c for cs in edges.values() for c in cs if c in extern_names})
+        _emit_json({
+            "edges": edges,
+            "roots": roots,
+            "leaves": leaves,
+            "dangling": dangling,
+            "externs": externs,
+        })
+        return
     if not program.functions:
         typer.echo("(no functions)")
         return
@@ -873,9 +951,20 @@ def fn_call_graph() -> None:
 
 
 @fn_app.command("unconstrained")
-def fn_unconstrained() -> None:
+def fn_unconstrained(
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
     """List parameters that have no claim attached. A scout for the agent."""
     program = _load()
+    if json_output:
+        rows: list[dict[str, str]] = []
+        for fn in program.functions:
+            constrained = {claim_param(c) for c in fn.claims if claim_param(c) is not None}
+            for p in fn.params:
+                if p.name not in constrained:
+                    rows.append({"function": fn.name, "param": p.name})
+        _emit_json(rows)
+        return
     found = False
     for fn in program.functions:
         constrained = {claim_param(c) for c in fn.claims if claim_param(c) is not None}
@@ -893,6 +982,7 @@ def fn_unconstrained() -> None:
 def claim_ls(
     function: str | None = typer.Argument(None, help="Restrict to one function (omit for all).",
                                           autocompletion=_comp.function_or_hash),
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
 ) -> None:
     """List stored claims (axiom + witness regimes) across the program."""
     program = _load()
@@ -901,6 +991,12 @@ def claim_ls(
     except (KeyError, ValueError) as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
+    if json_output:
+        _emit_json([
+            {"function": fn.name, "claim": c}
+            for fn in fns for c in fn.claims
+        ])
+        return
     theme = _theme()
     found = False
     for fn in fns:
@@ -1356,9 +1452,14 @@ def stmt_rm(
 # ---------- const sub-app ----------
 
 @const_app.command("ls")
-def const_ls() -> None:
+def const_ls(
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
     """List declared string constants."""
     program = _load()
+    if json_output:
+        _emit_json(list(program.constants))
+        return
     if not program.constants:
         typer.echo("(no constants)")
         return
@@ -1438,9 +1539,14 @@ def _parse_type_name(s: str, *, struct_names: tuple[str, ...] = ()):
 
 
 @extern_app.command("ls")
-def extern_ls() -> None:
+def extern_ls(
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
     """List declared externs with their signatures."""
     program = _load()
+    if json_output:
+        _emit_json(list(program.externs))
+        return
     if not program.externs:
         typer.echo("(no externs)")
         return
@@ -1565,9 +1671,14 @@ def _parse_struct_field_spec(spec: str, *, struct_names: tuple[str, ...]) -> Str
 
 
 @struct_app.command("ls")
-def struct_ls() -> None:
+def struct_ls(
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
     """List declared structs with their field signatures."""
     program = _load()
+    if json_output:
+        _emit_json(list(program.structs))
+        return
     if not program.structs:
         typer.echo("(no structs)")
         return
@@ -1580,6 +1691,7 @@ def struct_ls() -> None:
 def struct_show(
     name: str = typer.Argument(..., help="Struct name.",
                                autocompletion=_comp.struct_names),
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
 ) -> None:
     """Print one struct definition."""
     program = _load()
@@ -1587,6 +1699,9 @@ def struct_show(
     if sd is None:
         typer.echo(f"error: no struct named {name!r}", err=True)
         raise typer.Exit(1)
+    if json_output:
+        _emit_json(sd)
+        return
     theme = _theme()
     typer.echo(paint(struct_def_spans(sd), theme))
 

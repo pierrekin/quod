@@ -1,0 +1,32 @@
+{
+  "constants": [],
+  "functions": [
+    {
+      "name": "f",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": [
+        {
+          "kind": "quod.return_int",
+          "value": 0
+        }
+      ],
+      "claims": [
+        {
+          "kind": "non_negative",
+          "param": "x"
+        }
+      ]
+    }
+  ],
+  "externs": []
+}

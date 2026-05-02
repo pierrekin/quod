@@ -1,0 +1,18 @@
+{
+  "program": {
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "body": [{ "kind": "quod.return_int", "value": 0 }],
+        "claims": [],
+        "return_type": { "kind": "llvm.i32" }
+      }
+    ]
+  },
+  "cli": ["struct", "ls", "--json"],
+  "expect": {
+    "exit": 0,
+    "stdout_json": []
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "inline_return_42",
+  "program": {
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "body": [
+          { "kind": "quod.return_int", "value": 42 }
+        ],
+        "claims": [],
+        "return_type": { "kind": "llvm.i32" }
+      }
+    ]
+  },
+  "expect": {
+    "stdout": "",
+    "exit": 42
+  }
+}

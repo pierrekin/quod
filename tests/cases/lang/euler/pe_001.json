@@ -1,0 +1,7 @@
+{
+  "program_file": "../../../../examples/project_euler/001.json",
+  "expect": {
+    "stdout": "233168\n",
+    "exit": 0
+  }
+}

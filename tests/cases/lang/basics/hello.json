@@ -1,0 +1,7 @@
+{
+  "program_file": "../../../../examples/basics/helloworld.json",
+  "expect": {
+    "stdout": "hello, world\n",
+    "exit": 0
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "claim_add_non_negative",
+  "in_program": "before.json",
+  "steps": [
+    { "cli": ["claim", "add", "f", "non_negative", "x"], "expect": { "exit": 0 } }
+  ],
+  "expect": { "program_json": "after.json" }
+}

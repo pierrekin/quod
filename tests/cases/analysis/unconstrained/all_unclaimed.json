@@ -1,0 +1,24 @@
+{
+  "program": {
+    "functions": [
+      {
+        "name": "f",
+        "params": [
+          { "name": "x", "type": { "kind": "llvm.i32" } },
+          { "name": "y", "type": { "kind": "llvm.i32" } }
+        ],
+        "body": [{ "kind": "quod.return_int", "value": 0 }],
+        "claims": [],
+        "return_type": { "kind": "llvm.i32" }
+      }
+    ]
+  },
+  "cli": ["fn", "unconstrained", "--json"],
+  "expect": {
+    "exit": 0,
+    "stdout_json": [
+      { "function": "f", "param": "x" },
+      { "function": "f", "param": "y" }
+    ]
+  }
+}

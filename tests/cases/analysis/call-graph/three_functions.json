@@ -1,0 +1,42 @@
+{
+  "program": {
+    "functions": [
+      {
+        "name": "leaf",
+        "params": [],
+        "body": [{ "kind": "quod.return_int", "value": 0 }],
+        "claims": [],
+        "return_type": { "kind": "llvm.i32" }
+      },
+      {
+        "name": "mid",
+        "params": [],
+        "body": [{ "kind": "quod.return_int", "value": 0 }],
+        "claims": [],
+        "return_type": { "kind": "llvm.i32" }
+      },
+      {
+        "name": "root",
+        "params": [],
+        "body": [
+          { "kind": "quod.expr_stmt", "value": { "kind": "llvm.call", "function": "leaf", "args": [] } },
+          { "kind": "quod.expr_stmt", "value": { "kind": "llvm.call", "function": "mid", "args": [] } },
+          { "kind": "quod.return_int", "value": 0 }
+        ],
+        "claims": [],
+        "return_type": { "kind": "llvm.i32" }
+      }
+    ]
+  },
+  "cli": ["fn", "call-graph", "--json"],
+  "expect": {
+    "exit": 0,
+    "stdout_json": {
+      "edges": { "leaf": [], "mid": [], "root": ["leaf", "mid"] },
+      "roots": ["root"],
+      "leaves": ["leaf", "mid"],
+      "dangling": [],
+      "externs": []
+    }
+  }
+}

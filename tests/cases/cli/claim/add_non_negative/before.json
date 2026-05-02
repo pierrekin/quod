@@ -1,0 +1,13 @@
+{
+  "functions": [
+    {
+      "name": "f",
+      "params": [
+        { "name": "x", "type": { "kind": "llvm.i32" } }
+      ],
+      "body": [{ "kind": "quod.return_int", "value": 0 }],
+      "claims": [],
+      "return_type": { "kind": "llvm.i32" }
+    }
+  ]
+}
