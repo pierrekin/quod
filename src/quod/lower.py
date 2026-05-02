@@ -55,6 +55,7 @@ from quod.model import (
     Program,
     PtrOffset,
     ReturnExpr,
+    SizeOf,
     ReturnInRangeClaim,
     ShortCircuitAnd,
     ShortCircuitOr,
@@ -297,6 +298,9 @@ def _lower_expr(
             return ir.Constant(I8.as_pointer(), None)
         case CharLit(value=v):
             return ir.Constant(I8, ord(v))
+        case SizeOf(type=t):
+            size, _align = _size_of_quod_type(t, struct_defs, enum_defs)
+            return ir.Constant(I64, size)
         case EnumInit(enum=ename, variant=vname, fields=field_inits):
             ed = enum_defs.get(ename)
             ety = enum_tys.get(ename)
@@ -319,6 +323,57 @@ def _lower_expr(
                 val = builder.insert_value(val, slot_val, [1, i])
             return val
     raise ValueError(f"unhandled expr: {expr!r}")
+
+
+def _size_of_quod_type(
+    t,
+    struct_defs: dict[str, StructDef],
+    enum_defs: dict[str, EnumDef],
+) -> tuple[int, int]:
+    """Return (abi_size, abi_alignment) in bytes for a quod type.
+
+    Assumes a 64-bit data model (i8* is 8 bytes, 8-byte aligned). Mirrors
+    the LLVM data-layout rules for our v1 type system: integers are
+    naturally aligned to their width; structs accumulate fields with
+    per-field alignment + tail padding to the struct's max-alignment;
+    enums lower to `{i8, [N x i64]}` so they're always 8-aligned with
+    `8 + 8*max_payload_slots` bytes total.
+    """
+    match t:
+        case I1Type() | I8Type():
+            return (1, 1)
+        case I16Type():
+            return (2, 2)
+        case I32Type():
+            return (4, 4)
+        case I64Type() | I8PtrType():
+            return (8, 8)
+        case StructType(name=name):
+            sd = struct_defs.get(name)
+            if sd is None:
+                raise ValueError(f"sizeof: undefined struct {name!r}")
+            offset = 0
+            max_align = 1
+            for f in sd.fields:
+                fsize, falign = _size_of_quod_type(f.type, struct_defs, enum_defs)
+                offset = _align_to(offset, falign)
+                offset += fsize
+                if falign > max_align:
+                    max_align = falign
+            offset = _align_to(offset, max_align)
+            return (offset, max_align)
+        case EnumType(name=name):
+            ed = enum_defs.get(name)
+            if ed is None:
+                raise ValueError(f"sizeof: undefined enum {name!r}")
+            return (8 + 8 * ed.max_payload_slots(), 8)
+    raise ValueError(f"sizeof: unhandled type {t!r}")
+
+
+def _align_to(offset: int, alignment: int) -> int:
+    """Round `offset` up to the next multiple of `alignment`."""
+    rem = offset % alignment
+    return offset if rem == 0 else offset + (alignment - rem)
 
 
 def _pack_to_i64_slot(builder: ir.IRBuilder, val: ir.Value, declared_ty) -> ir.Value:

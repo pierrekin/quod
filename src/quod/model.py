@@ -205,6 +205,19 @@ class NullPtr(_Node):
     kind: Literal["quod.null_ptr"] = "quod.null_ptr"
 
 
+class SizeOf(_Node):
+    """Size in bytes of a quod type, computed at lower time from LLVM's
+    target data layout. Returns i64. Useful for stride-correct pointer
+    arithmetic over arena-allocated arrays of structs or enums.
+
+    Lowered to a constant — `getelementptr null, i32 1` then `ptrtoint`
+    is the classic LLVM trick — but practically we just ask llvmlite's
+    target_data for the ABI size.
+    """
+    kind: Literal["quod.sizeof"] = "quod.sizeof"
+    type: "Type"
+
+
 class EnumInit(_Node):
     """Construct a value of an enum type by selecting a variant and
     initializing its payload fields. Lowered to: store tag byte + bitcast
@@ -252,7 +265,7 @@ Expr = Annotated[
     Union[
         IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
         Call, StringRef, FieldRead, StructInit, PtrOffset, Widen, Load,
-        NullPtr, CharLit, EnumInit,
+        NullPtr, CharLit, EnumInit, SizeOf,
     ],
     Field(discriminator="kind"),
 ]
@@ -1257,6 +1270,8 @@ def _check_struct_uses_in_expr(
         case Load(ptr=p, type=t):
             _check_struct_uses_in_expr(p, by_name, enums_by_name, where=where)
             _check_type_refs(t, by_name, enums_by_name, where=where)
+        case SizeOf(type=t):
+            _check_type_refs(t, by_name, enums_by_name, where=where)
 
 
 class Program(_ProgramBase):
@@ -1640,6 +1655,8 @@ def _format_expr(expr) -> str:
             return "null"
         case CharLit(value=v):
             return repr(v)
+        case SizeOf(type=t):
+            return f"sizeof[{_format_type(t)}]"
         case EnumInit(enum=ename, variant=vname, fields=field_inits):
             if field_inits:
                 inner = ", ".join(f"{fi.name}: {_format_expr(fi.value)}" for fi in field_inits)

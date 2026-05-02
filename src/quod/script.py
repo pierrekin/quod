@@ -78,6 +78,7 @@ from quod.model import (
     Call,
     EnumInit,
     EnumType,
+    SizeOf,
     ExprStmt,
     FieldInit,
     FieldRead,
@@ -129,7 +130,7 @@ class Token:
 _KEYWORDS = frozenset({
     "fn", "let", "if", "else", "while", "for", "in", "return",
     "store", "with_arena", "capacity", "load", "widen", "uwiden",
-    "ptr_offset", "to", "null", "true", "false", "match",
+    "ptr_offset", "sizeof", "to", "null", "true", "false", "match",
     # type keywords
     "i1", "i8", "i16", "i32", "i64", "void",
 })
@@ -630,7 +631,8 @@ class Parser:
         if t.kind in ("INT", "CHAR", "IDENT"):
             return True
         if t.kind == "KW" and t.value in (
-            "null", "true", "false", "load", "widen", "uwiden", "ptr_offset"
+            "null", "true", "false", "load", "widen", "uwiden", "ptr_offset",
+            "sizeof",
         ):
             return True
         if t.kind == "OP" and t.value in ("(", "&", "-"):
@@ -753,6 +755,8 @@ class Parser:
                     return self._widen(signed=False)
                 case "ptr_offset":
                     return self._ptr_offset()
+                case "sizeof":
+                    return self._sizeof()
         # Identifier — could be call, struct_init, enum_init, or local/param ref.
         if t.kind == "IDENT":
             self.eat()
@@ -835,6 +839,13 @@ class Parser:
         target = self._type(allow_void=False)
         self.expect("OP", ")")
         return Widen(value=v, target=target, signed=signed)
+
+    def _sizeof(self) -> SizeOf:
+        self.expect("KW", "sizeof")
+        self.expect("OP", "[")
+        ty = self._type(allow_void=False)
+        self.expect("OP", "]")
+        return SizeOf(type=ty)
 
     def _ptr_offset(self) -> PtrOffset:
         self.expect("KW", "ptr_offset")

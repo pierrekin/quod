@@ -56,6 +56,7 @@ from quod.model import (
     ManualJustification,
     Match,
     MatchArm,
+    SizeOf,
     NonNegativeClaim,
     NullPtr,
     Param,
@@ -294,6 +295,16 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         ),
         "example": {"kind": "quod.char_lit", "value": "n"},
         "see_also": ["llvm.const_int"],
+    },
+    "quod.sizeof": {
+        "class": SizeOf,
+        "summary": (
+            "Size in bytes of a quod type, computed at lower time. Returns "
+            "i64. Use for stride-correct pointer arithmetic over arena-"
+            "allocated arrays of structs or enums."
+        ),
+        "example": {"kind": "quod.sizeof", "type": {"kind": "llvm.enum", "name": "JsonValue"}},
+        "see_also": ["quod.ptr_offset"],
     },
     "quod.enum_init": {
         "class": EnumInit,
@@ -677,6 +688,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "quod.sc_or", "quod.sc_and", "llvm.call", "quod.string_ref",
         "quod.struct_init", "quod.field", "quod.ptr_offset", "quod.widen",
         "quod.load", "quod.null_ptr", "quod.char_lit", "quod.enum_init",
+        "quod.sizeof",
     ],
     "statement": [
         "quod.return_expr", "quod.return", "quod.if",
