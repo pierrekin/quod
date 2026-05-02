@@ -890,6 +890,32 @@ def fn_add(
     typer.echo(f"added function {fn.name} (hash={short_hash(fn)})")
 
 
+@fn_app.command("rename")
+def fn_rename_cmd(
+    old: str = typer.Argument(..., help="Existing function name (or hash prefix).",
+                              autocompletion=_comp.function_or_hash),
+    new: str = typer.Argument(..., help="New function name."),
+) -> None:
+    """Rename a function and update every call site that names it.
+
+    Renames the function definition AND rewrites Call expressions
+    across every other function so dangling-call errors don't fire
+    at build time. If `old` is a hash prefix, it's resolved to the
+    function name before the rewrite.
+    """
+    from quod.editor import rename_function
+    with _exclusive_lock():
+        program = _load()
+        try:
+            fn = find_function_ref(program, old)
+            program = rename_function(program, fn.name, new)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    typer.echo(f"renamed {fn.name} -> {new}")
+
+
 @fn_app.command("rm")
 def fn_rm(
     function: str = typer.Argument(..., help="Function name or hash prefix.",

@@ -66,6 +66,60 @@ def add_function_to_program(program: Program, function: Function) -> Program:
     return program.model_copy(update={"functions": program.functions + (function,)})
 
 
+def rename_function(program: Program, old: str, new: str) -> Program:
+    """Rename function `old` to `new` and update every call site
+    (Call.function == old) across the program. Errors if `new` is
+    already taken or if `old` doesn't exist.
+
+    Calls to externs whose names happen to collide with `old` are
+    NOT rewritten — only call sites that resolve to a user function
+    of the same name. (In practice we just do a name-string match
+    here; the dangling-call check at lower time catches mistakes.)"""
+    from quod.model import Call
+    if old == new:
+        return program
+    if not any(fn.name == old for fn in program.functions):
+        raise KeyError(f"no function named {old!r}")
+    if any(fn.name == new for fn in program.functions):
+        raise ValueError(f"function {new!r} already exists")
+
+    def rewrite_calls(node):
+        """Pydantic-deep walker that rebuilds Call nodes with the
+        renamed function and recurses into every nested expr/stmt."""
+        if isinstance(node, Call) and node.function == old:
+            return node.model_copy(update={
+                "function": new,
+                "args": tuple(rewrite_calls(a) for a in node.args),
+            })
+        if hasattr(node, "model_copy"):
+            updates: dict = {}
+            for field_name, value in node:
+                replaced = _rewrite_value(value, rewrite_calls)
+                if replaced is not value:
+                    updates[field_name] = replaced
+            return node.model_copy(update=updates) if updates else node
+        return node
+
+    new_functions = []
+    for fn in program.functions:
+        renamed_fn = rewrite_calls(fn)
+        if fn.name == old:
+            renamed_fn = renamed_fn.model_copy(update={"name": new})
+        new_functions.append(renamed_fn)
+    return program.model_copy(update={"functions": tuple(new_functions)})
+
+
+def _rewrite_value(value, rewrite_node):
+    """Helper for rename_function: dispatch a value to either the node
+    rewriter or recurse into tuples/lists of values."""
+    if hasattr(value, "model_copy"):
+        return rewrite_node(value)
+    if isinstance(value, tuple):
+        new = tuple(_rewrite_value(v, rewrite_node) for v in value)
+        return new if any(a is not b for a, b in zip(new, value)) else value
+    return value
+
+
 def add_statement_in_function(
     program: Program,
     function: Function,
