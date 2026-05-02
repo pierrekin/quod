@@ -31,6 +31,50 @@
     {
       "name": ".fmt_const",
       "value": "constant[0].value = %.*s\n"
+    },
+    {
+      "name": ".fmt_parse_fail",
+      "value": "parse failed\n"
+    },
+    {
+      "name": ".fmt_no_functions",
+      "value": "no functions field\n"
+    },
+    {
+      "name": ".fmt_no_fn0",
+      "value": "no function 0\n"
+    },
+    {
+      "name": ".fmt_no_name",
+      "value": "no name\n"
+    },
+    {
+      "name": ".fmt_name_not_str",
+      "value": "name not a string\n"
+    },
+    {
+      "name": ".fmt_no_constants",
+      "value": "no constants field\n"
+    },
+    {
+      "name": ".fmt_no_c0",
+      "value": "no constant 0\n"
+    },
+    {
+      "name": ".fmt_no_value",
+      "value": "no value\n"
+    },
+    {
+      "name": ".fmt_value_not_str",
+      "value": "value not a string\n"
+    },
+    {
+      "name": ".fmt_read_fail",
+      "value": "read failed\n"
+    },
+    {
+      "name": ".helloworld_path",
+      "value": "/root/quod/examples/basics/helloworld.json"
     }
   ],
   "functions": [
@@ -54,25 +98,18 @@
           "body": [
             {
               "kind": "quod.let",
-              "name": "prog",
+              "name": "read_result",
               "type": {
                 "kind": "llvm.enum",
-                "name": "alloc.json.JsonValue"
+                "name": "std.io.ReadResult"
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "alloc.json.parse",
+                "function": "std.io.read_file_to_arena",
                 "args": [
                   {
                     "kind": "quod.string_ref",
-                    "name": ".helloworld_json"
-                  },
-                  {
-                    "kind": "llvm.const_int",
-                    "type": {
-                      "kind": "llvm.i64"
-                    },
-                    "value": 941
+                    "name": ".helloworld_path"
                   },
                   {
                     "kind": "quod.local_ref",
@@ -82,101 +119,15 @@
               }
             },
             {
-              "kind": "quod.let",
-              "name": "funcs",
-              "type": {
-                "kind": "llvm.enum",
-                "name": "alloc.json.JsonValue"
-              },
-              "init": {
-                "kind": "llvm.call",
-                "function": "alloc.json.object_get",
-                "args": [
-                  {
-                    "kind": "quod.local_ref",
-                    "name": "prog"
-                  },
-                  {
-                    "kind": "quod.string_ref",
-                    "name": ".key_functions"
-                  },
-                  {
-                    "kind": "llvm.const_int",
-                    "type": {
-                      "kind": "llvm.i64"
-                    },
-                    "value": 9
-                  }
-                ]
-              }
-            },
-            {
-              "kind": "quod.let",
-              "name": "fn0",
-              "type": {
-                "kind": "llvm.enum",
-                "name": "alloc.json.JsonValue"
-              },
-              "init": {
-                "kind": "llvm.call",
-                "function": "alloc.json.array_get",
-                "args": [
-                  {
-                    "kind": "quod.local_ref",
-                    "name": "funcs"
-                  },
-                  {
-                    "kind": "llvm.const_int",
-                    "type": {
-                      "kind": "llvm.i64"
-                    },
-                    "value": 0
-                  }
-                ]
-              }
-            },
-            {
-              "kind": "quod.let",
-              "name": "fn_name",
-              "type": {
-                "kind": "llvm.enum",
-                "name": "alloc.json.JsonValue"
-              },
-              "init": {
-                "kind": "llvm.call",
-                "function": "alloc.json.object_get",
-                "args": [
-                  {
-                    "kind": "quod.local_ref",
-                    "name": "fn0"
-                  },
-                  {
-                    "kind": "quod.string_ref",
-                    "name": ".key_name"
-                  },
-                  {
-                    "kind": "llvm.const_int",
-                    "type": {
-                      "kind": "llvm.i64"
-                    },
-                    "value": 4
-                  }
-                ]
-              }
-            },
-            {
               "kind": "quod.match",
               "scrutinee": {
                 "kind": "quod.local_ref",
-                "name": "fn_name"
+                "name": "read_result"
               },
               "arms": [
                 {
-                  "variant": "String",
-                  "bindings": [
-                    "p",
-                    "l"
-                  ],
+                  "variant": "Err",
+                  "bindings": [],
                   "body": [
                     {
                       "kind": "quod.expr_stmt",
@@ -186,22 +137,7 @@
                         "args": [
                           {
                             "kind": "quod.string_ref",
-                            "name": ".fmt_fn"
-                          },
-                          {
-                            "kind": "quod.widen",
-                            "value": {
-                              "kind": "quod.local_ref",
-                              "name": "l"
-                            },
-                            "target": {
-                              "kind": "llvm.i32"
-                            },
-                            "signed": true
-                          },
-                          {
-                            "kind": "quod.local_ref",
-                            "name": "p"
+                            "name": ".fmt_read_fail"
                           }
                         ]
                       }
@@ -209,143 +145,594 @@
                   ]
                 },
                 {
-                  "variant": "_",
-                  "bindings": [],
-                  "body": []
-                }
-              ]
-            },
-            {
-              "kind": "quod.let",
-              "name": "consts",
-              "type": {
-                "kind": "llvm.enum",
-                "name": "alloc.json.JsonValue"
-              },
-              "init": {
-                "kind": "llvm.call",
-                "function": "alloc.json.object_get",
-                "args": [
-                  {
-                    "kind": "quod.local_ref",
-                    "name": "prog"
-                  },
-                  {
-                    "kind": "quod.string_ref",
-                    "name": ".key_constants"
-                  },
-                  {
-                    "kind": "llvm.const_int",
-                    "type": {
-                      "kind": "llvm.i64"
-                    },
-                    "value": 9
-                  }
-                ]
-              }
-            },
-            {
-              "kind": "quod.let",
-              "name": "const0",
-              "type": {
-                "kind": "llvm.enum",
-                "name": "alloc.json.JsonValue"
-              },
-              "init": {
-                "kind": "llvm.call",
-                "function": "alloc.json.array_get",
-                "args": [
-                  {
-                    "kind": "quod.local_ref",
-                    "name": "consts"
-                  },
-                  {
-                    "kind": "llvm.const_int",
-                    "type": {
-                      "kind": "llvm.i64"
-                    },
-                    "value": 0
-                  }
-                ]
-              }
-            },
-            {
-              "kind": "quod.let",
-              "name": "const_val",
-              "type": {
-                "kind": "llvm.enum",
-                "name": "alloc.json.JsonValue"
-              },
-              "init": {
-                "kind": "llvm.call",
-                "function": "alloc.json.object_get",
-                "args": [
-                  {
-                    "kind": "quod.local_ref",
-                    "name": "const0"
-                  },
-                  {
-                    "kind": "quod.string_ref",
-                    "name": ".key_value"
-                  },
-                  {
-                    "kind": "llvm.const_int",
-                    "type": {
-                      "kind": "llvm.i64"
-                    },
-                    "value": 5
-                  }
-                ]
-              }
-            },
-            {
-              "kind": "quod.match",
-              "scrutinee": {
-                "kind": "quod.local_ref",
-                "name": "const_val"
-              },
-              "arms": [
-                {
-                  "variant": "String",
+                  "variant": "Ok",
                   "bindings": [
-                    "p",
-                    "l"
+                    "text"
                   ],
                   "body": [
                     {
-                      "kind": "quod.expr_stmt",
-                      "value": {
+                      "kind": "quod.let",
+                      "name": "pr",
+                      "type": {
+                        "kind": "llvm.enum",
+                        "name": "alloc.json.ParseResult"
+                      },
+                      "init": {
                         "kind": "llvm.call",
-                        "function": "printf",
+                        "function": "alloc.json.parse",
                         "args": [
                           {
-                            "kind": "quod.string_ref",
-                            "name": ".fmt_const"
-                          },
-                          {
-                            "kind": "quod.widen",
+                            "kind": "quod.field",
                             "value": {
                               "kind": "quod.local_ref",
-                              "name": "l"
+                              "name": "text"
                             },
-                            "target": {
-                              "kind": "llvm.i32"
+                            "name": "ptr"
+                          },
+                          {
+                            "kind": "quod.field",
+                            "value": {
+                              "kind": "quod.local_ref",
+                              "name": "text"
                             },
-                            "signed": true
+                            "name": "len"
                           },
                           {
                             "kind": "quod.local_ref",
-                            "name": "p"
+                            "name": "a"
                           }
                         ]
                       }
+                    },
+                    {
+                      "kind": "quod.match",
+                      "scrutinee": {
+                        "kind": "quod.local_ref",
+                        "name": "pr"
+                      },
+                      "arms": [
+                        {
+                          "variant": "Err",
+                          "bindings": [],
+                          "body": [
+                            {
+                              "kind": "quod.expr_stmt",
+                              "value": {
+                                "kind": "llvm.call",
+                                "function": "printf",
+                                "args": [
+                                  {
+                                    "kind": "quod.string_ref",
+                                    "name": ".fmt_parse_fail"
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "variant": "Ok",
+                          "bindings": [
+                            "prog"
+                          ],
+                          "body": [
+                            {
+                              "kind": "quod.let",
+                              "name": "funcs_o",
+                              "type": {
+                                "kind": "llvm.enum",
+                                "name": "alloc.json.JsonOpt"
+                              },
+                              "init": {
+                                "kind": "llvm.call",
+                                "function": "alloc.json.object_get",
+                                "args": [
+                                  {
+                                    "kind": "quod.local_ref",
+                                    "name": "prog"
+                                  },
+                                  {
+                                    "kind": "quod.string_ref",
+                                    "name": ".key_functions"
+                                  },
+                                  {
+                                    "kind": "llvm.const_int",
+                                    "type": {
+                                      "kind": "llvm.i64"
+                                    },
+                                    "value": 9
+                                  }
+                                ]
+                              }
+                            },
+                            {
+                              "kind": "quod.match",
+                              "scrutinee": {
+                                "kind": "quod.local_ref",
+                                "name": "funcs_o"
+                              },
+                              "arms": [
+                                {
+                                  "variant": "None",
+                                  "bindings": [],
+                                  "body": [
+                                    {
+                                      "kind": "quod.expr_stmt",
+                                      "value": {
+                                        "kind": "llvm.call",
+                                        "function": "printf",
+                                        "args": [
+                                          {
+                                            "kind": "quod.string_ref",
+                                            "name": ".fmt_no_functions"
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "variant": "Some",
+                                  "bindings": [
+                                    "funcs"
+                                  ],
+                                  "body": [
+                                    {
+                                      "kind": "quod.let",
+                                      "name": "fn0_o",
+                                      "type": {
+                                        "kind": "llvm.enum",
+                                        "name": "alloc.json.JsonOpt"
+                                      },
+                                      "init": {
+                                        "kind": "llvm.call",
+                                        "function": "alloc.json.array_get",
+                                        "args": [
+                                          {
+                                            "kind": "quod.local_ref",
+                                            "name": "funcs"
+                                          },
+                                          {
+                                            "kind": "llvm.const_int",
+                                            "type": {
+                                              "kind": "llvm.i64"
+                                            },
+                                            "value": 0
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    {
+                                      "kind": "quod.match",
+                                      "scrutinee": {
+                                        "kind": "quod.local_ref",
+                                        "name": "fn0_o"
+                                      },
+                                      "arms": [
+                                        {
+                                          "variant": "None",
+                                          "bindings": [],
+                                          "body": [
+                                            {
+                                              "kind": "quod.expr_stmt",
+                                              "value": {
+                                                "kind": "llvm.call",
+                                                "function": "printf",
+                                                "args": [
+                                                  {
+                                                    "kind": "quod.string_ref",
+                                                    "name": ".fmt_no_fn0"
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "variant": "Some",
+                                          "bindings": [
+                                            "fn0"
+                                          ],
+                                          "body": [
+                                            {
+                                              "kind": "quod.let",
+                                              "name": "name_o",
+                                              "type": {
+                                                "kind": "llvm.enum",
+                                                "name": "alloc.json.JsonOpt"
+                                              },
+                                              "init": {
+                                                "kind": "llvm.call",
+                                                "function": "alloc.json.object_get",
+                                                "args": [
+                                                  {
+                                                    "kind": "quod.local_ref",
+                                                    "name": "fn0"
+                                                  },
+                                                  {
+                                                    "kind": "quod.string_ref",
+                                                    "name": ".key_name"
+                                                  },
+                                                  {
+                                                    "kind": "llvm.const_int",
+                                                    "type": {
+                                                      "kind": "llvm.i64"
+                                                    },
+                                                    "value": 4
+                                                  }
+                                                ]
+                                              }
+                                            },
+                                            {
+                                              "kind": "quod.match",
+                                              "scrutinee": {
+                                                "kind": "quod.local_ref",
+                                                "name": "name_o"
+                                              },
+                                              "arms": [
+                                                {
+                                                  "variant": "None",
+                                                  "bindings": [],
+                                                  "body": [
+                                                    {
+                                                      "kind": "quod.expr_stmt",
+                                                      "value": {
+                                                        "kind": "llvm.call",
+                                                        "function": "printf",
+                                                        "args": [
+                                                          {
+                                                            "kind": "quod.string_ref",
+                                                            "name": ".fmt_no_name"
+                                                          }
+                                                        ]
+                                                      }
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "variant": "Some",
+                                                  "bindings": [
+                                                    "name"
+                                                  ],
+                                                  "body": [
+                                                    {
+                                                      "kind": "quod.match",
+                                                      "scrutinee": {
+                                                        "kind": "quod.local_ref",
+                                                        "name": "name"
+                                                      },
+                                                      "arms": [
+                                                        {
+                                                          "variant": "String",
+                                                          "bindings": [
+                                                            "p",
+                                                            "l"
+                                                          ],
+                                                          "body": [
+                                                            {
+                                                              "kind": "quod.expr_stmt",
+                                                              "value": {
+                                                                "kind": "llvm.call",
+                                                                "function": "printf",
+                                                                "args": [
+                                                                  {
+                                                                    "kind": "quod.string_ref",
+                                                                    "name": ".fmt_fn"
+                                                                  },
+                                                                  {
+                                                                    "kind": "quod.widen",
+                                                                    "value": {
+                                                                      "kind": "quod.local_ref",
+                                                                      "name": "l"
+                                                                    },
+                                                                    "target": {
+                                                                      "kind": "llvm.i32"
+                                                                    },
+                                                                    "signed": true
+                                                                  },
+                                                                  {
+                                                                    "kind": "quod.local_ref",
+                                                                    "name": "p"
+                                                                  }
+                                                                ]
+                                                              }
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "variant": "_",
+                                                          "bindings": [],
+                                                          "body": [
+                                                            {
+                                                              "kind": "quod.expr_stmt",
+                                                              "value": {
+                                                                "kind": "llvm.call",
+                                                                "function": "printf",
+                                                                "args": [
+                                                                  {
+                                                                    "kind": "quod.string_ref",
+                                                                    "name": ".fmt_name_not_str"
+                                                                  }
+                                                                ]
+                                                              }
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "kind": "quod.let",
+                              "name": "consts_o",
+                              "type": {
+                                "kind": "llvm.enum",
+                                "name": "alloc.json.JsonOpt"
+                              },
+                              "init": {
+                                "kind": "llvm.call",
+                                "function": "alloc.json.object_get",
+                                "args": [
+                                  {
+                                    "kind": "quod.local_ref",
+                                    "name": "prog"
+                                  },
+                                  {
+                                    "kind": "quod.string_ref",
+                                    "name": ".key_constants"
+                                  },
+                                  {
+                                    "kind": "llvm.const_int",
+                                    "type": {
+                                      "kind": "llvm.i64"
+                                    },
+                                    "value": 9
+                                  }
+                                ]
+                              }
+                            },
+                            {
+                              "kind": "quod.match",
+                              "scrutinee": {
+                                "kind": "quod.local_ref",
+                                "name": "consts_o"
+                              },
+                              "arms": [
+                                {
+                                  "variant": "None",
+                                  "bindings": [],
+                                  "body": [
+                                    {
+                                      "kind": "quod.expr_stmt",
+                                      "value": {
+                                        "kind": "llvm.call",
+                                        "function": "printf",
+                                        "args": [
+                                          {
+                                            "kind": "quod.string_ref",
+                                            "name": ".fmt_no_constants"
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "variant": "Some",
+                                  "bindings": [
+                                    "consts"
+                                  ],
+                                  "body": [
+                                    {
+                                      "kind": "quod.let",
+                                      "name": "c0_o",
+                                      "type": {
+                                        "kind": "llvm.enum",
+                                        "name": "alloc.json.JsonOpt"
+                                      },
+                                      "init": {
+                                        "kind": "llvm.call",
+                                        "function": "alloc.json.array_get",
+                                        "args": [
+                                          {
+                                            "kind": "quod.local_ref",
+                                            "name": "consts"
+                                          },
+                                          {
+                                            "kind": "llvm.const_int",
+                                            "type": {
+                                              "kind": "llvm.i64"
+                                            },
+                                            "value": 0
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    {
+                                      "kind": "quod.match",
+                                      "scrutinee": {
+                                        "kind": "quod.local_ref",
+                                        "name": "c0_o"
+                                      },
+                                      "arms": [
+                                        {
+                                          "variant": "None",
+                                          "bindings": [],
+                                          "body": [
+                                            {
+                                              "kind": "quod.expr_stmt",
+                                              "value": {
+                                                "kind": "llvm.call",
+                                                "function": "printf",
+                                                "args": [
+                                                  {
+                                                    "kind": "quod.string_ref",
+                                                    "name": ".fmt_no_c0"
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "variant": "Some",
+                                          "bindings": [
+                                            "c0"
+                                          ],
+                                          "body": [
+                                            {
+                                              "kind": "quod.let",
+                                              "name": "val_o",
+                                              "type": {
+                                                "kind": "llvm.enum",
+                                                "name": "alloc.json.JsonOpt"
+                                              },
+                                              "init": {
+                                                "kind": "llvm.call",
+                                                "function": "alloc.json.object_get",
+                                                "args": [
+                                                  {
+                                                    "kind": "quod.local_ref",
+                                                    "name": "c0"
+                                                  },
+                                                  {
+                                                    "kind": "quod.string_ref",
+                                                    "name": ".key_value"
+                                                  },
+                                                  {
+                                                    "kind": "llvm.const_int",
+                                                    "type": {
+                                                      "kind": "llvm.i64"
+                                                    },
+                                                    "value": 5
+                                                  }
+                                                ]
+                                              }
+                                            },
+                                            {
+                                              "kind": "quod.match",
+                                              "scrutinee": {
+                                                "kind": "quod.local_ref",
+                                                "name": "val_o"
+                                              },
+                                              "arms": [
+                                                {
+                                                  "variant": "None",
+                                                  "bindings": [],
+                                                  "body": [
+                                                    {
+                                                      "kind": "quod.expr_stmt",
+                                                      "value": {
+                                                        "kind": "llvm.call",
+                                                        "function": "printf",
+                                                        "args": [
+                                                          {
+                                                            "kind": "quod.string_ref",
+                                                            "name": ".fmt_no_value"
+                                                          }
+                                                        ]
+                                                      }
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "variant": "Some",
+                                                  "bindings": [
+                                                    "val"
+                                                  ],
+                                                  "body": [
+                                                    {
+                                                      "kind": "quod.match",
+                                                      "scrutinee": {
+                                                        "kind": "quod.local_ref",
+                                                        "name": "val"
+                                                      },
+                                                      "arms": [
+                                                        {
+                                                          "variant": "String",
+                                                          "bindings": [
+                                                            "p",
+                                                            "l"
+                                                          ],
+                                                          "body": [
+                                                            {
+                                                              "kind": "quod.expr_stmt",
+                                                              "value": {
+                                                                "kind": "llvm.call",
+                                                                "function": "printf",
+                                                                "args": [
+                                                                  {
+                                                                    "kind": "quod.string_ref",
+                                                                    "name": ".fmt_const"
+                                                                  },
+                                                                  {
+                                                                    "kind": "quod.widen",
+                                                                    "value": {
+                                                                      "kind": "quod.local_ref",
+                                                                      "name": "l"
+                                                                    },
+                                                                    "target": {
+                                                                      "kind": "llvm.i32"
+                                                                    },
+                                                                    "signed": true
+                                                                  },
+                                                                  {
+                                                                    "kind": "quod.local_ref",
+                                                                    "name": "p"
+                                                                  }
+                                                                ]
+                                                              }
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "variant": "_",
+                                                          "bindings": [],
+                                                          "body": [
+                                                            {
+                                                              "kind": "quod.expr_stmt",
+                                                              "value": {
+                                                                "kind": "llvm.call",
+                                                                "function": "printf",
+                                                                "args": [
+                                                                  {
+                                                                    "kind": "quod.string_ref",
+                                                                    "name": ".fmt_value_not_str"
+                                                                  }
+                                                                ]
+                                                              }
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
                     }
                   ]
-                },
-                {
-                  "variant": "_",
-                  "bindings": [],
-                  "body": []
                 }
               ]
             }
@@ -385,6 +772,7 @@
     }
   ],
   "imports": [
-    "alloc.json"
+    "alloc.json",
+    "std.io"
   ]
 }
