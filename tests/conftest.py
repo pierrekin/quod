@@ -101,6 +101,17 @@ class CaseItem(pytest.Item):
         super().__init__(**kw)
         self.case = case
         self._failure_blob: list[str] = []
+        # Group items by parent directory in pytest's progress display.
+        # Compact mode groups by the part of nodeid before '::'; rewriting
+        # it to the case's parent directory collapses every JSON file in a
+        # folder onto one progress line (e.g. `tests/cases/lang/arena .....`).
+        # The original per-file nodeid still works for selection by file
+        # path because pytest_collect_file is unchanged.
+        try:
+            rel = self.path.parent.relative_to(self.session.config.rootpath)
+        except ValueError:
+            rel = self.path.parent
+        self._nodeid = f"{rel}::{self.name}"
 
     def runtest(self) -> None:
         if "cli" in self.case or "steps" in self.case:
