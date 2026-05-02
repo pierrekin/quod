@@ -1,0 +1,7 @@
+{
+  "c_file": "../../../../examples/c_ingest/loops/loops.c",
+  "expect": {
+    "stdout": "sum_to(10)    = 55\nfactorial(6)  = 720\n",
+    "exit": 0
+  }
+}

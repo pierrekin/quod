@@ -1,0 +1,7 @@
+{
+  "c_file": "../../../../examples/c_ingest/arithmetic/arithmetic.c",
+  "expect": {
+    "stdout": "3^2 + 4^2 = 25\n",
+    "exit": 0
+  }
+}

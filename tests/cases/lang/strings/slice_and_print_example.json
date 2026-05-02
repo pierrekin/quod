@@ -1,0 +1,7 @@
+{
+  "program_file": "../../../../examples/strings/slice_and_print.json",
+  "expect": {
+    "stdout": "[hello]\n[world]\n",
+    "exit": 0
+  }
+}

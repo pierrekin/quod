@@ -41,6 +41,7 @@ workspace.)
 | `control_flow`  | `if` / `else if` / `else`, comparisons, `&&`, i1→int widen. |
 | `loops`         | `while`, `int` locals, assignment.                          |
 | `fizzbuzz`      | Loops + nested `if/else if/else` + `%` + mixed `printf`.    |
+| `string_offset` | `char*` pointer arithmetic — `p + n` and `&p[n]` patterns.  |
 | `curl_fetch`    | Pointer locals, opaque handles, enum constants, `[link]`.   |
 
 ### Note on `curl_fetch`
@@ -63,8 +64,10 @@ quod run
 
 ## v1 subset reminder
 
-Only `int`-typed values are ingested. Pointers (other than `const char*`
-to externs like `printf`), structs, floats, `unsigned`, `long`, `short`,
-arrays, `for` loops, `goto`, and `switch` are all refused with a clear
-error pointing at the offending source location. See `src/quod/ingest/c.py`
-for the full list of supported AST kinds.
+Only `int`-typed function params/returns are ingested. Locals may also be
+pointer-typed (mapped to `i8*`). Pointer arithmetic is supported on
+`char*` bases (byte stride matches quod's GEP) with literal offsets.
+Structs, floats, `unsigned`, `long`, `short`, multi-dimensional arrays,
+`for` loops, `goto`, dereference (`*p`), and `switch` are refused with a
+clear error pointing at the offending source location. See
+`src/quod/ingest/c.py` for the full list of supported AST kinds.

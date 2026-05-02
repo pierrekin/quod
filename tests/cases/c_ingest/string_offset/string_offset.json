@@ -1,0 +1,7 @@
+{
+  "c_file": "../../../../examples/c_ingest/string_offset/string_offset.c",
+  "expect": {
+    "stdout": "full   = hello, world!\np + 7  = world!\n&p[7]  = world!\np + 12 = !\n",
+    "exit": 0
+  }
+}

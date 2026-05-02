@@ -66,6 +66,17 @@ file    = "arenas/with_arena_scratch.json"
   name  = "arena_with_arena"
   entry = "main"
 
+# ---------- strings ----------
+
+[[program]]
+name    = "string_slice_and_print"
+version = "0.1.0"
+file    = "strings/slice_and_print.json"
+
+  [[program.bin]]
+  name  = "string_slice_and_print"
+  entry = "main"
+
 # ---------- claims ----------
 
 [[program]]
@@ -239,4 +250,13 @@ file    = "c_ingest/fizzbuzz/program.json"
 
   [[program.bin]]
   name  = "c_fizzbuzz"
+  entry = "main"
+
+[[program]]
+name    = "c_string_offset"
+version = "0.1.0"
+file    = "c_ingest/string_offset/program.json"
+
+  [[program.bin]]
+  name  = "c_string_offset"
   entry = "main"

@@ -76,7 +76,7 @@ def pytest_collect_file(parent, file_path: Path):
     return CaseFile.from_parent(parent, path=file_path)
 
 
-_CASE_KEYS = frozenset({"cli", "steps", "program", "program_file"})
+_CASE_KEYS = frozenset({"cli", "steps", "program", "program_file", "c_file"})
 
 
 def _looks_like_case(obj: Any) -> bool:
@@ -105,11 +105,14 @@ class CaseItem(pytest.Item):
     def runtest(self) -> None:
         if "cli" in self.case or "steps" in self.case:
             _run_cli_case(self)
-        elif "program_file" in self.case or "program" in self.case:
+        elif (
+            "program_file" in self.case or "program" in self.case
+            or "c_file" in self.case
+        ):
             _run_behavior_case(self)
         else:
             raise ValueError(
-                "case has none of: 'cli', 'steps', 'program', 'program_file'"
+                "case has none of: 'cli', 'steps', 'program', 'program_file', 'c_file'"
             )
 
     def repr_failure(self, excinfo):
@@ -125,13 +128,58 @@ class CaseItem(pytest.Item):
 
 def _run_behavior_case(item: CaseItem) -> None:
     case = item.case
+    expect = case.get("expect", {})
+    expected_stdout = expect.get("stdout")
+    expected_exit = expect.get("exit", 0)
+    expected_program_json = expect.get("program_json")
+    expected_ingest_error = expect.get("ingest_error")
+
+    # Negative-path: case asserts the loader (typically ingest_c) raises with
+    # a message containing `expected_ingest_error`. Skip everything else.
+    if expected_ingest_error is not None:
+        try:
+            _load_program(case, item.path.parent)
+        except Exception as exc:
+            if expected_ingest_error not in str(exc):
+                pytest.fail(
+                    f"case {item.name!r}: ingest error\n"
+                    f"  expected substring: {expected_ingest_error!r}\n"
+                    f"  got message:        {str(exc)!r}",
+                    pytrace=False,
+                )
+            return
+        pytest.fail(
+            f"case {item.name!r}: expected ingest to fail with "
+            f"{expected_ingest_error!r} but it succeeded",
+            pytrace=False,
+        )
+
     program = _load_program(case, item.path.parent)
     entry = case.get("entry", "main")
     args = [str(a) for a in case.get("args", [])]
     stdin_blob = case.get("stdin", "")
-    expect = case.get("expect", {})
-    expected_stdout = expect.get("stdout")
-    expected_exit = expect.get("exit", 0)
+
+    # Pre-build assertion: compare the loaded Program against an expected
+    # JSON snapshot. Lets c_file cases verify the ingester's output without
+    # also running the binary, and cross-checks behavior cases too.
+    if expected_program_json is not None:
+        actual = json.loads(program.model_dump_json())
+        expected = _resolve_program_ref(expected_program_json, item.path.parent)
+        if actual != expected:
+            item._failure_blob.append(
+                "  program_json mismatch (loaded program ≠ expected):\n"
+                + _json_diff(actual, expected, indent="    ")
+            )
+            pytest.fail("\n".join([f"case {item.name!r} failed", *item._failure_blob]), pytrace=False)
+
+    # Skip the build/run leg when the case is purely a snapshot check (no
+    # stdout/exit assertion either). Useful for ingester-only fixtures.
+    if (
+        expected_stdout is None
+        and "exit" not in expect
+        and expected_program_json is not None
+    ):
+        return
 
     with tempfile.TemporaryDirectory(prefix=f"quod-test-{item.name}-") as td:
         result = compile_program(
@@ -166,14 +214,28 @@ def _run_behavior_case(item: CaseItem) -> None:
 
 
 def _load_program(case: dict[str, Any], case_dir: Path) -> Program:
-    if "program" in case and "program_file" in case:
-        raise ValueError("case must set exactly one of 'program' / 'program_file'")
+    sources = [k for k in ("program", "program_file", "c_file") if k in case]
+    if len(sources) != 1:
+        raise ValueError(
+            f"case must set exactly one of 'program' / 'program_file' / 'c_file', got {sources}"
+        )
     if "program" in case:
         return Program.model_validate_json(json.dumps(case["program"]))
     if "program_file" in case:
         path = (case_dir / case["program_file"]).resolve()
         return Program.model_validate_json(path.read_text())
-    raise ValueError("case must set 'program' or 'program_file'")
+    if "c_file" in case:
+        from quod.ingest.c import ingest_c
+        path = (case_dir / case["c_file"]).resolve()
+        program = ingest_c(path)
+        # Post-ingest hook: a c_file case may declare extra `imports` so the
+        # ingested program can call into stdlib (std.str etc.) — the C source
+        # itself can't express that, but the resulting Program can.
+        extra_imports = case.get("imports")
+        if extra_imports:
+            program = program.model_copy(update={"imports": tuple(extra_imports)})
+        return program
+    raise AssertionError("unreachable")
 
 
 # ---------- CLI cases ----------

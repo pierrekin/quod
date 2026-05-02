@@ -1,0 +1,7 @@
+{
+  "c_file": "../../../../examples/c_ingest/control_flow/control_flow.c",
+  "expect": {
+    "stdout": "classify(-5) = -1\nclassify(0)  = 0\nclassify(42) = 1\nin_unit_range(50) = 1\nin_unit_range(150) = 0\n",
+    "exit": 0
+  }
+}

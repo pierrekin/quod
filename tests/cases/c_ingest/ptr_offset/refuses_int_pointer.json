@@ -1,0 +1,6 @@
+{
+  "c_file": "refuses_int_pointer.c",
+  "expect": {
+    "ingest_error": "only char* (byte stride) is supported"
+  }
+}

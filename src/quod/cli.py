@@ -325,6 +325,14 @@ def ingest(
         None, "--name", "-n",
         help="Program name in quod.toml. Defaults to the source file's stem.",
     ),
+    imports: list[str] = typer.Option(
+        [], "--import",
+        help=(
+            "Stdlib module to add to the resulting program's `imports` list. "
+            "Repeatable. The module must exist under quod's stdlib directory; "
+            "see `quod schema --category program` for what's available."
+        ),
+    ),
 ) -> None:
     """Ingest a source file into a fresh quod project.
 
@@ -352,6 +360,9 @@ def ingest(
     except IngestError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
+
+    if imports:
+        program = program.model_copy(update={"imports": tuple(imports)})
 
     program_name = name or source.stem
     main_fn = next((f for f in program.functions if f.name == "main" and not f.params), None)

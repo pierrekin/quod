@@ -30,6 +30,7 @@ from quod.model import (
     Function,
     I8PtrType,
     I32Type,
+    I64Type,
     If,
     IntLit,
     Let,
@@ -37,6 +38,7 @@ from quod.model import (
     Param,
     ParamRef,
     Program,
+    PtrOffset,
     ReturnExpr,
     ReturnInt,
     ShortCircuitAnd,
@@ -50,7 +52,39 @@ from quod.model import (
 
 
 _I32 = I32Type()
+_I64 = I64Type()
 _I8PTR = I8PtrType()
+
+
+# Char-typed pointee kinds. Pointer arithmetic on these has byte stride,
+# which matches quod.ptr_offset. Wider pointee types (int*, struct*) need
+# scaling by sizeof — we refuse rather than silently miscompile.
+_CHAR_POINTEE_KINDS = frozenset({
+    cx.TypeKind.CHAR_S,
+    cx.TypeKind.CHAR_U,
+    cx.TypeKind.SCHAR,
+    cx.TypeKind.UCHAR,
+})
+
+
+def _is_pointer(c: cx.Cursor) -> bool:
+    return c.type.get_canonical().kind == cx.TypeKind.POINTER
+
+
+def _is_char_pointer(c: cx.Cursor) -> bool:
+    canon = c.type.get_canonical()
+    if canon.kind != cx.TypeKind.POINTER:
+        return False
+    return canon.get_pointee().kind in _CHAR_POINTEE_KINDS
+
+
+def _is_char_array(c: cx.Cursor) -> bool:
+    """C arrays in expression context decay to pointers; we treat
+    `char buf[N]` the same as `char *buf` for arithmetic purposes."""
+    canon = c.type.get_canonical()
+    if canon.kind not in (cx.TypeKind.CONSTANTARRAY, cx.TypeKind.INCOMPLETEARRAY):
+        return False
+    return canon.element_type.kind in _CHAR_POINTEE_KINDS
 
 
 # Quod BinOp ops that yield i1 (comparisons). Returning one in an `int`-typed
@@ -302,18 +336,33 @@ class _FunctionTranslator:
             if not tokens:
                 raise _refuse(c, "unary operator with no tokens")
             op = tokens[0]
-            inner = self.expr(children[0])
+            # `&buf[k]` and `&buf[k+m]` are pointer arithmetic — handle before
+            # we recurse into the array-subscript child (which we'd otherwise
+            # have to lower as a load).
+            if op == "&":
+                inner = _unwrap(children[0])
+                if inner.kind == cx.CursorKind.ARRAY_SUBSCRIPT_EXPR:
+                    return self._array_address_of(c, inner)
+                raise _refuse(c, "address-of only supported for array subscripts (e.g. `&buf[k]`)")
+            inner_expr = self.expr(children[0])
             if op == "-":
-                if isinstance(inner, IntLit):
-                    return IntLit(type=_I32, value=-inner.value)
-                return BinOp(op="sub", lhs=IntLit(type=_I32, value=0), rhs=inner)
+                if isinstance(inner_expr, IntLit):
+                    return IntLit(type=_I32, value=-inner_expr.value)
+                return BinOp(op="sub", lhs=IntLit(type=_I32, value=0), rhs=inner_expr)
             if op == "+":
-                return inner
+                return inner_expr
             raise _refuse(c, f"unsupported unary operator {op!r}")
 
         if k == cx.CursorKind.BINARY_OPERATOR:
             tok = _binop_token(c)
             children = list(c.get_children())
+            # Pointer arithmetic must be detected before recursing, since the
+            # quod Expr nodes don't carry the C type info we need to tell
+            # `p + 1` (ptr_offset) from `n + 1` (regular add).
+            if tok == "+":
+                ptr_arith = self._maybe_pointer_add(c, children)
+                if ptr_arith is not None:
+                    return ptr_arith
             lhs = self.expr(children[0])
             rhs = self.expr(children[1])
             if tok == "&&":
@@ -323,6 +372,7 @@ class _FunctionTranslator:
             if tok in _BIN_OP_TABLE:
                 return BinOp(op=cast(any, _BIN_OP_TABLE[tok]), lhs=lhs, rhs=rhs)
             raise _refuse(c, f"unsupported binary operator {tok!r}")
+
 
         if k == cx.CursorKind.CALL_EXPR:
             children = list(c.get_children())
@@ -422,6 +472,93 @@ class _FunctionTranslator:
         # Single-statement bodies (e.g. `if (c) return 0;`) are valid C and
         # libclang exposes them as the statement directly.
         return (self.stmt(cursor),)
+
+    def _maybe_pointer_add(
+        self, c: cx.Cursor, children: list[cx.Cursor],
+    ) -> Expr | None:
+        """Recognize `p + n` as pointer arithmetic when `p` is char-pointer-typed.
+
+        Returns a `quod.ptr_offset` Expr when one operand is a char* (or char
+        array, which decays to char*) and the other is an integer offset; None
+        otherwise (caller falls back to the integer-arithmetic path).
+
+        Refuses unsupported pointer arithmetic outright (non-char pointee,
+        pointer minus pointer) so we never silently miscompile the byte stride.
+        """
+        lhs_c, rhs_c = _unwrap(children[0]), _unwrap(children[1])
+        lhs_is_ptr = _is_pointer(lhs_c) or _is_char_array(lhs_c)
+        rhs_is_ptr = _is_pointer(rhs_c) or _is_char_array(rhs_c)
+
+        if not (lhs_is_ptr or rhs_is_ptr):
+            return None
+        if lhs_is_ptr and rhs_is_ptr:
+            raise _refuse(c, "pointer-plus-pointer is not a valid C expression")
+
+        if lhs_is_ptr:
+            ptr_c, off_c = lhs_c, rhs_c
+        else:
+            ptr_c, off_c = rhs_c, lhs_c
+
+        if not (_is_char_pointer(ptr_c) or _is_char_array(ptr_c)):
+            raise _refuse(
+                c,
+                f"pointer arithmetic on {ptr_c.type.spelling!r}: only char* "
+                f"(byte stride) is supported. Cast to (char*) or compute "
+                f"the byte offset explicitly."
+            )
+
+        return PtrOffset(
+            base=self.expr(ptr_c),
+            offset=self._i64_offset(off_c),
+        )
+
+    def _array_address_of(self, outer: cx.Cursor, sub: cx.Cursor) -> Expr:
+        """Translate `&arr[k]` (UNARY `&` of ARRAY_SUBSCRIPT_EXPR) into
+        `quod.ptr_offset(arr, k)`. Same pointee restriction as `_maybe_pointer_add`."""
+        children = list(sub.get_children())
+        if len(children) != 2:
+            raise _refuse(sub, f"array subscript with {len(children)} children")
+        arr_c, idx_c = _unwrap(children[0]), _unwrap(children[1])
+        if not (_is_char_pointer(arr_c) or _is_char_array(arr_c)):
+            raise _refuse(
+                outer,
+                f"&{arr_c.spelling}[…]: only char arrays / char* bases are "
+                f"supported (got {arr_c.type.spelling!r})"
+            )
+        return PtrOffset(
+            base=self.expr(arr_c),
+            offset=self._i64_offset(idx_c),
+        )
+
+    def _i64_offset(self, cursor: cx.Cursor) -> Expr:
+        """Translate an offset expression into an i64-typed Expr suitable
+        for `quod.ptr_offset`. Until the language gains a widening node,
+        we restrict offsets to integer literals (which we can emit as i64
+        directly) — variables would need a sext that quod can't yet express.
+        """
+        c = _unwrap(cursor)
+        if c.kind == cx.CursorKind.INTEGER_LITERAL:
+            tokens = [t.spelling for t in c.get_tokens()]
+            if not tokens:
+                raise _refuse(c, "integer literal with no tokens")
+            return IntLit(type=_I64, value=int(tokens[0], 0))
+        # Negation: `&buf[-1]` or `p + (-1)` — accept literal-after-unary-minus.
+        if c.kind == cx.CursorKind.UNARY_OPERATOR:
+            tokens = [t.spelling for t in c.get_tokens()]
+            inner = list(c.get_children())
+            if (
+                tokens and tokens[0] == "-"
+                and len(inner) == 1
+                and _unwrap(inner[0]).kind == cx.CursorKind.INTEGER_LITERAL
+            ):
+                lit_tokens = [t.spelling for t in _unwrap(inner[0]).get_tokens()]
+                return IntLit(type=_I64, value=-int(lit_tokens[0], 0))
+        raise _refuse(
+            c,
+            "pointer-arithmetic offset must be an integer literal in v1; "
+            "variable offsets need an i32→i64 widening that quod doesn't "
+            "yet expose. Track the offset as a constant or compute outside the C source."
+        )
 
 
 def _translate_function(

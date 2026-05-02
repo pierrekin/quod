@@ -1,0 +1,7 @@
+{
+  "c_file": "slice.c",
+  "expect": {
+    "stdout": "plus  = world\nsubscr= world\n",
+    "exit": 0
+  }
+}

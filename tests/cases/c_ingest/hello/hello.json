@@ -1,0 +1,7 @@
+{
+  "c_file": "../../../../examples/c_ingest/hello/hello.c",
+  "expect": {
+    "stdout": "hello, world\n",
+    "exit": 0
+  }
+}
