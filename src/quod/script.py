@@ -581,6 +581,18 @@ class Parser:
         self.expect("OP", "{")
         arms: list[MatchArm] = []
         while not self.at("OP", "}"):
+            # `_` is a wildcard arm — no bindings, matches anything not
+            # handled by another arm. The lexer treats it as an IDENT.
+            head_tok = self.peek()
+            if head_tok.kind == "IDENT" and head_tok.value == "_":
+                self.eat()
+                self.expect("OP", "=>")
+                body = self._block()
+                self.consume_terminator()
+                arms.append(MatchArm(
+                    variant="_", bindings=(), body=tuple(body),
+                ))
+                continue
             variant = self.expect("IDENT").value
             bindings: list[str] = []
             if self.at("OP", "("):

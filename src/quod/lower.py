@@ -415,6 +415,9 @@ def _collect_local_bindings(
                     # Each arm's bindings become locals at function scope
                     # (alloca'd at entry, populated when the arm is taken).
                     for arm in arms:
+                        if arm.variant == "_":
+                            visit(arm.body)
+                            continue
                         # Find the variant's payload field declarations to
                         # know each binding's declared type. We don't know
                         # the scrutinee's enum statically here, so we walk
@@ -637,10 +640,19 @@ def _lower_stmt(
             if ed is None:
                 raise ValueError(f"match scrutinee of unknown enum type {scrut_ty.name!r}")
             tag = builder.extract_value(scrut_val, 0)
-            unreachable_bb = llvm_fn.append_basic_block("match_unreach")
-            sw = builder.switch(tag, unreachable_bb)
-            builder.position_at_end(unreachable_bb)
-            builder.unreachable()
+            # Order arms with wildcard last for predictable codegen — the
+            # switch's default block becomes the wildcard arm if present,
+            # else an unreachable block.
+            wildcard_arm = next((a for a in arms if a.variant == "_"), None)
+            named_arms = [a for a in arms if a.variant != "_"]
+            if wildcard_arm is not None:
+                wildcard_bb = llvm_fn.append_basic_block("match_default")
+                sw = builder.switch(tag, wildcard_bb)
+            else:
+                unreachable_bb = llvm_fn.append_basic_block("match_unreach")
+                sw = builder.switch(tag, unreachable_bb)
+                builder.position_at_end(unreachable_bb)
+                builder.unreachable()
             # Lazily create the merge block — only needed if some arm falls
             # through. If every arm terminates (ret/unreachable), the match
             # statement has no successor and we leave the builder pointing
@@ -653,7 +665,21 @@ def _lower_stmt(
                 if end_bb is None:
                     end_bb = llvm_fn.append_basic_block("match_end")
                 return end_bb
-            for arm in arms:
+
+            def lower_arm_body(arm_obj):
+                for s in arm_obj.body:
+                    _lower_stmt(
+                        builder, s, llvm_fn=llvm_fn, params=params, locals_=locals_,
+                        entry_bb=entry_bb, constants=constants, module=module,
+                        return_claims=return_claims, overrides=overrides,
+                        extern_sigs=extern_sigs,
+                        struct_defs=struct_defs, struct_tys=struct_tys,
+                        enum_defs=enum_defs, enum_tys=enum_tys,
+                    )
+                if not builder.block.is_terminated:
+                    builder.branch(ensure_end())
+
+            for arm in named_arms:
                 var = ed.variant(arm.variant)
                 if var is None:
                     raise ValueError(f"match arm references unknown variant {ed.name}::{arm.variant}")
@@ -668,17 +694,10 @@ def _lower_stmt(
                     slot = builder.extract_value(scrut_val, [1, i])
                     bound = _unpack_from_i64_slot(builder, slot, field.type, struct_tys, enum_tys)
                     builder.store(bound, locals_[binding])
-                for s in arm.body:
-                    _lower_stmt(
-                        builder, s, llvm_fn=llvm_fn, params=params, locals_=locals_,
-                        entry_bb=entry_bb, constants=constants, module=module,
-                        return_claims=return_claims, overrides=overrides,
-                        extern_sigs=extern_sigs,
-                        struct_defs=struct_defs, struct_tys=struct_tys,
-                        enum_defs=enum_defs, enum_tys=enum_tys,
-                    )
-                if not builder.block.is_terminated:
-                    builder.branch(ensure_end())
+                lower_arm_body(arm)
+            if wildcard_arm is not None:
+                builder.position_at_end(wildcard_bb)
+                lower_arm_body(wildcard_arm)
             if end_bb is not None:
                 builder.position_at_end(end_bb)
             return

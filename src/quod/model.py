@@ -485,6 +485,12 @@ class MatchArm(_Node):
     locals (one name per field, in declaration order), and runs `body`
     with those locals in scope.
 
+    The literal variant name `_` is a wildcard — it matches every variant
+    not handled by another arm of the same match. Wildcards take no
+    bindings (use a normal variant arm if you need the payload). At most
+    one wildcard per match. With a wildcard present, the named-variant
+    arms don't have to be exhaustive.
+
     Bindings are scoped to `body` only — they don't leak into sibling
     arms or out of the match.
     """
@@ -1093,15 +1099,17 @@ def _check_struct_uses_in_stmt(
                 _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
         case Match(scrutinee=scrut, arms=arms):
             _check_struct_uses_in_expr(scrut, by_name, enums_by_name, where=where)
-            # Need scrutinee's enum name to validate arms. We don't have full
-            # type inference here; the lower pass + per-EnumInit validation
-            # cover most error shapes. Here we only enforce per-arm structural
-            # rules that are independent of which enum is being matched —
-            # plus exhaustiveness is checked in _check_match_uses_in_expr
-            # when the scrutinee's enum is statically obvious (LocalRef or
-            # ParamRef of EnumType). For other shapes (Call returning enum,
-            # Load[Enum], etc.) we defer to the lower pass.
+            # Per-arm rules independent of scrutinee enum.
+            wildcard_count = 0
             for arm in arms:
+                if arm.variant == "_":
+                    wildcard_count += 1
+                    if arm.bindings:
+                        raise ValueError(
+                            f"{where}: match wildcard arm `_` cannot take "
+                            f"bindings (use a named variant arm if you "
+                            f"need the payload)"
+                        )
                 seen_binding: set[str] = set()
                 for b in arm.bindings:
                     if b in seen_binding:
@@ -1112,6 +1120,10 @@ def _check_struct_uses_in_stmt(
                     seen_binding.add(b)
                 for s in arm.body:
                     _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
+            if wildcard_count > 1:
+                raise ValueError(
+                    f"{where}: match has more than one wildcard arm `_`"
+                )
             arm_variants = [a.variant for a in arms]
             seen_arms: set[str] = set()
             for v in arm_variants:
@@ -1120,16 +1132,18 @@ def _check_struct_uses_in_stmt(
                         f"{where}: match has duplicate arm for variant {v!r}"
                     )
                 seen_arms.add(v)
+            has_wildcard = "_" in seen_arms
             scrut_enum = _scrutinee_enum_name(scrut, enums_by_name)
             if scrut_enum is not None:
                 ed = enums_by_name[scrut_enum]
                 declared = {v.name for v in ed.variants}
-                missing = declared - seen_arms
-                extra = seen_arms - declared
-                if missing:
+                named_arms = seen_arms - {"_"}
+                missing = declared - named_arms
+                extra = named_arms - declared
+                if missing and not has_wildcard:
                     raise ValueError(
                         f"{where}: match on {scrut_enum!r} non-exhaustive — "
-                        f"missing {sorted(missing)}"
+                        f"missing {sorted(missing)} (use `_` for a default arm)"
                     )
                 if extra:
                     raise ValueError(
@@ -1137,6 +1151,8 @@ def _check_struct_uses_in_stmt(
                         f"variant arms {sorted(extra)}"
                     )
                 for arm in arms:
+                    if arm.variant == "_":
+                        continue
                     var = ed.variant(arm.variant)
                     if var is not None and len(arm.bindings) != len(var.fields):
                         raise ValueError(
