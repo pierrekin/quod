@@ -523,34 +523,14 @@ def _collect_local_bindings(
                 case While(body=w_body):
                     visit(w_body)
                 case Match(arms=arms):
-                    # Each arm's bindings become locals at function scope
-                    # (alloca'd at entry, populated when the arm is taken).
+                    # Match bindings are NOT pre-collected here — they're
+                    # arm-scoped, allocated inline at each arm's entry block
+                    # by the Match handler in _lower_stmt. Two arms binding
+                    # the same name (e.g. Array(items, count) and
+                    # Object(keys, values, count) both binding `count`) get
+                    # independent allocas. Just recurse into arm bodies for
+                    # any nested Let / For / etc.
                     for arm in arms:
-                        if arm.variant == "_":
-                            visit(arm.body)
-                            continue
-                        # Find the variant's payload field declarations to
-                        # know each binding's declared type. We don't know
-                        # the scrutinee's enum statically here, so we walk
-                        # every enum and look for a matching variant by name.
-                        # Safe because validator already checked exhaustiveness.
-                        var_decl = None
-                        for ed in enum_defs.values():
-                            v = ed.variant(arm.variant)
-                            if v is not None:
-                                var_decl = v
-                                break
-                        if var_decl is None:
-                            raise ValueError(
-                                f"match arm references unknown variant {arm.variant!r}"
-                            )
-                        for binding, field in zip(arm.bindings, var_decl.fields):
-                            if binding in seen:
-                                raise ValueError(
-                                    f"match binding {binding!r} conflicts with another local"
-                                )
-                            seen.add(binding)
-                            out.append((binding, _type_to_llvm(field.type, struct_tys, enum_tys)))
                         visit(arm.body)
     visit(stmts)
     return out
@@ -800,15 +780,26 @@ def _lower_stmt(
                 arm_bb = llvm_fn.append_basic_block(f"match_{arm.variant}")
                 sw.add_case(ir.Constant(I8, ed.variant_index(arm.variant)), arm_bb)
                 builder.position_at_end(arm_bb)
-                # Bind payload fields. Each binding's alloca was pre-emitted
-                # by _collect_local_bindings; here we just unpack the slot
-                # and store. zip stops at the shorter — validator already
-                # checked binding count == field count.
+                # Bind payload fields with arm-scoped allocas. We allocate
+                # in the arm's basic block (not the function entry) so each
+                # arm's bindings are physically distinct — different arms
+                # can reuse names without colliding. Save/restore locals_
+                # across the body so the bindings don't leak past the arm.
+                saved: dict[str, ir.AllocaInstr | None] = {}
                 for i, (binding, field) in enumerate(zip(arm.bindings, var.fields)):
+                    saved[binding] = locals_.get(binding)
+                    field_ll_ty = _type_to_llvm(field.type, struct_tys, enum_tys)
+                    alloca = builder.alloca(field_ll_ty, name=binding)
                     slot = builder.extract_value(scrut_val, [1, i])
                     bound = _unpack_from_i64_slot(builder, slot, field.type, struct_tys, enum_tys)
-                    builder.store(bound, locals_[binding])
+                    builder.store(bound, alloca)
+                    locals_[binding] = alloca
                 lower_arm_body(arm)
+                for b, prior in saved.items():
+                    if prior is None:
+                        locals_.pop(b, None)
+                    else:
+                        locals_[b] = prior
             if wildcard_arm is not None:
                 builder.position_at_end(wildcard_bb)
                 lower_arm_body(wildcard_arm)
