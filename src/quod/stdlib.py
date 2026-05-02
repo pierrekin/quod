@@ -38,16 +38,20 @@ class ImportError_(Exception):
 
 def resolve_imports(program: Program) -> Program:
     """Walk `program.imports` (and any nested imports declared by those
-    modules), fold their structs/externs/functions into `program`, and
-    clear `program.imports`. First-wins dedupe by name — user-declared
-    items always shadow imports."""
+    modules), fold their constants/structs/enums/externs/functions into
+    `program`, and clear `program.imports`. First-wins dedupe by name —
+    user-declared items always shadow imports."""
     if not program.imports:
         return program
 
+    constants = list(program.constants)
     structs = list(program.structs)
+    enums = list(program.enums)
     externs = list(program.externs)
     functions = list(program.functions)
+    seen_const = {c.name for c in constants}
     seen_struct = {s.name for s in structs}
+    seen_enum = {e.name for e in enums}
     seen_extern = {e.name for e in externs}
     seen_fn = {f.name for f in functions}
 
@@ -62,10 +66,18 @@ def resolve_imports(program: Program) -> Program:
         for nested in mod.imports:
             if nested not in visited:
                 queue.append(nested)
+        for c in mod.constants:
+            if c.name not in seen_const:
+                constants.append(c)
+                seen_const.add(c.name)
         for s in mod.structs:
             if s.name not in seen_struct:
                 structs.append(s)
                 seen_struct.add(s.name)
+        for ed in mod.enums:
+            if ed.name not in seen_enum:
+                enums.append(ed)
+                seen_enum.add(ed.name)
         for e in mod.externs:
             if e.name not in seen_extern:
                 externs.append(e)
@@ -79,8 +91,9 @@ def resolve_imports(program: Program) -> Program:
     # merged result — catches dangling struct refs that were deferred while
     # imports were unresolved.
     return Program(
-        constants=program.constants,
+        constants=tuple(constants),
         structs=tuple(structs),
+        enums=tuple(enums),
         externs=tuple(externs),
         functions=tuple(functions),
         imports=(),
