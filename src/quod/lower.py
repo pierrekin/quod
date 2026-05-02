@@ -52,7 +52,6 @@ from quod.model import (
     PtrOffset,
     ReturnExpr,
     ReturnInRangeClaim,
-    ReturnInt,
     ShortCircuitAnd,
     ShortCircuitOr,
     StringRef,
@@ -385,11 +384,6 @@ def _lower_stmt(
             )
 
     match stmt:
-        case ReturnInt(value=v):
-            ret_val = ir.Constant(llvm_fn.function_type.return_type, v)
-            _emit_return_claims(builder, ret_val, return_claims, llvm_fn, module, overrides)
-            builder.ret(ret_val)
-            return
         case ReturnExpr(value=expr):
             ret_val = lower_expr(expr)
             _emit_return_claims(builder, ret_val, return_claims, llvm_fn, module, overrides)
@@ -400,7 +394,7 @@ def _lower_stmt(
                 raise ValueError(
                     f"function {llvm_fn.name!r} returns "
                     f"{llvm_fn.function_type.return_type}, not void; "
-                    "use return_int / return_expr"
+                    "use return_expr"
                 )
             builder.ret_void()
             return
@@ -762,13 +756,13 @@ def _desugar_stmts(stmts) -> tuple:
 
 def _prepend_drop_before_returns(stmts, drop_stmt) -> tuple:
     """Walk `stmts` and emit `drop_stmt` immediately before each
-    `ReturnInt` / `ReturnExpr`. Recurses into branches and loop bodies; nested
-    `WithArena`s have already been desugared (their own drops already in
-    place), so we only need to add ours."""
+    `ReturnExpr` / bare `Return`. Recurses into branches and loop bodies;
+    nested `WithArena`s have already been desugared (their own drops
+    already in place), so we only need to add ours."""
     out: list = []
     for s in stmts:
         match s:
-            case ReturnInt() | ReturnExpr() | Return():
+            case ReturnExpr() | Return():
                 out.append(drop_stmt)
                 out.append(s)
             case If(then_body=t, else_body=e):
@@ -797,7 +791,7 @@ def _always_terminates(stmts) -> bool:
         return False
     last = stmts[-1]
     match last:
-        case ReturnInt() | ReturnExpr() | Return():
+        case ReturnExpr() | Return():
             return True
         case If(then_body=t, else_body=e):
             return _always_terminates(t) and _always_terminates(e)

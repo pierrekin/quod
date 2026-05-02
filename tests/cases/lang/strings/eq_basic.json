@@ -1,42 +1,150 @@
 {
   "program": {
-    "imports": ["std.str"],
+    "imports": [
+      "std.str"
+    ],
     "constants": [
-      { "name": ".str.foo",  "value": "hello" },
-      { "name": ".str.foo2", "value": "hello" },
-      { "name": ".str.bar",  "value": "world" },
-      { "name": ".str.fmt",  "value": "eq=%d ne=%d\n" }
+      {
+        "name": ".str.foo",
+        "value": "hello"
+      },
+      {
+        "name": ".str.foo2",
+        "value": "hello"
+      },
+      {
+        "name": ".str.bar",
+        "value": "world"
+      },
+      {
+        "name": ".str.fmt",
+        "value": "eq=%d ne=%d\n"
+      }
     ],
     "externs": [
-      { "name": "printf", "param_types": [{ "kind": "llvm.i8_ptr" }], "varargs": true }
+      {
+        "name": "printf",
+        "param_types": [
+          {
+            "kind": "llvm.i8_ptr"
+          }
+        ],
+        "varargs": true
+      }
     ],
     "functions": [
       {
         "name": "main",
         "params": [],
-        "return_type": { "kind": "llvm.i32" },
+        "return_type": {
+          "kind": "llvm.i32"
+        },
         "body": [
-          { "kind": "quod.let", "name": "a", "type": { "kind": "llvm.struct", "name": "std.str.String" },
-            "init": { "kind": "llvm.call", "function": "std.str.from_cstr",
-                      "args": [{ "kind": "quod.string_ref", "name": ".str.foo" }] } },
-          { "kind": "quod.let", "name": "b", "type": { "kind": "llvm.struct", "name": "std.str.String" },
-            "init": { "kind": "llvm.call", "function": "std.str.from_cstr",
-                      "args": [{ "kind": "quod.string_ref", "name": ".str.foo2" }] } },
-          { "kind": "quod.let", "name": "c", "type": { "kind": "llvm.struct", "name": "std.str.String" },
-            "init": { "kind": "llvm.call", "function": "std.str.from_cstr",
-                      "args": [{ "kind": "quod.string_ref", "name": ".str.bar" }] } },
-          { "kind": "quod.expr_stmt",
-            "value": { "kind": "llvm.call", "function": "printf",
-                       "args": [
-                         { "kind": "quod.string_ref", "name": ".str.fmt" },
-                         { "kind": "llvm.call", "function": "std.str.eq",
-                           "args": [{ "kind": "quod.local_ref", "name": "a" },
-                                    { "kind": "quod.local_ref", "name": "b" }] },
-                         { "kind": "llvm.call", "function": "std.str.eq",
-                           "args": [{ "kind": "quod.local_ref", "name": "a" },
-                                    { "kind": "quod.local_ref", "name": "c" }] }
-                       ] } },
-          { "kind": "quod.return_int", "value": 0 }
+          {
+            "kind": "quod.let",
+            "name": "a",
+            "type": {
+              "kind": "llvm.struct",
+              "name": "std.str.String"
+            },
+            "init": {
+              "kind": "llvm.call",
+              "function": "std.str.from_cstr",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.foo"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "b",
+            "type": {
+              "kind": "llvm.struct",
+              "name": "std.str.String"
+            },
+            "init": {
+              "kind": "llvm.call",
+              "function": "std.str.from_cstr",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.foo2"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "c",
+            "type": {
+              "kind": "llvm.struct",
+              "name": "std.str.String"
+            },
+            "init": {
+              "kind": "llvm.call",
+              "function": "std.str.from_cstr",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.bar"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.fmt"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "std.str.eq",
+                  "args": [
+                    {
+                      "kind": "quod.local_ref",
+                      "name": "a"
+                    },
+                    {
+                      "kind": "quod.local_ref",
+                      "name": "b"
+                    }
+                  ]
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "std.str.eq",
+                  "args": [
+                    {
+                      "kind": "quod.local_ref",
+                      "name": "a"
+                    },
+                    {
+                      "kind": "quod.local_ref",
+                      "name": "c"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          }
         ],
         "claims": []
       }

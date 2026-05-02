@@ -1,50 +1,116 @@
 {
   "program": {
     "constants": [
-      { "name": ".hi", "value": "hi\n" },
-      { "name": ".bye", "value": "bye\n" }
+      {
+        "name": ".hi",
+        "value": "hi\n"
+      },
+      {
+        "name": ".bye",
+        "value": "bye\n"
+      }
     ],
     "externs": [
-      { "name": "printf", "param_types": [{ "kind": "llvm.i8_ptr" }], "varargs": true }
+      {
+        "name": "printf",
+        "param_types": [
+          {
+            "kind": "llvm.i8_ptr"
+          }
+        ],
+        "varargs": true
+      }
     ],
     "functions": [
       {
         "name": "say_hi",
         "params": [],
-        "return_type": { "kind": "llvm.void" },
+        "return_type": {
+          "kind": "llvm.void"
+        },
         "body": [
-          { "kind": "quod.expr_stmt",
-            "value": { "kind": "llvm.call", "function": "printf",
-                       "args": [{ "kind": "quod.string_ref", "name": ".hi" }] } }
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".hi"
+                }
+              ]
+            }
+          }
         ],
         "claims": []
       },
       {
         "name": "say_bye",
         "params": [],
-        "return_type": { "kind": "llvm.void" },
+        "return_type": {
+          "kind": "llvm.void"
+        },
         "body": [
-          { "kind": "quod.expr_stmt",
-            "value": { "kind": "llvm.call", "function": "printf",
-                       "args": [{ "kind": "quod.string_ref", "name": ".bye" }] } },
-          { "kind": "quod.return" }
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".bye"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return"
+          }
         ],
         "claims": []
       },
       {
         "name": "main",
         "params": [],
-        "return_type": { "kind": "llvm.i32" },
+        "return_type": {
+          "kind": "llvm.i32"
+        },
         "body": [
-          { "kind": "quod.expr_stmt",
-            "value": { "kind": "llvm.call", "function": "say_hi", "args": [] } },
-          { "kind": "quod.expr_stmt",
-            "value": { "kind": "llvm.call", "function": "say_bye", "args": [] } },
-          { "kind": "quod.return_int", "value": 0 }
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "say_hi",
+              "args": []
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "say_bye",
+              "args": []
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          }
         ],
         "claims": []
       }
     ]
   },
-  "expect": { "stdout": "hi\nbye\n", "exit": 0 }
+  "expect": {
+    "stdout": "hi\nbye\n",
+    "exit": 0
+  }
 }

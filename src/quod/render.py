@@ -56,7 +56,6 @@ from quod.model import (
     PtrOffset,
     ReturnExpr,
     ReturnInRangeClaim,
-    ReturnInt,
     ShortCircuitAnd,
     ShortCircuitOr,
     StringConstant,
@@ -305,11 +304,6 @@ def _expr_spans(expr) -> tuple[Span, ...]:
 
 def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
     match stmt:
-        case ReturnInt(value=v):
-            yield Line(stmt, indent, (
-                Span("return", "keyword"), Span(" ", "ws"),
-                Span(str(v), "literal_int"),
-            ))
         case Return():
             yield Line(stmt, indent, (Span("return", "keyword"),))
         case ReturnExpr(value=expr):

@@ -60,12 +60,10 @@ The grammar:
 CMPOP is one of: == != < <= > >= <u <=u >u >=u
 
 Statements may be terminated by newlines or ';' (both work; either is
-optional at end of block). `int_lit` carries an explicit width via
-context: by default i64 inside parser bodies, but type-coerced when
-the position demands a different width. The model distinguishes
-`return_int` (constant) from `return_expr` (any expression); the
-parser emits `return_int` when the operand is a bare integer literal
-and `return_expr` otherwise.
+optional at end of block). Integer literals default to i64; use a
+width suffix (`0i8`, `42i32`, `-3i8`) to opt into a narrower type.
+A bare integer literal at return position adopts the function's
+declared return_type, so `return 0` works in any int-returning fn.
 """
 
 from __future__ import annotations
@@ -101,7 +99,6 @@ from quod.model import (
     PtrOffset,
     Return,
     ReturnExpr,
-    ReturnInt,
     ShortCircuitAnd,
     ShortCircuitOr,
     Store,

@@ -1,49 +1,189 @@
 {
   "program": {
     "externs": [
-      { "name": "quod_arena_alloc",
-        "param_types": [{ "kind": "llvm.i8_ptr" }, { "kind": "llvm.i64" }],
-        "return_type": { "kind": "llvm.i8_ptr" } },
-      { "name": "quod_arena_used",
-        "param_types": [{ "kind": "llvm.i8_ptr" }],
-        "return_type": { "kind": "llvm.i64" } }
+      {
+        "name": "quod_arena_alloc",
+        "param_types": [
+          {
+            "kind": "llvm.i8_ptr"
+          },
+          {
+            "kind": "llvm.i64"
+          }
+        ],
+        "return_type": {
+          "kind": "llvm.i8_ptr"
+        }
+      },
+      {
+        "name": "quod_arena_used",
+        "param_types": [
+          {
+            "kind": "llvm.i8_ptr"
+          }
+        ],
+        "return_type": {
+          "kind": "llvm.i64"
+        }
+      }
     ],
     "functions": [
       {
         "name": "main",
         "params": [],
-        "return_type": { "kind": "llvm.i32" },
+        "return_type": {
+          "kind": "llvm.i32"
+        },
         "body": [
-          { "kind": "quod.with_arena", "name": "outer",
-            "capacity": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 4096 },
+          {
+            "kind": "quod.with_arena",
+            "name": "outer",
+            "capacity": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i64"
+              },
+              "value": 4096
+            },
             "body": [
-              { "kind": "quod.let", "name": "_p1", "type": { "kind": "llvm.i8_ptr" },
-                "init": { "kind": "llvm.call", "function": "quod_arena_alloc",
-                          "args": [{ "kind": "quod.local_ref", "name": "outer" },
-                                   { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 32 }] } },
-              { "kind": "quod.with_arena", "name": "inner",
-                "capacity": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 1024 },
+              {
+                "kind": "quod.let",
+                "name": "_p1",
+                "type": {
+                  "kind": "llvm.i8_ptr"
+                },
+                "init": {
+                  "kind": "llvm.call",
+                  "function": "quod_arena_alloc",
+                  "args": [
+                    {
+                      "kind": "quod.local_ref",
+                      "name": "outer"
+                    },
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i64"
+                      },
+                      "value": 32
+                    }
+                  ]
+                }
+              },
+              {
+                "kind": "quod.with_arena",
+                "name": "inner",
+                "capacity": {
+                  "kind": "llvm.const_int",
+                  "type": {
+                    "kind": "llvm.i64"
+                  },
+                  "value": 1024
+                },
                 "body": [
-                  { "kind": "quod.let", "name": "_p2", "type": { "kind": "llvm.i8_ptr" },
-                    "init": { "kind": "llvm.call", "function": "quod_arena_alloc",
-                              "args": [{ "kind": "quod.local_ref", "name": "inner" },
-                                       { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 16 }] } },
-                  { "kind": "quod.let", "name": "u", "type": { "kind": "llvm.i64" },
-                    "init": { "kind": "llvm.call", "function": "quod_arena_used",
-                              "args": [{ "kind": "quod.local_ref", "name": "inner" }] } },
-                  { "kind": "quod.if",
-                    "cond": { "kind": "llvm.binop", "op": "eq",
-                              "lhs": { "kind": "quod.local_ref", "name": "u" },
-                              "rhs": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 16 } },
-                    "then_body": [{ "kind": "quod.return_int", "value": 0 }],
-                    "else_body": [{ "kind": "quod.return_int", "value": 1 }] }
-                ] }
-            ] },
-          { "kind": "quod.return_int", "value": 2 }
+                  {
+                    "kind": "quod.let",
+                    "name": "_p2",
+                    "type": {
+                      "kind": "llvm.i8_ptr"
+                    },
+                    "init": {
+                      "kind": "llvm.call",
+                      "function": "quod_arena_alloc",
+                      "args": [
+                        {
+                          "kind": "quod.local_ref",
+                          "name": "inner"
+                        },
+                        {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i64"
+                          },
+                          "value": 16
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "quod.let",
+                    "name": "u",
+                    "type": {
+                      "kind": "llvm.i64"
+                    },
+                    "init": {
+                      "kind": "llvm.call",
+                      "function": "quod_arena_used",
+                      "args": [
+                        {
+                          "kind": "quod.local_ref",
+                          "name": "inner"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "quod.if",
+                    "cond": {
+                      "kind": "llvm.binop",
+                      "op": "eq",
+                      "lhs": {
+                        "kind": "quod.local_ref",
+                        "name": "u"
+                      },
+                      "rhs": {
+                        "kind": "llvm.const_int",
+                        "type": {
+                          "kind": "llvm.i64"
+                        },
+                        "value": 16
+                      }
+                    },
+                    "then_body": [
+                      {
+                        "kind": "quod.return_expr",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 0
+                        }
+                      }
+                    ],
+                    "else_body": [
+                      {
+                        "kind": "quod.return_expr",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 1
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 2
+            }
+          }
         ],
         "claims": []
       }
     ]
   },
-  "expect": { "exit": 0 }
+  "expect": {
+    "exit": 0
+  }
 }

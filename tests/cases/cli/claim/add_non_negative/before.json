@@ -3,11 +3,29 @@
     {
       "name": "f",
       "params": [
-        { "name": "x", "type": { "kind": "llvm.i32" } }
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
       ],
-      "body": [{ "kind": "quod.return_int", "value": 0 }],
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.const_int",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "value": 0
+          }
+        }
+      ],
       "claims": [],
-      "return_type": { "kind": "llvm.i32" }
+      "return_type": {
+        "kind": "llvm.i32"
+      }
     }
   ]
 }

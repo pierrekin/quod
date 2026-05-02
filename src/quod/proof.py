@@ -8,7 +8,7 @@ The encoding lives entirely in this module — `model` knows nothing about SMT.
 
 Coverage:
   expressions: IntLit, ParamRef, BinOp(add, sub, mul, slt, eq), Call (cross-procedural)
-  statements:  ReturnInt, ReturnExpr, If (both branches return), ExprStmt (skipped)
+  statements:  ReturnExpr, If (both branches return), ExprStmt (skipped)
   claims:      NonNegativeClaim, IntRangeClaim, ReturnInRangeClaim
                  - as hypotheses on the function under analysis (via `hypotheses=`)
                  - as hypotheses on calls to *other* user functions (via `program=`),
@@ -52,7 +52,6 @@ from quod.model import (
     Program,
     ReturnExpr,
     ReturnInRangeClaim,
-    ReturnInt,
     ShortCircuitAnd,
     ShortCircuitOr,
     StringRef,
@@ -173,8 +172,6 @@ def _stmts_to_return_smt(stmts, state: _SmtState) -> str:
     return value. Side-effect-only statements (ExprStmt) are skipped."""
     for stmt in stmts:
         match stmt:
-            case ReturnInt(value=v):
-                return str(v)
             case ReturnExpr(value=expr):
                 return _expr_to_smt(expr, state)
             case If(cond=cond, then_body=t, else_body=e):

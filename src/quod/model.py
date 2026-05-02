@@ -333,12 +333,6 @@ def int_type_width(t: "IntType") -> int:
 
 # ---------- Statements ----------
 
-class ReturnInt(_Node):
-    """Return a constant integer. Shorthand kept for hello-world brevity."""
-    kind: Literal["quod.return_int"] = "quod.return_int"
-    value: int
-
-
 class ReturnExpr(_Node):
     kind: Literal["quod.return_expr"] = "quod.return_expr"
     value: Expr
@@ -346,7 +340,7 @@ class ReturnExpr(_Node):
 
 class Return(_Node):
     """Bare return for void functions. The enclosing function's return_type
-    must be llvm.void; non-void functions must use return_int / return_expr."""
+    must be llvm.void; non-void functions must use return_expr."""
     kind: Literal["quod.return"] = "quod.return"
 
 
@@ -451,7 +445,7 @@ class WithArena(_Node):
 
 
 Statement = Annotated[
-    Union[ReturnInt, ReturnExpr, Return, If, Let, Assign, While, For, ExprStmt, FieldSet, Store, WithArena],
+    Union[ReturnExpr, Return, If, Let, Assign, While, For, ExprStmt, FieldSet, Store, WithArena],
     Field(discriminator="kind"),
 ]
 
@@ -1227,8 +1221,6 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
     pad = " " * indent
     prefix = label(stmt)
     match stmt:
-        case ReturnInt(value=v):
-            return f"{pad}{prefix}return {v}"
         case ReturnExpr(value=expr):
             return f"{pad}{prefix}return {_format_expr(expr)}"
         case Return():

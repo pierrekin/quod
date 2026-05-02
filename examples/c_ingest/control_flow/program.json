@@ -85,14 +85,26 @@
               },
               "then_body": [
                 {
-                  "kind": "quod.return_int",
-                  "value": 0
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
+                    "value": 0
+                  }
                 }
               ],
               "else_body": [
                 {
-                  "kind": "quod.return_int",
-                  "value": 1
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
+                    "value": 1
+                  }
                 }
               ]
             }
@@ -155,14 +167,26 @@
           },
           "then_body": [
             {
-              "kind": "quod.return_int",
-              "value": 1
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 1
+              }
             }
           ],
           "else_body": [
             {
-              "kind": "quod.return_int",
-              "value": 0
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 0
+              }
             }
           ]
         }
@@ -310,8 +334,14 @@
           }
         },
         {
-          "kind": "quod.return_int",
-          "value": 0
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.const_int",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "value": 0
+          }
         }
       ],
       "claims": [],

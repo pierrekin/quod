@@ -40,7 +40,6 @@ from quod.model import (
     Program,
     PtrOffset,
     ReturnExpr,
-    ReturnInt,
     ShortCircuitAnd,
     ShortCircuitOr,
     StringConstant,
@@ -402,7 +401,7 @@ class _FunctionTranslator:
             inner = _unwrap(children[0])
             if inner.kind == cx.CursorKind.INTEGER_LITERAL:
                 tokens = [t.spelling for t in inner.get_tokens()]
-                return ReturnInt(value=int(tokens[0], 0))
+                return ReturnExpr(value=IntLit(type=_I32, value=int(tokens[0], 0)))
             value = self.expr(children[0])
             if _is_i1_typed(value):
                 # C's `return cond;` implicitly widens i1→int. quod has no
@@ -410,8 +409,8 @@ class _FunctionTranslator:
                 # then return 1 else return 0.
                 return If(
                     cond=value,
-                    then_body=(ReturnInt(value=1),),
-                    else_body=(ReturnInt(value=0),),
+                    then_body=(ReturnExpr(value=IntLit(type=_I32, value=1)),),
+                    else_body=(ReturnExpr(value=IntLit(type=_I32, value=0)),),
                 )
             return ReturnExpr(value=value)
 

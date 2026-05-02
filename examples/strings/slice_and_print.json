@@ -1,60 +1,217 @@
 {
-  "imports": ["std.str"],
+  "imports": [
+    "std.str"
+  ],
   "constants": [
-    { "name": ".greet", "value": "hello, world!" },
-    { "name": ".fmt", "value": "[%s]\n" }
+    {
+      "name": ".greet",
+      "value": "hello, world!"
+    },
+    {
+      "name": ".fmt",
+      "value": "[%s]\n"
+    }
   ],
   "externs": [
-    { "name": "printf", "param_types": [{ "kind": "llvm.i8_ptr" }], "varargs": true }
+    {
+      "name": "printf",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ],
+      "varargs": true
+    }
   ],
   "functions": [
     {
       "name": "main",
       "params": [],
-      "return_type": { "kind": "llvm.i32" },
+      "return_type": {
+        "kind": "llvm.i32"
+      },
       "body": [
-        { "kind": "quod.let", "name": "src", "type": { "kind": "llvm.struct", "name": "std.str.String" },
-          "init": { "kind": "llvm.call", "function": "std.str.from_cstr",
-                    "args": [{ "kind": "quod.string_ref", "name": ".greet" }] } },
-        { "kind": "quod.with_arena", "name": "scratch",
-          "capacity": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 4096 },
+        {
+          "kind": "quod.let",
+          "name": "src",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "std.str.String"
+          },
+          "init": {
+            "kind": "llvm.call",
+            "function": "std.str.from_cstr",
+            "args": [
+              {
+                "kind": "quod.string_ref",
+                "name": ".greet"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.with_arena",
+          "name": "scratch",
+          "capacity": {
+            "kind": "llvm.const_int",
+            "type": {
+              "kind": "llvm.i64"
+            },
+            "value": 4096
+          },
           "body": [
-            { "kind": "quod.let", "name": "head", "type": { "kind": "llvm.struct", "name": "std.str.String" },
-              "init": { "kind": "llvm.call", "function": "std.str.slice",
-                        "args": [
-                          { "kind": "quod.local_ref", "name": "src" },
-                          { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 0 },
-                          { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 5 }
-                        ] } },
-            { "kind": "quod.let", "name": "tail", "type": { "kind": "llvm.struct", "name": "std.str.String" },
-              "init": { "kind": "llvm.call", "function": "std.str.slice",
-                        "args": [
-                          { "kind": "quod.local_ref", "name": "src" },
-                          { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 7 },
-                          { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 12 }
-                        ] } },
-            { "kind": "quod.let", "name": "head_c", "type": { "kind": "llvm.i8_ptr" },
-              "init": { "kind": "llvm.call", "function": "std.str.to_cstr_in",
-                        "args": [
-                          { "kind": "quod.local_ref", "name": "head" },
-                          { "kind": "quod.local_ref", "name": "scratch" }
-                        ] } },
-            { "kind": "quod.let", "name": "tail_c", "type": { "kind": "llvm.i8_ptr" },
-              "init": { "kind": "llvm.call", "function": "std.str.to_cstr_in",
-                        "args": [
-                          { "kind": "quod.local_ref", "name": "tail" },
-                          { "kind": "quod.local_ref", "name": "scratch" }
-                        ] } },
-            { "kind": "quod.expr_stmt",
-              "value": { "kind": "llvm.call", "function": "printf",
-                         "args": [{ "kind": "quod.string_ref", "name": ".fmt" },
-                                  { "kind": "quod.local_ref", "name": "head_c" }] } },
-            { "kind": "quod.expr_stmt",
-              "value": { "kind": "llvm.call", "function": "printf",
-                         "args": [{ "kind": "quod.string_ref", "name": ".fmt" },
-                                  { "kind": "quod.local_ref", "name": "tail_c" }] } }
-          ] },
-        { "kind": "quod.return_int", "value": 0 }
+            {
+              "kind": "quod.let",
+              "name": "head",
+              "type": {
+                "kind": "llvm.struct",
+                "name": "std.str.String"
+              },
+              "init": {
+                "kind": "llvm.call",
+                "function": "std.str.slice",
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "src"
+                  },
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i64"
+                    },
+                    "value": 0
+                  },
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i64"
+                    },
+                    "value": 5
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "tail",
+              "type": {
+                "kind": "llvm.struct",
+                "name": "std.str.String"
+              },
+              "init": {
+                "kind": "llvm.call",
+                "function": "std.str.slice",
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "src"
+                  },
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i64"
+                    },
+                    "value": 7
+                  },
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i64"
+                    },
+                    "value": 12
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "head_c",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              },
+              "init": {
+                "kind": "llvm.call",
+                "function": "std.str.to_cstr_in",
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "head"
+                  },
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "scratch"
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "tail_c",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              },
+              "init": {
+                "kind": "llvm.call",
+                "function": "std.str.to_cstr_in",
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "tail"
+                  },
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "scratch"
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "printf",
+                "args": [
+                  {
+                    "kind": "quod.string_ref",
+                    "name": ".fmt"
+                  },
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "head_c"
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "printf",
+                "args": [
+                  {
+                    "kind": "quod.string_ref",
+                    "name": ".fmt"
+                  },
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "tail_c"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.const_int",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "value": 0
+          }
+        }
       ],
       "claims": []
     }

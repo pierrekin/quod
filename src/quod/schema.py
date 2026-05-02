@@ -57,7 +57,6 @@ from quod.model import (
     Return,
     ReturnExpr,
     ReturnInRangeClaim,
-    ReturnInt,
     ShortCircuitAnd,
     ShortCircuitOr,
     StringConstant,
@@ -291,12 +290,6 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     },
 
     # ---------- statement ----------
-    "quod.return_int": {
-        "class": ReturnInt,
-        "summary": "Return a constant integer. Shorthand for `return_expr` with a const_int value; the constant takes the function's declared return_type.",
-        "example": {"kind": "quod.return_int", "value": 0},
-        "see_also": ["quod.return_expr"],
-    },
     "quod.return_expr": {
         "class": ReturnExpr,
         "summary": "Return the value of an expression. The expression's type must match the function's return_type.",
@@ -312,11 +305,11 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "summary": (
             "Bare return for void functions. The enclosing function's "
             "return_type must be llvm.void; non-void functions must use "
-            "return_int / return_expr. Void functions also get an implicit "
-            "ret void at the end if the body falls through."
+            "return_expr. Void functions also get an implicit ret void at "
+            "the end if the body falls through."
         ),
         "example": {"kind": "quod.return"},
-        "see_also": ["llvm.void", "quod.return_int", "quod.return_expr"],
+        "see_also": ["llvm.void", "quod.return_expr"],
     },
     "quod.if": {
         "class": If,
@@ -326,8 +319,10 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "cond": {"kind": "llvm.binop", "op": "slt",
                      "lhs": {"kind": "llvm.param_ref", "name": "x"},
                      "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}},
-            "then_body": [{"kind": "quod.return_int", "value": -1}],
-            "else_body": [{"kind": "quod.return_int", "value": 1}],
+            "then_body": [{"kind": "quod.return_expr",
+                           "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": -1}}],
+            "else_body": [{"kind": "quod.return_expr",
+                           "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}],
         },
     },
     "quod.let": {
@@ -538,7 +533,8 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "example": {
             "name": "main", "params": [],
             "return_type": {"kind": "llvm.i32"},
-            "body": [{"kind": "quod.return_int", "value": 0}],
+            "body": [{"kind": "quod.return_expr",
+                      "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}}],
         },
     },
     "Param": {
@@ -579,7 +575,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "quod.load", "quod.null_ptr", "quod.char_lit",
     ],
     "statement": [
-        "quod.return_int", "quod.return_expr", "quod.return", "quod.if",
+        "quod.return_expr", "quod.return", "quod.if",
         "quod.let", "quod.assign", "quod.while", "quod.for", "quod.expr_stmt",
         "quod.field_set", "quod.store", "quod.with_arena",
     ],

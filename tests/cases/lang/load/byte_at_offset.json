@@ -1,39 +1,113 @@
 {
   "program": {
     "constants": [
-      { "name": ".s",   "value": "hello" },
-      { "name": ".fmt", "value": "byte=%d\n" }
+      {
+        "name": ".s",
+        "value": "hello"
+      },
+      {
+        "name": ".fmt",
+        "value": "byte=%d\n"
+      }
     ],
     "externs": [
-      { "name": "printf", "param_types": [{ "kind": "llvm.i8_ptr" }], "varargs": true }
+      {
+        "name": "printf",
+        "param_types": [
+          {
+            "kind": "llvm.i8_ptr"
+          }
+        ],
+        "varargs": true
+      }
     ],
     "functions": [
       {
         "name": "main",
         "params": [],
-        "return_type": { "kind": "llvm.i32" },
+        "return_type": {
+          "kind": "llvm.i32"
+        },
         "body": [
-          { "kind": "quod.let", "name": "p", "type": { "kind": "llvm.i8_ptr" },
-            "init": { "kind": "quod.ptr_offset",
-                      "base": { "kind": "quod.string_ref", "name": ".s" },
-                      "offset": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 1 } } },
-          { "kind": "quod.let", "name": "b", "type": { "kind": "llvm.i8" },
-            "init": { "kind": "quod.load",
-                      "ptr": { "kind": "quod.local_ref", "name": "p" },
-                      "type": { "kind": "llvm.i8" } } },
-          { "kind": "quod.expr_stmt",
-            "value": { "kind": "llvm.call", "function": "printf",
-                       "args": [
-                         { "kind": "quod.string_ref", "name": ".fmt" },
-                         { "kind": "quod.widen",
-                           "value": { "kind": "quod.local_ref", "name": "b" },
-                           "target": { "kind": "llvm.i32" }, "signed": false }
-                       ] } },
-          { "kind": "quod.return_int", "value": 0 }
+          {
+            "kind": "quod.let",
+            "name": "p",
+            "type": {
+              "kind": "llvm.i8_ptr"
+            },
+            "init": {
+              "kind": "quod.ptr_offset",
+              "base": {
+                "kind": "quod.string_ref",
+                "name": ".s"
+              },
+              "offset": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i64"
+                },
+                "value": 1
+              }
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "b",
+            "type": {
+              "kind": "llvm.i8"
+            },
+            "init": {
+              "kind": "quod.load",
+              "ptr": {
+                "kind": "quod.local_ref",
+                "name": "p"
+              },
+              "type": {
+                "kind": "llvm.i8"
+              }
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".fmt"
+                },
+                {
+                  "kind": "quod.widen",
+                  "value": {
+                    "kind": "quod.local_ref",
+                    "name": "b"
+                  },
+                  "target": {
+                    "kind": "llvm.i32"
+                  },
+                  "signed": false
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          }
         ],
         "claims": []
       }
     ]
   },
-  "expect": { "stdout": "byte=101\n", "exit": 0 }
+  "expect": {
+    "stdout": "byte=101\n",
+    "exit": 0
+  }
 }

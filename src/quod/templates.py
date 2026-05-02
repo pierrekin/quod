@@ -14,7 +14,6 @@ from quod.model import (
     ParamRef,
     Program,
     ReturnExpr,
-    ReturnInt,
     StringConstant,
     StringRef,
 )
@@ -32,7 +31,7 @@ HELLO_WORLD = Program(
             return_type=_I32,
             body=(
                 ExprStmt(value=Call(function="puts", args=(StringRef(name=".str.greeting"),))),
-                ReturnInt(value=0),
+                ReturnExpr(value=IntLit(type=_I32, value=0)),
             ),
         ),
     ),

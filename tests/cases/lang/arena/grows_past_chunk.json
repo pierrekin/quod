@@ -1,52 +1,208 @@
 {
   "program": {
     "externs": [
-      { "name": "quod_arena_new",
-        "param_types": [{ "kind": "llvm.i64" }],
-        "return_type": { "kind": "llvm.i8_ptr" } },
-      { "name": "quod_arena_alloc",
-        "param_types": [{ "kind": "llvm.i8_ptr" }, { "kind": "llvm.i64" }],
-        "return_type": { "kind": "llvm.i8_ptr" } },
-      { "name": "quod_arena_drop",
-        "param_types": [{ "kind": "llvm.i8_ptr" }],
-        "return_type": { "kind": "llvm.i64" } },
-      { "name": "quod_arena_used",
-        "param_types": [{ "kind": "llvm.i8_ptr" }],
-        "return_type": { "kind": "llvm.i64" } }
+      {
+        "name": "quod_arena_new",
+        "param_types": [
+          {
+            "kind": "llvm.i64"
+          }
+        ],
+        "return_type": {
+          "kind": "llvm.i8_ptr"
+        }
+      },
+      {
+        "name": "quod_arena_alloc",
+        "param_types": [
+          {
+            "kind": "llvm.i8_ptr"
+          },
+          {
+            "kind": "llvm.i64"
+          }
+        ],
+        "return_type": {
+          "kind": "llvm.i8_ptr"
+        }
+      },
+      {
+        "name": "quod_arena_drop",
+        "param_types": [
+          {
+            "kind": "llvm.i8_ptr"
+          }
+        ],
+        "return_type": {
+          "kind": "llvm.i64"
+        }
+      },
+      {
+        "name": "quod_arena_used",
+        "param_types": [
+          {
+            "kind": "llvm.i8_ptr"
+          }
+        ],
+        "return_type": {
+          "kind": "llvm.i64"
+        }
+      }
     ],
     "functions": [
       {
         "name": "main",
         "params": [],
-        "return_type": { "kind": "llvm.i32" },
+        "return_type": {
+          "kind": "llvm.i32"
+        },
         "body": [
-          { "kind": "quod.let", "name": "a", "type": { "kind": "llvm.i8_ptr" },
-            "init": { "kind": "llvm.call", "function": "quod_arena_new",
-                      "args": [{ "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 64 }] } },
-          { "kind": "quod.let", "name": "_p1", "type": { "kind": "llvm.i8_ptr" },
-            "init": { "kind": "llvm.call", "function": "quod_arena_alloc",
-                      "args": [{ "kind": "quod.local_ref", "name": "a" },
-                               { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 32 }] } },
-          { "kind": "quod.let", "name": "_p2", "type": { "kind": "llvm.i8_ptr" },
-            "init": { "kind": "llvm.call", "function": "quod_arena_alloc",
-                      "args": [{ "kind": "quod.local_ref", "name": "a" },
-                               { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 1000 }] } },
-          { "kind": "quod.let", "name": "used", "type": { "kind": "llvm.i64" },
-            "init": { "kind": "llvm.call", "function": "quod_arena_used",
-                      "args": [{ "kind": "quod.local_ref", "name": "a" }] } },
-          { "kind": "quod.expr_stmt",
-            "value": { "kind": "llvm.call", "function": "quod_arena_drop",
-                       "args": [{ "kind": "quod.local_ref", "name": "a" }] } },
-          { "kind": "quod.if",
-            "cond": { "kind": "llvm.binop", "op": "eq",
-                      "lhs": { "kind": "quod.local_ref", "name": "used" },
-                      "rhs": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 1040 } },
-            "then_body": [{ "kind": "quod.return_int", "value": 0 }],
-            "else_body": [{ "kind": "quod.return_int", "value": 1 }] }
+          {
+            "kind": "quod.let",
+            "name": "a",
+            "type": {
+              "kind": "llvm.i8_ptr"
+            },
+            "init": {
+              "kind": "llvm.call",
+              "function": "quod_arena_new",
+              "args": [
+                {
+                  "kind": "llvm.const_int",
+                  "type": {
+                    "kind": "llvm.i64"
+                  },
+                  "value": 64
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "_p1",
+            "type": {
+              "kind": "llvm.i8_ptr"
+            },
+            "init": {
+              "kind": "llvm.call",
+              "function": "quod_arena_alloc",
+              "args": [
+                {
+                  "kind": "quod.local_ref",
+                  "name": "a"
+                },
+                {
+                  "kind": "llvm.const_int",
+                  "type": {
+                    "kind": "llvm.i64"
+                  },
+                  "value": 32
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "_p2",
+            "type": {
+              "kind": "llvm.i8_ptr"
+            },
+            "init": {
+              "kind": "llvm.call",
+              "function": "quod_arena_alloc",
+              "args": [
+                {
+                  "kind": "quod.local_ref",
+                  "name": "a"
+                },
+                {
+                  "kind": "llvm.const_int",
+                  "type": {
+                    "kind": "llvm.i64"
+                  },
+                  "value": 1000
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "used",
+            "type": {
+              "kind": "llvm.i64"
+            },
+            "init": {
+              "kind": "llvm.call",
+              "function": "quod_arena_used",
+              "args": [
+                {
+                  "kind": "quod.local_ref",
+                  "name": "a"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "quod_arena_drop",
+              "args": [
+                {
+                  "kind": "quod.local_ref",
+                  "name": "a"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.if",
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "eq",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "used"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i64"
+                },
+                "value": 1040
+              }
+            },
+            "then_body": [
+              {
+                "kind": "quod.return_expr",
+                "value": {
+                  "kind": "llvm.const_int",
+                  "type": {
+                    "kind": "llvm.i32"
+                  },
+                  "value": 0
+                }
+              }
+            ],
+            "else_body": [
+              {
+                "kind": "quod.return_expr",
+                "value": {
+                  "kind": "llvm.const_int",
+                  "type": {
+                    "kind": "llvm.i32"
+                  },
+                  "value": 1
+                }
+              }
+            ]
+          }
         ],
         "claims": []
       }
     ]
   },
-  "expect": { "exit": 0 }
+  "expect": {
+    "exit": 0
+  }
 }
