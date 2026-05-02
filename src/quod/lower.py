@@ -1176,6 +1176,15 @@ def lower(
 
     module = ir.Module(name="quod")
     module.triple = target or llvm.get_default_triple()
+    # CRITICAL: set the data layout from the target. With an empty
+    # datalayout string, LLVM falls back to its "neutral" defaults
+    # which use 4-byte alignment for i64 — breaking any aggregate
+    # layout that assumes natural 8-byte alignment. The optimizer
+    # silently miscompiles bitcast-then-load through structs whose
+    # alignment differs from the neutral default.
+    _ensure_initialized(cross=module.triple != llvm.get_default_triple())
+    _tm = llvm.Target.from_triple(module.triple).create_target_machine()
+    module.data_layout = str(_tm.target_data)
     overrides = overrides or {}
 
     # Pass 0: register named struct types. Two phases (allocate, then set
