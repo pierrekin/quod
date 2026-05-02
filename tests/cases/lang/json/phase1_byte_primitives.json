@@ -1,0 +1,7 @@
+{
+  "program_file": "../../../../examples/json/phase1_byte_primitives/program.json",
+  "expect": {
+    "stdout": "peek1=a consume=a peek2=b at_end_after=1\n",
+    "exit": 0
+  }
+}

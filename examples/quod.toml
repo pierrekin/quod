@@ -84,6 +84,15 @@ file    = "json/phase0_skeleton/program.json"
   name  = "json_v1_phase0"
   entry = "main"
 
+[[program]]
+name    = "json_v1_phase1"
+version = "0.1.0"
+file    = "json/phase1_byte_primitives/program.json"
+
+  [[program.bin]]
+  name  = "json_v1_phase1"
+  entry = "main"
+
 # ---------- strings ----------
 
 [[program]]
