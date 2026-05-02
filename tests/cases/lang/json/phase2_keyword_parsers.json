@@ -1,0 +1,7 @@
+{
+  "program_file": "../../../../examples/json/phase2_keyword_parsers/program.json",
+  "expect": {
+    "stdout": "null:    ok=1 tag=0\ntrue:    ok=1 tag=1 b=1\nfalse:   ok=1 tag=1 b=0\nws+true: ok=1 tag=1 b=1\n",
+    "exit": 0
+  }
+}
