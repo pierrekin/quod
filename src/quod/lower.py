@@ -46,6 +46,7 @@ from quod.model import (
     LocalRef,
     NonNegativeClaim,
     NullPtr,
+    Return,
     ParamRef,
     Program,
     PtrOffset,
@@ -59,6 +60,7 @@ from quod.model import (
     StructDef,
     StructInit,
     StructType,
+    VoidType,
     While,
     Widen,
     WithArena,
@@ -97,6 +99,8 @@ def _type_to_llvm(t, struct_tys: dict[str, "ir.IdentifiedStructType"] | None = N
             if struct_tys is None or name not in struct_tys:
                 raise ValueError(f"struct type {name!r} not registered with the module")
             return struct_tys[name]
+        case VoidType():
+            return ir.VoidType()
     raise ValueError(f"unhandled quod.Type: {t!r}")
 
 
@@ -391,6 +395,15 @@ def _lower_stmt(
             _emit_return_claims(builder, ret_val, return_claims, llvm_fn, module, overrides)
             builder.ret(ret_val)
             return
+        case Return():
+            if not isinstance(llvm_fn.function_type.return_type, ir.VoidType):
+                raise ValueError(
+                    f"function {llvm_fn.name!r} returns "
+                    f"{llvm_fn.function_type.return_type}, not void; "
+                    "use return_int / return_expr"
+                )
+            builder.ret_void()
+            return
         case ExprStmt(value=expr):
             lower_expr(expr)
             return
@@ -658,6 +671,14 @@ def _lower_function_body(
             struct_defs=struct_defs, struct_tys=struct_tys,
         )
 
+    # Void functions get an implicit `ret void` if the body falls through;
+    # non-void functions left without a terminator surface as a verifier
+    # error (correct — the user owes a return).
+    if not builder.block.is_terminated and isinstance(
+        llvm_fn.function_type.return_type, ir.VoidType
+    ):
+        builder.ret_void()
+
 
 _ARENA_NEW = "quod_arena_new"
 _ARENA_DROP = "quod_arena_drop"
@@ -747,7 +768,7 @@ def _prepend_drop_before_returns(stmts, drop_stmt) -> tuple:
     out: list = []
     for s in stmts:
         match s:
-            case ReturnInt() | ReturnExpr():
+            case ReturnInt() | ReturnExpr() | Return():
                 out.append(drop_stmt)
                 out.append(s)
             case If(then_body=t, else_body=e):
@@ -776,7 +797,7 @@ def _always_terminates(stmts) -> bool:
         return False
     last = stmts[-1]
     match last:
-        case ReturnInt() | ReturnExpr():
+        case ReturnInt() | ReturnExpr() | Return():
             return True
         case If(then_body=t, else_body=e):
             return _always_terminates(t) and _always_terminates(e)

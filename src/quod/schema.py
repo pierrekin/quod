@@ -27,6 +27,7 @@ from quod.model import (
     Assign,
     BinOp,
     Call,
+    CharLit,
     DerivedJustification,
     ExprStmt,
     ExternFunction,
@@ -45,13 +46,15 @@ from quod.model import (
     IntLit,
     IntRangeClaim,
     Let,
+    Load,
     LocalRef,
-    CharLit,
     ManualJustification,
     NonNegativeClaim,
     NullPtr,
     Param,
     ParamRef,
+    PtrOffset,
+    Return,
     ReturnExpr,
     ReturnInRangeClaim,
     ReturnInt,
@@ -63,10 +66,9 @@ from quod.model import (
     StructField,
     StructInit,
     StructType,
-    While,
-    Load,
-    PtrOffset,
     Store,
+    VoidType,
+    While,
     Widen,
     WithArena,
     Z3Justification,
@@ -305,6 +307,17 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
                       "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}},
         },
     },
+    "quod.return": {
+        "class": Return,
+        "summary": (
+            "Bare return for void functions. The enclosing function's "
+            "return_type must be llvm.void; non-void functions must use "
+            "return_int / return_expr. Void functions also get an implicit "
+            "ret void at the end if the body falls through."
+        ),
+        "example": {"kind": "quod.return"},
+        "see_also": ["llvm.void", "quod.return_int", "quod.return_expr"],
+    },
     "quod.if": {
         "class": If,
         "summary": "Two-branch conditional. cond must lower to i1. Both branches are required (use [] for an empty branch).",
@@ -458,6 +471,16 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "example": {"kind": "llvm.struct", "name": "Point"},
         "see_also": ["StructDef"],
     },
+    "llvm.void": {
+        "class": VoidType,
+        "summary": (
+            "The LLVM void type. Only valid as a function's return_type. "
+            "Functions returning void use bare quod.return statements (no "
+            "value) and may not appear in any value position."
+        ),
+        "example": {"kind": "llvm.void"},
+        "see_also": ["quod.return"],
+    },
 
     # ---------- claim ----------
     "non_negative": {
@@ -556,13 +579,13 @@ _CATEGORIES: dict[str, list[str]] = {
         "quod.load", "quod.null_ptr", "quod.char_lit",
     ],
     "statement": [
-        "quod.return_int", "quod.return_expr", "quod.if",
+        "quod.return_int", "quod.return_expr", "quod.return", "quod.if",
         "quod.let", "quod.assign", "quod.while", "quod.for", "quod.expr_stmt",
         "quod.field_set", "quod.store", "quod.with_arena",
     ],
     "type": [
         "llvm.i1", "llvm.i8", "llvm.i16", "llvm.i32", "llvm.i64",
-        "llvm.i8_ptr", "llvm.struct",
+        "llvm.i8_ptr", "llvm.struct", "llvm.void",
     ],
     "claim": ["non_negative", "int_range", "return_in_range"],
     "justification": ["z3", "manual", "derived"],

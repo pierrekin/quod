@@ -50,6 +50,8 @@ from quod.model import (
     NonNegativeClaim,
     NullPtr,
     ParamRef,
+    Return,
+    VoidType,
     Program,
     PtrOffset,
     ReturnExpr,
@@ -183,6 +185,7 @@ def _visual_width(spans: Iterable[Span]) -> int:
 _TYPE_NAMES: dict[type, str] = {
     I1Type: "i1", I8Type: "i8", I16Type: "i16",
     I32Type: "i32", I64Type: "i64", I8PtrType: "i8*",
+    VoidType: "void",
 }
 
 
@@ -307,6 +310,8 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
                 Span("return", "keyword"), Span(" ", "ws"),
                 Span(str(v), "literal_int"),
             ))
+        case Return():
+            yield Line(stmt, indent, (Span("return", "keyword"),))
         case ReturnExpr(value=expr):
             yield Line(stmt, indent, (
                 Span("return", "keyword"), Span(" ", "ws"),

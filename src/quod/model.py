@@ -284,6 +284,15 @@ class StructType(_Node):
     name: str
 
 
+class VoidType(_Node):
+    """The LLVM `void` type. Only valid as a function return type.
+
+    Functions returning void must use the bare `quod.return` statement
+    (no value) and may not appear in any value position.
+    """
+    kind: Literal["llvm.void"] = "llvm.void"
+
+
 # Integer-only sub-union: usable wherever a pointer would be nonsense
 # (IntLit, function params/return, For loop var, claim-bearing locals).
 IntType = Annotated[
@@ -291,10 +300,17 @@ IntType = Annotated[
     Field(discriminator="kind"),
 ]
 
-# Full type union, including pointer and struct types — used for ExternFunction
-# signatures, function params/return, Let bindings, and struct fields.
+# Full type union, including pointer and struct types — used for Let
+# bindings, struct fields, and other value-bearing contexts. Void is
+# deliberately excluded; see ReturnType for return positions.
 Type = Annotated[
     Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType, StructType],
+    Field(discriminator="kind"),
+]
+
+# Type that can appear at a function return position, including void.
+ReturnType = Annotated[
+    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType, StructType, VoidType],
     Field(discriminator="kind"),
 ]
 
@@ -326,6 +342,12 @@ class ReturnInt(_Node):
 class ReturnExpr(_Node):
     kind: Literal["quod.return_expr"] = "quod.return_expr"
     value: Expr
+
+
+class Return(_Node):
+    """Bare return for void functions. The enclosing function's return_type
+    must be llvm.void; non-void functions must use return_int / return_expr."""
+    kind: Literal["quod.return"] = "quod.return"
 
 
 class If(_Node):
@@ -429,7 +451,7 @@ class WithArena(_Node):
 
 
 Statement = Annotated[
-    Union[ReturnInt, ReturnExpr, If, Let, Assign, While, For, ExprStmt, FieldSet, Store, WithArena],
+    Union[ReturnInt, ReturnExpr, Return, If, Let, Assign, While, For, ExprStmt, FieldSet, Store, WithArena],
     Field(discriminator="kind"),
 ]
 
@@ -673,7 +695,7 @@ class Param(_Node):
 class Function(_Node):
     name: str
     params: tuple[Param, ...] = ()
-    return_type: Type
+    return_type: ReturnType
     body: tuple[Statement, ...]
     claims: tuple[Claim, ...] = ()
     notes: tuple[str, ...] = ()       # free-form developer/agent intent
@@ -704,7 +726,7 @@ class ExternFunction(_Node):
     name: str
     arity: int = 0
     param_types: tuple[Type, ...] = ()
-    return_type: Type = I32Type()
+    return_type: ReturnType = I32Type()
     varargs: bool = False
 
     @model_serializer(mode="wrap")
@@ -1156,6 +1178,8 @@ def _format_type(t) -> str:
             return "i8*"
         case StructType(name=n):
             return n
+        case VoidType():
+            return "void"
     raise ValueError(f"unhandled type: {t!r}")
 
 
@@ -1207,6 +1231,8 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
             return f"{pad}{prefix}return {v}"
         case ReturnExpr(value=expr):
             return f"{pad}{prefix}return {_format_expr(expr)}"
+        case Return():
+            return f"{pad}{prefix}return"
         case If(cond=cond, then_body=t_body, else_body=e_body):
             then_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in t_body)
             head = f"{pad}{prefix}if ({_format_expr(cond)}) {{"
