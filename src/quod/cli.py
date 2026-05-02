@@ -817,7 +817,8 @@ def fn_add(
                             else Path(script_file).read_text())
                 else:
                     text = sys.stdin.read() if script == "-" else script
-                fn = _parse_script(text)
+                enum_names = frozenset(ed.name for ed in program.enums)
+                fn = _parse_script(text, enum_names=enum_names)
             else:
                 fn = parse_function_spec(read_json_arg(spec))
             program = add_function_to_program(program, fn)

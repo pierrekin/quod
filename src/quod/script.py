@@ -76,6 +76,8 @@ from quod.model import (
     BinOp,
     CharLit,
     Call,
+    EnumInit,
+    EnumType,
     ExprStmt,
     FieldInit,
     FieldRead,
@@ -93,6 +95,8 @@ from quod.model import (
     Let,
     Load,
     LocalRef,
+    Match,
+    MatchArm,
     NullPtr,
     Param,
     ParamRef,
@@ -125,7 +129,7 @@ class Token:
 _KEYWORDS = frozenset({
     "fn", "let", "if", "else", "while", "for", "in", "return",
     "store", "with_arena", "capacity", "load", "widen", "uwiden",
-    "ptr_offset", "to", "null", "true", "false",
+    "ptr_offset", "to", "null", "true", "false", "match",
     # type keywords
     "i1", "i8", "i16", "i32", "i64", "void",
 })
@@ -133,7 +137,7 @@ _KEYWORDS = frozenset({
 # Multi-char operators must be matched before single-char ones.
 _MULTI_OPS = (
     "->", "==", "!=", "<=", ">=", "<u", ">u", "<=u", ">=u", "/u",
-    "||", "&&", "..",
+    "||", "&&", "..", "::", "=>",
 )
 _SINGLE_OPS = "(){}[],:;=+-*/%<>.&|"
 
@@ -316,10 +320,15 @@ _CMP_OPS = {
 
 
 class Parser:
-    def __init__(self, tokens: list[Token]):
+    def __init__(self, tokens: list[Token], *, enum_names: frozenset[str] = frozenset()):
         self.toks = tokens
         self.pos = 0
         self.param_names: frozenset[str] = frozenset()
+        # Names known to be enums (from the surrounding program). When a type
+        # token is a bare IDENT, we emit EnumType for names in this set and
+        # StructType for everything else. Empty by default — if the caller
+        # didn't tell us, every custom type becomes a struct.
+        self.enum_names = enum_names
         # Disabled in the condition position of if/while and the bounds of
         # for, where `{` always begins the body block. Mirrors Rust's
         # struct-literal-in-cond restriction; parens force the issue when
@@ -417,6 +426,8 @@ class Parser:
             return self._PRIM_TYPE_MAP[t.value]()
         if t.kind == "IDENT":
             self.eat()
+            if t.value in self.enum_names:
+                return EnumType(name=t.value)
             return StructType(name=t.value)
         raise ScriptError(f"expected a type, got {t.kind} {t.value!r}", t.line, t.col)
 
@@ -442,6 +453,7 @@ class Parser:
                 case "return": return self._return()
                 case "store": return self._store_stmt()
                 case "with_arena": return self._with_arena()
+                case "match": return self._match()
         # IDENT — could be assign / field_set / expr_stmt (call)
         if t.kind == "IDENT":
             # Look ahead: IDENT '=' is assign; IDENT '.' IDENT '=' is field_set;
@@ -562,6 +574,31 @@ class Parser:
         value = self._expr()
         self.expect("OP", ")")
         return Store(ptr=ptr, value=value)
+
+    def _match(self) -> Match:
+        self.expect("KW", "match")
+        scrut = self._cond_expr()  # struct_init disabled while reading scrutinee
+        self.expect("OP", "{")
+        arms: list[MatchArm] = []
+        while not self.at("OP", "}"):
+            variant = self.expect("IDENT").value
+            bindings: list[str] = []
+            if self.at("OP", "("):
+                self.eat()
+                if not self.at("OP", ")"):
+                    bindings.append(self.expect("IDENT").value)
+                    while self.at("OP", ","):
+                        self.eat()
+                        bindings.append(self.expect("IDENT").value)
+                self.expect("OP", ")")
+            self.expect("OP", "=>")
+            body = self._block()
+            self.consume_terminator()
+            arms.append(MatchArm(
+                variant=variant, bindings=tuple(bindings), body=tuple(body),
+            ))
+        self.expect("OP", "}")
+        return Match(scrutinee=scrut, arms=tuple(arms))
 
     def _with_arena(self) -> WithArena:
         self.expect("KW", "with_arena")
@@ -704,9 +741,11 @@ class Parser:
                     return self._widen(signed=False)
                 case "ptr_offset":
                     return self._ptr_offset()
-        # Identifier — could be call, struct_init, or local/param ref.
+        # Identifier — could be call, struct_init, enum_init, or local/param ref.
         if t.kind == "IDENT":
             self.eat()
+            if self.at("OP", "::"):
+                return self._enum_init(t.value)
             if self.at("OP", "("):
                 return self._call_args(t.value)
             if self.at("OP", "{") and self._struct_init_allowed:
@@ -730,6 +769,22 @@ class Parser:
                 args.append(self._expr())
         self.expect("OP", ")")
         return Call(function=fn_name, args=tuple(args))
+
+    def _enum_init(self, enum_name: str) -> EnumInit:
+        self.expect("OP", "::")
+        variant = self.expect("IDENT").value
+        fields: list[FieldInit] = []
+        if self.at("OP", "("):
+            self.eat()
+            if not self.at("OP", ")"):
+                fields.append(self._field_init())
+                while self.at("OP", ","):
+                    self.eat()
+                    if self.at("OP", ")"):
+                        break  # trailing comma
+                    fields.append(self._field_init())
+            self.expect("OP", ")")
+        return EnumInit(enum=enum_name, variant=variant, fields=tuple(fields))
 
     def _struct_init(self, name: str) -> StructInit:
         self.expect("OP", "{")
@@ -781,15 +836,20 @@ class Parser:
 
 # ---------- Public API ----------
 
-def parse_function(src: str) -> Function:
+def parse_function(src: str, *, enum_names: frozenset[str] = frozenset()) -> Function:
     """Parse a quod-script function definition into a `Function` model.
 
     Raises `ScriptError` for syntax problems (with line/col); raises
     `pydantic.ValidationError` if the parsed structure violates model
     invariants.
+
+    `enum_names` lets the caller specify which custom type names refer to
+    enums (so a bare `Maybe` in type position becomes EnumType("Maybe")
+    rather than StructType("Maybe")). The CLI passes the program's
+    current enum names; standalone use can leave it empty.
     """
     tokens = tokenize(src)
-    parser = Parser(tokens)
+    parser = Parser(tokens, enum_names=enum_names)
     fn = parser.parse_function()
     if not parser.at("EOF"):
         t = parser.peek()

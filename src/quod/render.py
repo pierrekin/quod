@@ -61,6 +61,10 @@ from quod.model import (
     StringConstant,
     StringRef,
     Store,
+    EnumDef,
+    EnumInit,
+    EnumType,
+    Match,
     StructDef,
     StructInit,
     StructType,
@@ -191,6 +195,8 @@ _TYPE_NAMES: dict[type, str] = {
 def type_span(t) -> Span:
     if isinstance(t, StructType):
         return Span(t.name, "type")
+    if isinstance(t, EnumType):
+        return Span(t.name, "type")
     name = _TYPE_NAMES.get(type(t))
     if name is None:
         raise ValueError(f"unhandled type: {t!r}")
@@ -297,6 +303,23 @@ def _expr_spans(expr) -> tuple[Span, ...]:
             return (Span("null", "keyword"),)
         case CharLit(value=v):
             return (Span(repr(v), "literal_int"),)
+        case EnumInit(enum=ename, variant=vname, fields=field_inits):
+            head = (
+                Span(ename, "type"), Span("::", "op"), Span(vname, "fn_name"),
+            )
+            if not field_inits:
+                return head
+            out: list[Span] = list(head)
+            out.append(Span("(", "punct"))
+            for i, fi in enumerate(field_inits):
+                if i > 0:
+                    out.append(Span(", ", "punct"))
+                out.extend((
+                    Span(fi.name, "param"), Span(": ", "punct"),
+                    *_expr_spans(fi.value),
+                ))
+            out.append(Span(")", "punct"))
+            return tuple(out)
     raise ValueError(f"unhandled expr: {expr!r}")
 
 
@@ -388,6 +411,28 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
             ))
             for s in body:
                 yield from _stmt_lines(s, indent + 2)
+            yield Line(None, indent, (Span("}", "punct"),))
+        case Match(scrutinee=scrut, arms=arms):
+            yield Line(stmt, indent, (
+                Span("match", "keyword"), Span(" ", "ws"),
+                *_expr_spans(scrut),
+                Span(" {", "punct"),
+            ))
+            for arm in arms:
+                head: list[Span] = [Span(arm.variant, "fn_name")]
+                if arm.bindings:
+                    head.append(Span("(", "punct"))
+                    for i, b in enumerate(arm.bindings):
+                        if i > 0:
+                            head.append(Span(", ", "punct"))
+                        head.append(Span(b, "local"))
+                    head.append(Span(")", "punct"))
+                head.extend((Span(" ", "ws"), Span("=>", "op"),
+                             Span(" {", "punct")))
+                yield Line(None, indent + 2, tuple(head))
+                for s in arm.body:
+                    yield from _stmt_lines(s, indent + 4)
+                yield Line(None, indent + 2, (Span("}", "punct"),))
             yield Line(None, indent, (Span("}", "punct"),))
         case _:
             raise ValueError(f"unhandled stmt: {stmt!r}")
@@ -575,6 +620,10 @@ def format_program_lines(program: Program) -> Iterator[Line]:
         yield Line(None, 2, (Span("structs:", "section"),))
         for sd in program.structs:
             yield _struct_def_line(sd, 4)
+    if program.enums:
+        yield Line(None, 2, (Span("enums:", "section"),))
+        for ed in program.enums:
+            yield from _enum_def_lines(ed, 4)
     if program.externs:
         yield Line(None, 2, (Span("externs:", "section"),))
         for ext in program.externs:
@@ -586,10 +635,31 @@ def format_program_lines(program: Program) -> Iterator[Line]:
     if (
         not program.constants and not program.functions
         and not program.externs and not program.structs
-        and not program.imports
+        and not program.enums and not program.imports
     ):
         yield Line(None, 2, (Span("(empty)", "comment"),))
     yield Line(None, 0, (Span("}", "punct"),))
+
+
+def _enum_def_lines(ed: EnumDef, indent: int) -> Iterator[Line]:
+    yield Line(ed, indent, (
+        Span("enum", "keyword"), Span(" ", "ws"),
+        Span(ed.name, "type"), Span(" {", "punct"),
+    ))
+    for v in ed.variants:
+        spans: list[Span] = [Span(v.name, "fn_name")]
+        if v.fields:
+            spans.append(Span("(", "punct"))
+            for i, f in enumerate(v.fields):
+                if i > 0:
+                    spans.append(Span(", ", "punct"))
+                spans.extend((
+                    Span(f.name, "param"), Span(": ", "punct"),
+                    type_span(f.type),
+                ))
+            spans.append(Span(")", "punct"))
+        yield Line(v, indent + 2, tuple(spans))
+    yield Line(None, indent, (Span("}", "punct"),))
 
 
 # ---------- Renderer ----------
