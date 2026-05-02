@@ -163,6 +163,20 @@ file    = "json_v2/program.json"
   name  = "json_v2"
   entry = "main"
 
+# v3 builds on v2 — same enum + parsers — and adds the *consumer* side:
+# accessors (get_field, get_index, as_number, ...), a top-level
+# parse(text, len, arena) entry point, and a keystone test that parses
+# one of quod's own program.json files.
+
+[[program]]
+name    = "json_v3"
+version = "0.1.0"
+file    = "json_v3/program.json"
+
+  [[program.bin]]
+  name  = "json_v3"
+  entry = "main"
+
 # ---------- strings ----------
 
 [[program]]
