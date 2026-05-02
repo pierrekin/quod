@@ -35,6 +35,7 @@ from quod.model import (
     ShortCircuitOr,
     StructInit,
     While,
+    WithArena,
 )
 
 
@@ -126,6 +127,10 @@ def _walk_calls_in_stmt(stmt) -> Iterator[Call]:
         case For(lo=lo, hi=hi, body=body):
             yield from _walk_calls_in_expr(lo)
             yield from _walk_calls_in_expr(hi)
+            for s in body:
+                yield from _walk_calls_in_stmt(s)
+        case WithArena(capacity=cap, body=body):
+            yield from _walk_calls_in_expr(cap)
             for s in body:
                 yield from _walk_calls_in_stmt(s)
 

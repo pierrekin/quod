@@ -46,6 +46,26 @@ file    = "structs/point_dot.json"
   name  = "point_dot"
   entry = "main"
 
+# ---------- arenas ----------
+
+[[program]]
+name    = "arena_scratch"
+version = "0.1.0"
+file    = "arenas/scratch.json"
+
+  [[program.bin]]
+  name  = "arena_scratch"
+  entry = "main"
+
+[[program]]
+name    = "arena_with_arena"
+version = "0.1.0"
+file    = "arenas/with_arena_scratch.json"
+
+  [[program.bin]]
+  name  = "arena_with_arena"
+  entry = "main"
+
 # ---------- claims ----------
 
 [[program]]

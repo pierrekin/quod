@@ -299,8 +299,28 @@ class FieldSet(_Node):
     value: Expr
 
 
+class WithArena(_Node):
+    """Bracket a body with an arena that's freed automatically.
+
+    Lowering is a desugar: at block entry the runtime's `quod_arena_new` is
+    called with `capacity` (i64) and the result (i8*) bound to a local named
+    `name` for the duration of `body`. On every exit edge — fall-through and
+    every `return` reachable from `body` — `quod_arena_drop` is called on
+    that handle.
+
+    The desugaring auto-declares the `quod_arena_new` / `quod_arena_drop`
+    externs if the program doesn't already have them, so a `with_arena`
+    block is one-stop sugar; users only need to declare `quod_arena_alloc`
+    (and friends) explicitly when they call them inside the body.
+    """
+    kind: Literal["quod.with_arena"] = "quod.with_arena"
+    name: str
+    capacity: Expr   # must lower to i64
+    body: tuple["Statement", ...]
+
+
 Statement = Annotated[
-    Union[ReturnInt, ReturnExpr, If, Let, Assign, While, For, ExprStmt, FieldSet],
+    Union[ReturnInt, ReturnExpr, If, Let, Assign, While, For, ExprStmt, FieldSet, WithArena],
     Field(discriminator="kind"),
 ]
 
@@ -476,6 +496,10 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
             case For(lo=lo, hi=hi, body=body):
                 visit_expr(lo)
                 visit_expr(hi)
+                for x in body:
+                    visit_stmt(x)
+            case WithArena(capacity=cap, body=body):
+                visit_expr(cap)
                 for x in body:
                     visit_stmt(x)
             case _:
@@ -706,6 +730,10 @@ def _check_struct_uses_in_stmt(stmt, by_name: dict[str, "StructDef"], *, where: 
         case For(lo=lo, hi=hi, body=body):
             _check_struct_uses_in_expr(lo, by_name, where=where)
             _check_struct_uses_in_expr(hi, by_name, where=where)
+            for s in body:
+                _check_struct_uses_in_stmt(s, by_name, where=where)
+        case WithArena(capacity=cap, body=body):
+            _check_struct_uses_in_expr(cap, by_name, where=where)
             for s in body:
                 _check_struct_uses_in_stmt(s, by_name, where=where)
 
@@ -1034,6 +1062,12 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
             )
         case ExprStmt(value=v):
             return f"{pad}{prefix}{_format_expr(v)}"
+        case WithArena(name=n, capacity=cap, body=body):
+            body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body)
+            return (
+                f"{pad}{prefix}with_arena {n} = arena_new({_format_expr(cap)}) {{\n"
+                f"{body_lines}\n{pad}}}"
+            )
     raise ValueError(f"unhandled stmt: {stmt!r}")
 
 

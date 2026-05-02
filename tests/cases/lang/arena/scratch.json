@@ -1,0 +1,7 @@
+{
+  "program_file": "../../../../examples/arenas/scratch.json",
+  "expect": {
+    "stdout": "arena: alloc(64) -> used 64\narena: alloc(200) -> used 272\ndone\n",
+    "exit": 0
+  }
+}

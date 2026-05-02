@@ -59,6 +59,7 @@ from quod.model import (
     StructInit,
     StructType,
     While,
+    WithArena,
     _Node,
     format_claim,
     format_claim_metadata,
@@ -334,6 +335,18 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
             yield Line(None, indent, (Span("}", "punct"),))
         case ExprStmt(value=v):
             yield Line(stmt, indent, _expr_spans(v))
+        case WithArena(name=n, capacity=cap, body=body):
+            yield Line(stmt, indent, (
+                Span("with_arena", "keyword"), Span(" ", "ws"),
+                Span(n, "local"), Span(" ", "ws"),
+                Span("=", "op"), Span(" ", "ws"),
+                Span("arena_new", "fn_name"), Span("(", "punct"),
+                *_expr_spans(cap),
+                Span(") {", "punct"),
+            ))
+            for s in body:
+                yield from _stmt_lines(s, indent + 2)
+            yield Line(None, indent, (Span("}", "punct"),))
         case _:
             raise ValueError(f"unhandled stmt: {stmt!r}")
 

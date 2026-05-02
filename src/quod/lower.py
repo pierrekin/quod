@@ -19,6 +19,7 @@ from llvmlite import binding as llvm
 from llvmlite import ir
 
 from quod.analysis import derive_lattice_claims, elaborate
+from quod.runtime import build_runtime_archive
 from quod.model import (
     Assign,
     BinOp,
@@ -53,6 +54,7 @@ from quod.model import (
     StructInit,
     StructType,
     While,
+    WithArena,
 )
 
 
@@ -606,6 +608,148 @@ def _lower_function_body(
         )
 
 
+_ARENA_NEW = "quod_arena_new"
+_ARENA_DROP = "quod_arena_drop"
+
+
+def _desugar_with_arena(program: Program) -> Program:
+    """Rewrite every `WithArena` block into the equivalent `Let` + `Call`
+    sequence, threading `arena_drop` calls before every `return` reachable
+    from the body.
+
+    Auto-declares the `quod_arena_new` / `quod_arena_drop` externs when any
+    block is present, so downstream lowering sees a regular Program with
+    regular calls. Idempotent on programs that contain no `WithArena`.
+    """
+    has_block = any(_function_uses_with_arena(fn) for fn in program.functions)
+    if not has_block:
+        return program
+
+    new_functions = tuple(
+        fn.model_copy(update={"body": _desugar_stmts(fn.body)})
+        for fn in program.functions
+    )
+    new_externs = _ensure_arena_externs(program.externs)
+    return program.model_copy(update={
+        "functions": new_functions,
+        "externs": new_externs,
+    })
+
+
+def _function_uses_with_arena(fn: Function) -> bool:
+    return any(_stmt_contains_with_arena(s) for s in fn.body)
+
+
+def _stmt_contains_with_arena(s) -> bool:
+    match s:
+        case WithArena():
+            return True
+        case If(then_body=t, else_body=e):
+            return any(_stmt_contains_with_arena(x) for x in (*t, *e))
+        case While(body=b) | For(body=b):
+            return any(_stmt_contains_with_arena(x) for x in b)
+    return False
+
+
+def _desugar_stmts(stmts) -> tuple:
+    out: list = []
+    for s in stmts:
+        match s:
+            case WithArena(name=name, capacity=cap, body=body):
+                inner = _desugar_stmts(body)
+                drop_stmt = ExprStmt(value=Call(
+                    function=_ARENA_DROP, args=(LocalRef(name=name),),
+                ))
+                inner_with_drops = _prepend_drop_before_returns(inner, drop_stmt)
+                out.append(Let(
+                    name=name, type=I8PtrType(),
+                    init=Call(function=_ARENA_NEW, args=(cap,)),
+                ))
+                out.extend(inner_with_drops)
+                # If every path through the body returns, the fall-through
+                # drop and anything that follows in the outer block is
+                # unreachable. The lowering pass leaves the IR builder in a
+                # terminated block after such an If, so we must trim here
+                # instead of emitting dead instructions on top of the ret.
+                if _always_terminates(inner_with_drops):
+                    return tuple(out)
+                out.append(drop_stmt)
+            case If(then_body=t, else_body=e):
+                out.append(s.model_copy(update={
+                    "then_body": _desugar_stmts(t),
+                    "else_body": _desugar_stmts(e),
+                }))
+            case While(body=b):
+                out.append(s.model_copy(update={"body": _desugar_stmts(b)}))
+            case For(body=b):
+                out.append(s.model_copy(update={"body": _desugar_stmts(b)}))
+            case _:
+                out.append(s)
+    return tuple(out)
+
+
+def _prepend_drop_before_returns(stmts, drop_stmt) -> tuple:
+    """Walk `stmts` and emit `drop_stmt` immediately before each
+    `ReturnInt` / `ReturnExpr`. Recurses into branches and loop bodies; nested
+    `WithArena`s have already been desugared (their own drops already in
+    place), so we only need to add ours."""
+    out: list = []
+    for s in stmts:
+        match s:
+            case ReturnInt() | ReturnExpr():
+                out.append(drop_stmt)
+                out.append(s)
+            case If(then_body=t, else_body=e):
+                out.append(s.model_copy(update={
+                    "then_body": _prepend_drop_before_returns(t, drop_stmt),
+                    "else_body": _prepend_drop_before_returns(e, drop_stmt),
+                }))
+            case While(body=b):
+                out.append(s.model_copy(update={
+                    "body": _prepend_drop_before_returns(b, drop_stmt),
+                }))
+            case For(body=b):
+                out.append(s.model_copy(update={
+                    "body": _prepend_drop_before_returns(b, drop_stmt),
+                }))
+            case _:
+                out.append(s)
+    return tuple(out)
+
+
+def _always_terminates(stmts) -> bool:
+    """Conservative: True only when the last reachable statement is provably
+    a terminator (a `return` or an `if` whose branches both terminate). Used
+    to suppress an unreachable trailing drop after `with_arena` lowering."""
+    if not stmts:
+        return False
+    last = stmts[-1]
+    match last:
+        case ReturnInt() | ReturnExpr():
+            return True
+        case If(then_body=t, else_body=e):
+            return _always_terminates(t) and _always_terminates(e)
+    return False
+
+
+def _ensure_arena_externs(externs: tuple[ExternFunction, ...]) -> tuple[ExternFunction, ...]:
+    by_name = {e.name: e for e in externs}
+    additions: list[ExternFunction] = []
+    if _ARENA_NEW not in by_name:
+        additions.append(ExternFunction(
+            name=_ARENA_NEW,
+            param_types=(I64Type(),),
+            return_type=I8PtrType(),
+        ))
+    if _ARENA_DROP not in by_name:
+        additions.append(ExternFunction(
+            name=_ARENA_DROP,
+            param_types=(I8PtrType(),),
+            return_type=I64Type(),
+        ))
+    return externs + tuple(additions)
+
+
 def lower(
     program: Program, *,
     target: str | None = None,
@@ -619,6 +763,8 @@ def lower(
     no wrapping happens. Otherwise a synthetic `main` is appended that calls
     `entry` and returns its result.
     """
+    program = _desugar_with_arena(program)
+
     module = ir.Module(name="quod")
     module.triple = target or llvm.get_default_triple()
     overrides = overrides or {}
@@ -884,10 +1030,14 @@ def compile_program(
         binary: Path | None = None
         if link:
             binary = build_dir / bin_name
+            # Build the runtime archive (arena allocator etc.) into the same
+            # build_dir, matching the user's target. Archive linking is
+            # by-reference, so unused runtime symbols stay stripped.
+            runtime_archive = build_runtime_archive(build_dir, target=target)
             cmd = ["clang"]
             if target:
                 cmd += ["-target", target]
-            cmd += [str(object_path), "-o", str(binary)]
+            cmd += [str(object_path), str(runtime_archive), "-o", str(binary)]
             cmd += [f"-l{lib}" for lib in libraries]
             subprocess.run(cmd, check=True)
 

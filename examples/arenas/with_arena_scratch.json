@@ -1,0 +1,53 @@
+{
+  "constants": [
+    { "name": ".str.allocfmt", "value": "arena: alloc(%lld) -> used %lld\n" },
+    { "name": ".str.donefmt",  "value": "done\n" }
+  ],
+  "externs": [
+    { "name": "printf", "param_types": [{ "kind": "llvm.i8_ptr" }], "varargs": true },
+    { "name": "quod_arena_alloc",
+      "param_types": [{ "kind": "llvm.i8_ptr" }, { "kind": "llvm.i64" }],
+      "return_type": { "kind": "llvm.i8_ptr" } },
+    { "name": "quod_arena_used",
+      "param_types": [{ "kind": "llvm.i8_ptr" }],
+      "return_type": { "kind": "llvm.i64" } }
+  ],
+  "functions": [
+    {
+      "name": "main",
+      "params": [],
+      "return_type": { "kind": "llvm.i32" },
+      "body": [
+        { "kind": "quod.with_arena", "name": "a",
+          "capacity": { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 4096 },
+          "body": [
+            { "kind": "quod.let", "name": "_p1", "type": { "kind": "llvm.i8_ptr" },
+              "init": { "kind": "llvm.call", "function": "quod_arena_alloc",
+                        "args": [{ "kind": "quod.local_ref", "name": "a" },
+                                 { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 64 }] } },
+            { "kind": "quod.expr_stmt",
+              "value": { "kind": "llvm.call", "function": "printf",
+                         "args": [{ "kind": "quod.string_ref", "name": ".str.allocfmt" },
+                                  { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 64 },
+                                  { "kind": "llvm.call", "function": "quod_arena_used",
+                                    "args": [{ "kind": "quod.local_ref", "name": "a" }] }] } },
+            { "kind": "quod.let", "name": "_p2", "type": { "kind": "llvm.i8_ptr" },
+              "init": { "kind": "llvm.call", "function": "quod_arena_alloc",
+                        "args": [{ "kind": "quod.local_ref", "name": "a" },
+                                 { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 200 }] } },
+            { "kind": "quod.expr_stmt",
+              "value": { "kind": "llvm.call", "function": "printf",
+                         "args": [{ "kind": "quod.string_ref", "name": ".str.allocfmt" },
+                                  { "kind": "llvm.const_int", "type": { "kind": "llvm.i64" }, "value": 200 },
+                                  { "kind": "llvm.call", "function": "quod_arena_used",
+                                    "args": [{ "kind": "quod.local_ref", "name": "a" }] }] } }
+          ] },
+        { "kind": "quod.expr_stmt",
+          "value": { "kind": "llvm.call", "function": "printf",
+                     "args": [{ "kind": "quod.string_ref", "name": ".str.donefmt" }] } },
+        { "kind": "quod.return_int", "value": 0 }
+      ],
+      "claims": []
+    }
+  ]
+}
