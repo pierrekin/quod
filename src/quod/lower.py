@@ -28,6 +28,7 @@ from quod.model import (
     EnumDef,
     EnumInit,
     EnumType,
+    EnumVariant,
     ExprStmt,
     ExternFunction,
     FieldRead,
@@ -335,9 +336,9 @@ def _lower_expr(
             if var is None:
                 raise ValueError(f"enum_init: enum {ename!r} has no variant {vname!r}")
             init_by_name = {fi.name: fi.value for fi in field_inits}
-            val: ir.Value = ir.Constant(ety, ir.Undefined)
-            tag = ir.Constant(I8, ed.variant_index(vname))
-            val = builder.insert_value(val, tag, 0)
+            # Build the variant's LLVM struct value via insertvalue chain.
+            variant_ty = _variant_struct_ty(var, struct_tys, enum_tys)
+            variant_val: ir.Value = ir.Constant(variant_ty, ir.Undefined)
             for i, f in enumerate(var.fields):
                 if f.name not in init_by_name:
                     raise ValueError(
@@ -346,10 +347,34 @@ def _lower_expr(
                 field_dest_ty = _type_to_llvm(f.type, struct_tys, enum_tys)
                 coerced = _coerce_int_lit(init_by_name[f.name], field_dest_ty)
                 field_val = go(coerced)
-                slot_val = _pack_to_i64_slot(builder, field_val, f.type)
-                val = builder.insert_value(val, slot_val, [1, i])
-            return val
+                variant_val = builder.insert_value(variant_val, field_val, i)
+            # Pack into the enum: alloca, store tag, bitcast payload to
+            # variant_struct*, store variant value, load enum back. The
+            # alloca lives in the current block; the optimizer's pipeline
+            # (mem2reg/SROA + instcombine/GVN) folds it out for simple cases.
+            enum_alloca = builder.alloca(ety)
+            tag_ptr = builder.gep(
+                enum_alloca, [ir.Constant(I32, 0), ir.Constant(I32, 0)],
+            )
+            builder.store(ir.Constant(I8, ed.variant_index(vname)), tag_ptr)
+            payload_ptr = builder.gep(
+                enum_alloca, [ir.Constant(I32, 0), ir.Constant(I32, 1)],
+            )
+            variant_ptr = builder.bitcast(payload_ptr, variant_ty.as_pointer())
+            builder.store(variant_val, variant_ptr)
+            return builder.load(enum_alloca)
     raise ValueError(f"unhandled expr: {expr!r}")
+
+
+def _variant_struct_ty(
+    var: "EnumVariant",
+    struct_tys: dict[str, "ir.IdentifiedStructType"],
+    enum_tys: dict[str, "ir.IdentifiedStructType"],
+) -> ir.LiteralStructType:
+    """Build the anonymous LLVM struct type that holds one variant's
+    payload fields, in declaration order. Empty for unit variants."""
+    field_tys = [_type_to_llvm(f.type, struct_tys, enum_tys) for f in var.fields]
+    return ir.LiteralStructType(field_tys)
 
 
 _LLVM_INT_TO_QUOD: dict[int, type] = {
@@ -392,8 +417,10 @@ def _size_of_quod_type(
     the LLVM data-layout rules for our v1 type system: integers are
     naturally aligned to their width; structs accumulate fields with
     per-field alignment + tail padding to the struct's max-alignment;
-    enums lower to `{i8, [N x i64]}` so they're always 8-aligned with
-    `8 + 8*max_payload_slots` bytes total.
+    enums layout as `{i8 tag, [N x i8] payload}` where N is the largest
+    variant's struct size — and the enum's alignment is the max alignment
+    across all variant fields (so the payload bytes are correctly
+    aligned for the most-aligned field).
     """
     match t:
         case I1Type() | I8Type():
@@ -422,40 +449,57 @@ def _size_of_quod_type(
             ed = enum_defs.get(name)
             if ed is None:
                 raise ValueError(f"sizeof: undefined enum {name!r}")
-            return (8 + 8 * ed.max_payload_slots(), 8)
+            return _enum_layout(ed, struct_defs, enum_defs)
     raise ValueError(f"sizeof: unhandled type {t!r}")
+
+
+def _variant_struct_layout(
+    var: "EnumVariant",
+    struct_defs: dict[str, StructDef],
+    enum_defs: dict[str, EnumDef],
+) -> tuple[int, int]:
+    """(size, alignment) of a single variant's payload struct."""
+    offset = 0
+    max_align = 1
+    for f in var.fields:
+        fsize, falign = _size_of_quod_type(f.type, struct_defs, enum_defs)
+        offset = _align_to(offset, falign)
+        offset += fsize
+        if falign > max_align:
+            max_align = falign
+    offset = _align_to(offset, max_align)
+    return (offset, max_align)
+
+
+def _enum_layout(
+    ed: EnumDef,
+    struct_defs: dict[str, StructDef],
+    enum_defs: dict[str, EnumDef],
+) -> tuple[int, int]:
+    """(size, alignment) of an enum value. Layout is conceptually
+    `{i8 tag, [N x i8] payload}` where N is sized to fit the largest
+    variant; the actual struct alignment is the max payload alignment
+    so loads/stores via the variant struct are properly aligned. The
+    tag offset is 0; the payload starts at offset = max_payload_align."""
+    payload_size = 0
+    payload_align = 1
+    for v in ed.variants:
+        vsize, valign = _variant_struct_layout(v, struct_defs, enum_defs)
+        if vsize > payload_size:
+            payload_size = vsize
+        if valign > payload_align:
+            payload_align = valign
+    # Tag is one byte at offset 0; payload starts after alignment to
+    # payload_align (so e.g. an i64 payload field is 8-aligned).
+    payload_offset = _align_to(1, payload_align)
+    total = _align_to(payload_offset + payload_size, payload_align)
+    return (total, payload_align)
 
 
 def _align_to(offset: int, alignment: int) -> int:
     """Round `offset` up to the next multiple of `alignment`."""
     rem = offset % alignment
     return offset if rem == 0 else offset + (alignment - rem)
-
-
-def _pack_to_i64_slot(builder: ir.IRBuilder, val: ir.Value, declared_ty) -> ir.Value:
-    """Coerce a payload field value into the i64 slot it's stored in within
-    an enum's payload array. Integers narrower than i64 zero-extend (the
-    bit-pattern is what we round-trip on extract); pointers ptrtoint."""
-    if isinstance(val.type, ir.IntType):
-        if val.type.width == 64:
-            return val
-        return builder.zext(val, I64)
-    if isinstance(val.type, ir.PointerType):
-        return builder.ptrtoint(val, I64)
-    raise ValueError(f"unsupported enum payload field type {declared_ty!r}: lowered to {val.type}")
-
-
-def _unpack_from_i64_slot(builder: ir.IRBuilder, slot: ir.Value, declared_ty, struct_tys, enum_tys) -> ir.Value:
-    """Inverse of `_pack_to_i64_slot`: pull the declared field value back
-    out of an i64 slot. Trunc for narrower ints, inttoptr for pointers."""
-    target_ty = _type_to_llvm(declared_ty, struct_tys, enum_tys)
-    if isinstance(target_ty, ir.IntType):
-        if target_ty.width == 64:
-            return slot
-        return builder.trunc(slot, target_ty)
-    if isinstance(target_ty, ir.PointerType):
-        return builder.inttoptr(slot, target_ty)
-    raise ValueError(f"unsupported enum payload field type {declared_ty!r}: lowers to {target_ty}")
 
 
 def _lower_short_circuit(builder: ir.IRBuilder, lhs, rhs, *, kind: str, lower) -> ir.Value:
@@ -733,7 +777,18 @@ def _lower_stmt(
             ed = enum_defs.get(scrut_ty.name)
             if ed is None:
                 raise ValueError(f"match scrutinee of unknown enum type {scrut_ty.name!r}")
-            tag = builder.extract_value(scrut_val, 0)
+            # Spill the enum value to memory so we can read the tag and
+            # bitcast the payload to a per-variant LLVM struct pointer.
+            # All field reads in arms go through this same alloca.
+            scrut_alloca = builder.alloca(scrut_ty)
+            builder.store(scrut_val, scrut_alloca)
+            tag_ptr = builder.gep(
+                scrut_alloca, [ir.Constant(I32, 0), ir.Constant(I32, 0)],
+            )
+            tag = builder.load(tag_ptr)
+            payload_ptr = builder.gep(
+                scrut_alloca, [ir.Constant(I32, 0), ir.Constant(I32, 1)],
+            )
             # Order arms with wildcard last for predictable codegen — the
             # switch's default block becomes the wildcard arm if present,
             # else an unreachable block.
@@ -780,20 +835,25 @@ def _lower_stmt(
                 arm_bb = llvm_fn.append_basic_block(f"match_{arm.variant}")
                 sw.add_case(ir.Constant(I8, ed.variant_index(arm.variant)), arm_bb)
                 builder.position_at_end(arm_bb)
-                # Bind payload fields with arm-scoped allocas. We allocate
-                # in the arm's basic block (not the function entry) so each
-                # arm's bindings are physically distinct — different arms
-                # can reuse names without colliding. Save/restore locals_
-                # across the body so the bindings don't leak past the arm.
+                # Bind payload fields with arm-scoped allocas. Bitcast the
+                # enum's payload bytes to this variant's LLVM struct type;
+                # extract each field via GEP+load and store into the
+                # binding's alloca. Save/restore locals_ across the body
+                # so bindings don't leak past the arm.
+                variant_ty = _variant_struct_ty(var, struct_tys, enum_tys)
+                variant_ptr = builder.bitcast(payload_ptr, variant_ty.as_pointer())
                 saved: dict[str, ir.AllocaInstr | None] = {}
                 for i, (binding, field) in enumerate(zip(arm.bindings, var.fields)):
                     saved[binding] = locals_.get(binding)
                     field_ll_ty = _type_to_llvm(field.type, struct_tys, enum_tys)
-                    alloca = builder.alloca(field_ll_ty, name=binding)
-                    slot = builder.extract_value(scrut_val, [1, i])
-                    bound = _unpack_from_i64_slot(builder, slot, field.type, struct_tys, enum_tys)
-                    builder.store(bound, alloca)
-                    locals_[binding] = alloca
+                    binding_alloca = builder.alloca(field_ll_ty, name=binding)
+                    field_ptr = builder.gep(
+                        variant_ptr,
+                        [ir.Constant(I32, 0), ir.Constant(I32, i)],
+                    )
+                    field_val = builder.load(field_ptr)
+                    builder.store(field_val, binding_alloca)
+                    locals_[binding] = binding_alloca
                 lower_arm_body(arm)
                 for b, prior in saved.items():
                     if prior is None:
@@ -1138,12 +1198,17 @@ def lower(
         body = [_type_to_llvm(f.type, struct_tys) for f in sd.fields]
         ty.set_body(*body)
 
-    # Enums: each lowers to an identified `{i8, [N x i64]}` struct, where
-    # N is the max payload-field count across the enum's variants. Each
-    # payload field occupies one i64 slot — int values zero-extend to fit,
-    # pointers ptrtoint. Variant payload structures are virtual: there's
-    # no per-variant LLVM struct; encode/decode happens at the slot level.
+    # Enums: each lowers to an identified `{i8 tag, [N x i64] payload}`
+    # struct. N is the smallest count such that `N * 8` covers the
+    # largest variant's payload size. Using i64 for the payload array
+    # gives us 8-byte alignment, which is the maximum alignment any
+    # variant field can require in quod's current type system (i64,
+    # i8*, and any struct/enum built from them are at most 8-aligned).
+    # EnumInit and Match access fields by bitcasting the payload bytes
+    # to a per-variant literal LLVM struct type — variants can carry
+    # arbitrary types (other structs, even other enums).
     enum_defs: dict[str, EnumDef] = {ed.name: ed for ed in program.enums}
+    struct_defs_for_layout: dict[str, StructDef] = {sd.name: sd for sd in program.structs}
     enum_tys: dict[str, ir.IdentifiedStructType] = {}
     for ed in program.enums:
         enum_tys[ed.name] = module.context.get_identified_type(ed.name)
@@ -1151,8 +1216,14 @@ def lower(
         ty = enum_tys[ed.name]
         if not ty.is_opaque:
             continue
-        payload_slots = ed.max_payload_slots()
-        ty.set_body(I8, ir.ArrayType(I64, payload_slots))
+        # Largest variant payload size in bytes. ceil-divide by 8.
+        max_payload = max(
+            (_variant_struct_layout(v, struct_defs_for_layout, enum_defs)[0]
+             for v in ed.variants),
+            default=0,
+        )
+        n_slots = (max_payload + 7) // 8 or 1
+        ty.set_body(I8, ir.ArrayType(I64, n_slots))
 
     constants: dict[str, ir.GlobalVariable] = {}
     for c in program.constants:

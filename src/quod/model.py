@@ -355,13 +355,6 @@ ReturnType = Annotated[
     Field(discriminator="kind"),
 ]
 
-# Scalar types — the subset valid as enum-variant payload fields.
-# Restricted to int widths (up to i64) and i8* so each payload field
-# occupies one i64-sized slot in the tagged-union layout.
-ScalarPayloadType = Annotated[
-    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType],
-    Field(discriminator="kind"),
-]
 
 
 def int_type_width(t: "IntType") -> int:
@@ -772,11 +765,12 @@ class StructDef(_Node):
 
 
 class EnumPayloadField(_Node):
-    """One payload field of an EnumVariant. Restricted to scalar types
-    (int widths up to i64, plus i8*) so each field fits in a single
-    i64-sized slot of the variant's payload."""
+    """One payload field of an EnumVariant. Any value Type is allowed —
+    int widths, i8*, named structs, even other enums. Variants lower
+    to per-variant LLVM struct types stored in the enum's payload byte
+    array via bitcast."""
     name: str
-    type: ScalarPayloadType
+    type: Type
 
 
 class EnumVariant(_Node):
