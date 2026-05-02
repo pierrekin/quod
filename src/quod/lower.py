@@ -43,6 +43,7 @@ from quod.model import (
     If,
     IntLit,
     IntRangeClaim,
+    int_type_width,
     Let,
     CharLit,
     Load,
@@ -234,7 +235,18 @@ def _lower_expr(
             callee = module.globals.get(fname)
             if callee is None:
                 raise ValueError(f"call to undeclared function {fname!r}")
-            arg_vals = [go(a) for a in args]
+            # Coerce bare int literals at each fixed (non-vararg) parameter
+            # position to the callee's declared type. Vararg slots (printf
+            # etc.) keep their declared types since the callee has no
+            # narrower type to coerce them to.
+            param_tys = callee.function_type.args
+            coerced: list = []
+            for i, a in enumerate(args):
+                if i < len(param_tys):
+                    coerced.append(_coerce_int_lit(a, param_tys[i]))
+                else:
+                    coerced.append(a)
+            arg_vals = [go(a) for a in coerced]
             return builder.call(callee, arg_vals)
         case StructInit(type=tname, fields=field_inits):
             sd = struct_defs.get(tname)
@@ -248,7 +260,9 @@ def _lower_expr(
                     raise ValueError(
                         f"struct_init for {tname!r} missing field {f.name!r}"
                     )
-                val = builder.insert_value(val, go(init_by_name[f.name]), i)
+                field_dest_ty = _type_to_llvm(f.type, struct_tys, enum_tys)
+                coerced = _coerce_int_lit(init_by_name[f.name], field_dest_ty)
+                val = builder.insert_value(val, go(coerced), i)
             return val
         case FieldRead(value=inner, name=fname):
             inner_val = go(inner)
@@ -318,11 +332,42 @@ def _lower_expr(
                     raise ValueError(
                         f"enum_init for {ename}::{vname} missing field {f.name!r}"
                     )
-                field_val = go(init_by_name[f.name])
+                field_dest_ty = _type_to_llvm(f.type, struct_tys, enum_tys)
+                coerced = _coerce_int_lit(init_by_name[f.name], field_dest_ty)
+                field_val = go(coerced)
                 slot_val = _pack_to_i64_slot(builder, field_val, f.type)
                 val = builder.insert_value(val, slot_val, [1, i])
             return val
     raise ValueError(f"unhandled expr: {expr!r}")
+
+
+_LLVM_INT_TO_QUOD: dict[int, type] = {
+    1: I1Type, 8: I8Type, 16: I16Type, 32: I32Type, 64: I64Type,
+}
+
+
+def _coerce_int_lit(expr, dest_ty):
+    """If `expr` is a bare IntLit and `dest_ty` is a different-width
+    integer type, return a new IntLit retyped to `dest_ty`. Otherwise
+    return `expr` unchanged.
+
+    The rule is bare-literals-only: `parser.had_error = 1` retypes 1 to
+    i8 because the field is i8, but `parser.had_error = (x + 1)` does
+    NOT — composite expressions don't auto-narrow (silent truncation
+    would hide bugs). Same shape as how `return 0` adopts the function's
+    return type.
+    """
+    if not isinstance(expr, IntLit):
+        return expr
+    if not isinstance(dest_ty, ir.IntType):
+        return expr
+    src_w = int_type_width(expr.type)
+    if src_w == dest_ty.width:
+        return expr
+    cls = _LLVM_INT_TO_QUOD.get(dest_ty.width)
+    if cls is None:
+        return expr
+    return expr.model_copy(update={"type": cls()})
 
 
 def _size_of_quod_type(
@@ -559,13 +604,15 @@ def _lower_stmt(
             return
         case Let(name=name, init=init):
             # Alloca was pre-emitted at the entry block; just store the init value.
-            init_val = lower_expr(init)
+            dest_ty = locals_[name].type.pointee
+            init_val = lower_expr(_coerce_int_lit(init, dest_ty))
             builder.store(init_val, locals_[name])
             return
         case Assign(name=name, value=v):
             if name not in locals_:
                 raise ValueError(f"assign to undeclared local {name!r}")
-            val = lower_expr(v)
+            dest_ty = locals_[name].type.pointee
+            val = lower_expr(_coerce_int_lit(v, dest_ty))
             builder.store(val, locals_[name])
             return
         case Store(ptr=p, value=v):
@@ -590,7 +637,8 @@ def _lower_stmt(
             if sd is None:
                 raise ValueError(f"field-set on unknown struct {pointee.name!r}")
             idx = sd.field_index(fname)
-            val = lower_expr(v)
+            dest_ty = _type_to_llvm(sd.fields[idx].type, struct_tys, enum_tys)
+            val = lower_expr(_coerce_int_lit(v, dest_ty))
             field_ptr = builder.gep(
                 alloca, [ir.Constant(I32, 0), ir.Constant(I32, idx)],
             )
