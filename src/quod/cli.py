@@ -1642,6 +1642,25 @@ def const_rm(
     typer.echo(f"removed constant {name}")
 
 
+@const_app.command("rename")
+def const_rename(
+    old: str = typer.Argument(..., help="Existing constant name.",
+                              autocompletion=_comp.constant_names),
+    new: str = typer.Argument(..., help="New constant name."),
+) -> None:
+    """Rename a string constant and update every quod.string_ref to it."""
+    from quod.editor import rename_constant
+    with _exclusive_lock():
+        program = _load()
+        try:
+            program = rename_constant(program, old, new)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    typer.echo(f"renamed constant {old} -> {new}")
+
+
 # ---------- extern sub-app ----------
 
 _TYPE_NAMES = {
@@ -1898,6 +1917,25 @@ def struct_rm(
     typer.echo(f"removed struct {name}")
 
 
+@struct_app.command("rename")
+def struct_rename(
+    old: str = typer.Argument(..., help="Existing struct name.",
+                              autocompletion=_comp.struct_names),
+    new: str = typer.Argument(..., help="New struct name."),
+) -> None:
+    """Rename a struct and update every reference (StructType, StructInit)."""
+    from quod.editor import rename_struct
+    with _exclusive_lock():
+        program = _load()
+        try:
+            program = rename_struct(program, old, new)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    typer.echo(f"renamed struct {old} -> {new}")
+
+
 def _format_field_type(t) -> str:
     """Short rendering of a struct field's type for the `quod struct add` ack."""
     for tok, cls in _TYPE_NAMES.items():
@@ -1988,6 +2026,52 @@ def enum_rm(
             raise typer.Exit(1)
         _save(program)
     typer.echo(f"removed enum {name}")
+
+
+@enum_app.command("rename")
+def enum_rename(
+    old: str = typer.Argument(..., help="Existing enum name."),
+    new: str = typer.Argument(..., help="New enum name."),
+) -> None:
+    """Rename an enum and update every reference (EnumType, EnumInit)."""
+    from quod.editor import rename_enum
+    with _exclusive_lock():
+        program = _load()
+        try:
+            program = rename_enum(program, old, new)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    typer.echo(f"renamed enum {old} -> {new}")
+
+
+@enum_app.command("rename-variant")
+def enum_rename_variant(
+    enum_name: str = typer.Argument(..., help="Enum the variant belongs to."),
+    old: str = typer.Argument(..., help="Existing variant name."),
+    new: str = typer.Argument(..., help="New variant name."),
+) -> None:
+    """Rename a variant within an enum.
+
+    Updates the variant in the EnumDef, every EnumInit that names it
+    against this enum, and every Match arm that targets this enum.
+
+    Match-arm rewriting uses a structural heuristic: an arm is rewritten
+    only if all of that match's arm names (excluding `_`) are valid
+    variant names of the renamed enum. Matches against a different enum
+    that happen to share the variant name `old` won't be touched.
+    """
+    from quod.editor import rename_variant
+    with _exclusive_lock():
+        program = _load()
+        try:
+            program = rename_variant(program, enum_name, old, new)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    typer.echo(f"renamed variant {enum_name}::{old} -> {enum_name}::{new}")
 
 
 # ---------- note sub-app ----------

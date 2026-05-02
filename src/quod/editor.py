@@ -110,14 +110,173 @@ def rename_function(program: Program, old: str, new: str) -> Program:
 
 
 def _rewrite_value(value, rewrite_node):
-    """Helper for rename_function: dispatch a value to either the node
-    rewriter or recurse into tuples/lists of values."""
+    """Helper for the rename_* functions: dispatch a value to either
+    the node rewriter or recurse into tuples/lists of values."""
     if hasattr(value, "model_copy"):
         return rewrite_node(value)
     if isinstance(value, tuple):
         new = tuple(_rewrite_value(v, rewrite_node) for v in value)
         return new if any(a is not b for a, b in zip(new, value)) else value
     return value
+
+
+def _walk_rewrite(program: Program, transform) -> Program:
+    """Walk every node in the program top-down, applying `transform`.
+    `transform` takes a node and returns either a new node (if it
+    wants to rewrite) or the same node (if not). Recursion into nested
+    fields happens after transform so a transform can stop at its level.
+    """
+    def rewrite(node):
+        replaced = transform(node)
+        if replaced is not node:
+            return replaced
+        if hasattr(node, "model_copy"):
+            updates: dict = {}
+            for field_name, value in node:
+                replaced_v = _rewrite_value(value, rewrite)
+                if replaced_v is not value:
+                    updates[field_name] = replaced_v
+            return node.model_copy(update=updates) if updates else node
+        return node
+    return rewrite(program)
+
+
+def rename_struct(program: Program, old: str, new: str) -> Program:
+    """Rename a StructDef. Updates the def, every StructType reference,
+    and every StructInit's type field. Errors if `new` collides with an
+    existing struct or enum, or if `old` doesn't exist."""
+    from quod.model import EnumType, StructInit, StructType
+    if old == new:
+        return program
+    if not any(sd.name == old for sd in program.structs):
+        raise KeyError(f"no struct named {old!r}")
+    if any(sd.name == new for sd in program.structs):
+        raise ValueError(f"struct {new!r} already exists")
+    if any(ed.name == new for ed in program.enums):
+        raise ValueError(f"name {new!r} collides with an enum")
+
+    def transform(node):
+        if isinstance(node, StructType) and node.name == old:
+            return node.model_copy(update={"name": new})
+        if isinstance(node, StructInit) and node.type == old:
+            return node.model_copy(update={"type": new})
+        # The StructDef itself is renamed by walking program.structs below.
+        return node
+
+    program = _walk_rewrite(program, transform)
+    new_structs = tuple(
+        sd.model_copy(update={"name": new}) if sd.name == old else sd
+        for sd in program.structs
+    )
+    return program.model_copy(update={"structs": new_structs})
+
+
+def rename_enum(program: Program, old: str, new: str) -> Program:
+    """Rename an EnumDef. Updates the def, every EnumType reference, and
+    every EnumInit's enum field. Errors on collisions."""
+    from quod.model import EnumInit, EnumType, StructType
+    if old == new:
+        return program
+    if not any(ed.name == old for ed in program.enums):
+        raise KeyError(f"no enum named {old!r}")
+    if any(ed.name == new for ed in program.enums):
+        raise ValueError(f"enum {new!r} already exists")
+    if any(sd.name == new for sd in program.structs):
+        raise ValueError(f"name {new!r} collides with a struct")
+
+    def transform(node):
+        if isinstance(node, EnumType) and node.name == old:
+            return node.model_copy(update={"name": new})
+        if isinstance(node, EnumInit) and node.enum == old:
+            return node.model_copy(update={"enum": new})
+        return node
+
+    program = _walk_rewrite(program, transform)
+    new_enums = tuple(
+        ed.model_copy(update={"name": new}) if ed.name == old else ed
+        for ed in program.enums
+    )
+    return program.model_copy(update={"enums": new_enums})
+
+
+def rename_constant(program: Program, old: str, new: str) -> Program:
+    """Rename a StringConstant. Updates the def + every StringRef. Does
+    NOT touch Call.function (constants and call targets share no naming
+    convention — leading-dot constant names aren't valid call targets)."""
+    from quod.model import StringRef
+    if old == new:
+        return program
+    if not any(c.name == old for c in program.constants):
+        raise KeyError(f"no constant named {old!r}")
+    if any(c.name == new for c in program.constants):
+        raise ValueError(f"constant {new!r} already exists")
+
+    def transform(node):
+        if isinstance(node, StringRef) and node.name == old:
+            return node.model_copy(update={"name": new})
+        return node
+
+    program = _walk_rewrite(program, transform)
+    new_consts = tuple(
+        c.model_copy(update={"name": new}) if c.name == old else c
+        for c in program.constants
+    )
+    return program.model_copy(update={"constants": new_consts})
+
+
+def rename_variant(program: Program, enum_name: str, old: str, new: str) -> Program:
+    """Rename a variant within an enum. Updates the variant's name in
+    the EnumDef, every EnumInit whose enum == enum_name and variant ==
+    old, and every Match arm whose arms collectively belong to the
+    renamed enum (identified by being a subset of the enum's variant
+    set, after the rename)."""
+    from quod.model import EnumDef, EnumInit, Match, MatchArm
+    if old == new:
+        return program
+    target = next((ed for ed in program.enums if ed.name == enum_name), None)
+    if target is None:
+        raise KeyError(f"no enum named {enum_name!r}")
+    if not any(v.name == old for v in target.variants):
+        raise KeyError(f"enum {enum_name!r} has no variant {old!r}")
+    if any(v.name == new for v in target.variants):
+        raise ValueError(f"variant {new!r} already exists in enum {enum_name!r}")
+
+    # The renamed enum's full variant set after the rename. We use this
+    # to identify which Match statements scrutinize THIS enum: a match
+    # whose arms (excluding wildcard) are a subset of this set, AND
+    # which contains the OLD name, is one we should rewrite.
+    new_variant_set = {(new if v.name == old else v.name) for v in target.variants}
+
+    def transform(node):
+        if isinstance(node, EnumInit) and node.enum == enum_name and node.variant == old:
+            return node.model_copy(update={"variant": new})
+        if isinstance(node, Match):
+            arm_variants = {a.variant for a in node.arms if a.variant != "_"}
+            if old not in arm_variants:
+                return node
+            # Heuristic: this match targets enum_name iff its arms
+            # are a subset of enum_name's pre-rename variant set.
+            old_variant_set = {v.name for v in target.variants}
+            if not arm_variants.issubset(old_variant_set):
+                return node
+            new_arms = tuple(
+                arm.model_copy(update={"variant": new}) if arm.variant == old else arm
+                for arm in node.arms
+            )
+            return node.model_copy(update={"arms": new_arms})
+        return node
+
+    program = _walk_rewrite(program, transform)
+    new_enums = tuple(
+        ed.model_copy(update={
+            "variants": tuple(
+                v.model_copy(update={"name": new}) if v.name == old else v
+                for v in ed.variants
+            ),
+        }) if ed.name == enum_name else ed
+        for ed in program.enums
+    )
+    return program.model_copy(update={"enums": new_enums})
 
 
 def add_statement_in_function(
