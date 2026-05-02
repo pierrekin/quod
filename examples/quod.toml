@@ -138,6 +138,15 @@ file    = "json/phase6_parse_array/program.json"
   name  = "json_v1_phase6"
   entry = "main"
 
+[[program]]
+name    = "json_v1_phase7"
+version = "0.1.0"
+file    = "json/phase7_parse_object/program.json"
+
+  [[program.bin]]
+  name  = "json_v1_phase7"
+  entry = "main"
+
 # ---------- strings ----------
 
 [[program]]
