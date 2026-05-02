@@ -205,7 +205,18 @@ def _lower_expr(
                 raise ValueError(f"reference to undeclared local {n!r}")
             return builder.load(locals_[n])
         case BinOp(op="add", lhs=l, rhs=r):
-            return builder.add(go(l), go(r))
+            lv = go(l)
+            rv = go(r)
+            # Ptr-on-LHS pointer arithmetic: `(p + i64)` desugars to an
+            # inbounds GEP. Mirrors what `quod.ptr_offset` does explicitly,
+            # but lets straight-line script `(p + n)` work without forcing
+            # the user to reach for the explicit form.
+            if (
+                isinstance(lv.type, ir.PointerType) and lv.type.pointee == I8
+                and isinstance(rv.type, ir.IntType) and rv.type.width == 64
+            ):
+                return builder.gep(lv, [rv], inbounds=True)
+            return builder.add(lv, rv)
         case BinOp(op="sub", lhs=l, rhs=r):
             return builder.sub(go(l), go(r))
         case BinOp(op="mul", lhs=l, rhs=r):
