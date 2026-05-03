@@ -47,8 +47,10 @@ from quod.model import (
     StringRef,
     Statement,
     Type,
+    Unreachable,
     While,
     Widen,
+    body_always_terminates,
 )
 
 
@@ -594,6 +596,16 @@ def _translate_function(
 
     translator = _FunctionTranslator(tuple(p.name for p in params), state)
     body = tuple(translator.stmt(s) for s in body_cursor.get_children())
+
+    # Faithful translation of C fall-through. C99 §5.1.2.2.3 defines falling
+    # off `main` as `return 0;` — synthesize that. Every other int-returning
+    # function falling off the end is UB (§6.9.1/12) — represent it
+    # explicitly with `Unreachable` so analysis can flag the path.
+    if not body_always_terminates(body):
+        if cursor.spelling == "main":
+            body = body + (ReturnExpr(value=IntLit(type=_I32, value=0)),)
+        else:
+            body = body + (Unreachable(),)
 
     note = f"ingested from {source_path.name}:{cursor.location.line}"
     return Function(

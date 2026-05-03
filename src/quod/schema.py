@@ -69,6 +69,7 @@ from quod.model import (
     Return,
     ReturnExpr,
     ReturnInRangeClaim,
+    Unreachable,
     ShortCircuitAnd,
     ShortCircuitOr,
     StringConstant,
@@ -384,6 +385,19 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         ),
         "example": {"kind": "quod.return"},
         "see_also": ["llvm.void", "quod.return_expr"],
+    },
+    "quod.unreachable": {
+        "class": Unreachable,
+        "summary": (
+            "A statement that must not be executed at runtime. Lowers to "
+            "LLVM `unreachable`. Used to terminate a block when the source "
+            "language's semantics for reaching this point are undefined — "
+            "e.g. the C ingest emits this for fall-through off a non-`main` "
+            "int-returning function (UB per C99 §6.9.1/12), so analysis can "
+            "flag the path rather than fabricating a return value."
+        ),
+        "example": {"kind": "quod.unreachable"},
+        "see_also": ["quod.return_expr"],
     },
     "quod.if": {
         "class": If,
@@ -759,7 +773,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "quod.char_lit", "quod.enum_init", "quod.sizeof", "quod.try",
     ],
     "statement": [
-        "quod.return_expr", "quod.return", "quod.if",
+        "quod.return_expr", "quod.return", "quod.unreachable", "quod.if",
         "quod.let", "quod.assign", "quod.while", "quod.for", "quod.expr_stmt",
         "quod.field_set", "quod.store", "quod.store_field",
         "quod.with_arena", "quod.match",

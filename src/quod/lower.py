@@ -69,10 +69,12 @@ from quod.model import (
     StructDef,
     StructInit,
     StructType,
+    Unreachable,
     VoidType,
     While,
     Widen,
     WithArena,
+    body_always_terminates,
 )
 
 
@@ -720,6 +722,15 @@ def _lower_stmt(
                 )
             builder.ret_void()
             return
+        case Unreachable():
+            # Synthesized e.g. by the C ingest for fall-through off a non-main
+            # int-returning function (UB per C99 §6.9.1/12). If the current
+            # block is already terminated — say, after an `if (c) return 0;
+            # else return 1;` — there's nothing to do; emitting an instruction
+            # would error.
+            if not builder.block.is_terminated:
+                builder.unreachable()
+            return
         case ExprStmt(value=expr):
             lower_expr(expr)
             return
@@ -1222,7 +1233,7 @@ def _desugar_stmts(stmts) -> tuple:
                 # unreachable. The lowering pass leaves the IR builder in a
                 # terminated block after such an If, so we must trim here
                 # instead of emitting dead instructions on top of the ret.
-                if _always_terminates(inner_with_drops):
+                if body_always_terminates(inner_with_drops):
                     return tuple(out)
                 out.append(drop_stmt)
             case If(then_body=t, else_body=e):
@@ -1266,21 +1277,6 @@ def _prepend_drop_before_returns(stmts, drop_stmt) -> tuple:
             case _:
                 out.append(s)
     return tuple(out)
-
-
-def _always_terminates(stmts) -> bool:
-    """Conservative: True only when the last reachable statement is provably
-    a terminator (a `return` or an `if` whose branches both terminate). Used
-    to suppress an unreachable trailing drop after `with_arena` lowering."""
-    if not stmts:
-        return False
-    last = stmts[-1]
-    match last:
-        case ReturnExpr() | Return():
-            return True
-        case If(then_body=t, else_body=e):
-            return _always_terminates(t) and _always_terminates(e)
-    return False
 
 
 def lower(

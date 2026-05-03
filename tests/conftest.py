@@ -253,7 +253,8 @@ def _load_program(case: dict[str, Any], case_dir: Path) -> Program:
     if "c_file" in case:
         from quod.ingest.c import ingest_c
         path = (case_dir / case["c_file"]).resolve()
-        program = ingest_c(path)
+        clang_args = tuple(case.get("clang_args", ()))
+        program = ingest_c(path, clang_args=clang_args)
         # Post-ingest hook: a c_file case may declare extra `imports` so the
         # ingested program can call into stdlib (core.str etc.) — the C source
         # itself can't express that, but the resulting Program can.

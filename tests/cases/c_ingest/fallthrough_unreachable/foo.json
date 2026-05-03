@@ -1,0 +1,68 @@
+{
+  "constants": [],
+  "functions": [
+    {
+      "name": "foo",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "sgt",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {
+                  "kind": "llvm.param_ref",
+                  "name": "x"
+                },
+                "rhs": {
+                  "kind": "llvm.const_int",
+                  "type": {
+                    "kind": "llvm.i32"
+                  },
+                  "value": 1
+                }
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.unreachable"
+        }
+      ],
+      "claims": [],
+      "notes": [
+        "ingested from foo.c:5"
+      ]
+    }
+  ],
+  "externs": []
+}

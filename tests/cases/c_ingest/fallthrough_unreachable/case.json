@@ -1,0 +1,6 @@
+{
+  "c_file": "foo.c",
+  "expect": {
+    "program_json": "foo.json"
+  }
+}

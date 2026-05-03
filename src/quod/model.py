@@ -426,6 +426,16 @@ class Return(_Node):
     kind: Literal["quod.return"] = "quod.return"
 
 
+class Unreachable(_Node):
+    """A statement that must not be executed at runtime. Lowers to LLVM
+    `unreachable`. Used to terminate a basic block when the source
+    language's semantics for reaching this point are undefined — e.g. C's
+    fall-through off a non-`main` int-returning function (UB per C99
+    §6.9.1/12). Lets downstream analysis flag the path as a finding rather
+    than silently fabricating a return value."""
+    kind: Literal["quod.unreachable"] = "quod.unreachable"
+
+
 class If(_Node):
     """Two-branch conditional. Branches may both terminate (return), or both
     fall through to the next statement, or mix — a merge block is created
@@ -578,9 +588,26 @@ class Match(_Node):
 
 
 Statement = Annotated[
-    Union[ReturnExpr, Return, If, Let, Assign, While, For, ExprStmt, FieldSet, Store, StoreField, WithArena, Match],
+    Union[ReturnExpr, Return, Unreachable, If, Let, Assign, While, For, ExprStmt, FieldSet, Store, StoreField, WithArena, Match],
     Field(discriminator="kind"),
 ]
+
+
+def body_always_terminates(stmts) -> bool:
+    """Conservative: True only when the last reachable statement is provably
+    a terminator — a `return`, an `unreachable`, or an `if` whose branches
+    both terminate. Used by the C ingest to decide whether a fall-through
+    needs synthesizing, and by the lowering pass to suppress dead trailing
+    instructions (e.g. arena drops after a body that never falls through)."""
+    if not stmts:
+        return False
+    last = stmts[-1]
+    match last:
+        case ReturnExpr() | Return() | Unreachable():
+            return True
+        case If(then_body=t, else_body=e):
+            return body_always_terminates(t) and body_always_terminates(e)
+    return False
 
 
 # ---------- Justifications ----------
@@ -1760,6 +1787,8 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
             return f"{pad}{prefix}return {_format_expr(expr)}"
         case Return():
             return f"{pad}{prefix}return"
+        case Unreachable():
+            return f"{pad}{prefix}unreachable"
         case If(cond=cond, then_body=t_body, else_body=e_body):
             then_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in t_body)
             head = f"{pad}{prefix}if ({_format_expr(cond)}) {{"

@@ -1,0 +1,8 @@
+{
+  "c_file": "hello.c",
+  "clang_args": ["-std=c89", "-Wno-implicit-int"],
+  "expect": {
+    "stdout": "hi from K&R\n",
+    "exit": 0
+  }
+}

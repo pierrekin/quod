@@ -72,6 +72,7 @@ from quod.model import (
     StructDef,
     StructInit,
     StructType,
+    Unreachable,
     While,
     Widen,
     WithArena,
@@ -348,6 +349,8 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
     match stmt:
         case Return():
             yield Line(stmt, indent, (Span("return", "keyword"),))
+        case Unreachable():
+            yield Line(stmt, indent, (Span("unreachable", "keyword"),))
         case ReturnExpr(value=expr):
             yield Line(stmt, indent, (
                 Span("return", "keyword"), Span(" ", "ws"),
