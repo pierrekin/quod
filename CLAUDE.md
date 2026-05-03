@@ -35,6 +35,16 @@ proven by Z3 (`witness`), or derived by a fixed-point analysis
   back to axiom.** `sat` means the claim is false; `unknown` means it's
   outside the SMT lowering — refactor or skip, don't trust-me-bro.
 
+## Don't dodge migration cost
+
+If the right design requires churning N call sites — tests, stdlib JSONs,
+CLI defaults, examples — that is **not** a reason to keep a sloppy
+interface, introduce an "unspecified" zombie state, or default a field to
+`Optional` when every caller knows the answer. quod is being built as a
+language ecosystem; every shipped wart compounds across every future
+caller. Migrate every caller in the same change. The right interface
+costs once; the wrong one costs forever.
+
 ## Editing the code itself
 
 - The graph is the asset. Nodes (`src/quod/model.py`) are frozen
