@@ -624,6 +624,12 @@ def body_always_terminates(stmts) -> bool:
 
 
 class Z3Justification(_Node):
+    # TODO(soundness): missing a body-derived hash. `artifact_hash` only
+    # pins this justification to the .smt2 file's bytes — nothing pins
+    # the .smt2 file to the function body it was generated from, so a
+    # body edit that changes the SMT meaning leaves verify silently
+    # passing on a stale proof. Add `body_smt_hash` set at prove time
+    # and re-checked at verify time. See cli.py:_verify_justification.
     kind: Literal["z3"] = "z3"
     artifact_path: str
     artifact_hash: str

@@ -1402,6 +1402,17 @@ def claim_verify(
 
 
 def _verify_justification(j: Justification, root: Path) -> tuple[bool, str]:
+    # TODO(soundness): the Z3 arm checks (a) the .smt2 file's hash matches
+    # what's pinned and (b) z3 still says unsat — but it does NOT re-derive
+    # the SMT from the current function body and confirm the on-disk file
+    # is what the body *would* produce now. So an edit to the body that
+    # changes its SMT meaning (e.g. flipping a comparison) leaves the
+    # .smt2 file untouched, the file-hash matches, z3 still says unsat,
+    # and verify "passes" on a stale proof. CLAUDE.md says proofs are
+    # pinned to body hashes; the code only pins to the SMT file. Fix:
+    # add `body_smt_hash` (or similar) to Z3Justification, set it at
+    # prove time to sha256(goal_smt_lib(fn, claim, ...)), and recompute +
+    # compare here before the file-hash + z3 checks.
     match j:
         case Z3Justification(artifact_path=p, artifact_hash=stored):
             full = root / p
