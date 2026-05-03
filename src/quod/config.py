@@ -31,6 +31,20 @@ Schema:
       name  = "hello"        # output binary filename
       entry = "main"         # entry-point function in program.json
 
+    # Reusable named bundles of args for ingesters. The ingester picks
+    # up only the fields that apply to it (e.g. clang_args for the C
+    # ingester); profiles are not language-typed.
+    [ingest.profile.knr]
+    clang_args = ["-std=c89", "-Wno-implicit-int"]
+
+    # Declared ingestions. Bare `quod ingest` runs each entry in order,
+    # merging the result into the project's program.json. Only `kind =
+    # "c-file"` is supported today.
+    [[ingest.entry]]
+    kind    = "c-file"
+    source  = "vendor/knr/01-hello.c"
+    profile = "knr"          # OR clang_args = [...] inline (not both)
+
 A workspace can list any number of `[[program]]` entries. Per-program
 commands (`show`, `fn`, `claim`, ...) accept `--program / -p NAME`; if
 exactly one program is configured the flag is optional.
@@ -79,6 +93,32 @@ class LinkConfig:
 
 
 @dataclass(frozen=True)
+class IngestProfile:
+    """A reusable bundle of args for an ingester. Looked up by name from
+    `[ingest.profile.<name>]` and referenced by `[[ingest]] profile = ...`
+    or `quod ingest c --profile <name>`. The ingester picks up only the
+    fields that apply to it (e.g. `clang_args` for the C ingester) — the
+    profile is not language-typed, so misuse is the user's responsibility.
+    """
+    clang_args: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class IngestEntry:
+    """One declared ingestion. Today only `kind = "c-file"` is supported.
+
+    `profile` and `clang_args` are mutually exclusive — pick a named
+    profile or inline the args, not both. The CLI's bare `quod ingest`
+    runs each entry in declaration order, merging results into the
+    project's program.json.
+    """
+    kind: str
+    source: Path
+    profile: str | None = None
+    clang_args: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class EnforceConfig:
     axiom: str | None = None
     witness: str | None = None
@@ -103,6 +143,8 @@ class Config:
     build: BuildConfig = field(default_factory=BuildConfig)
     link: LinkConfig = field(default_factory=LinkConfig)
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
+    ingest_profiles: dict[str, IngestProfile] = field(default_factory=dict)
+    ingests: tuple[IngestEntry, ...] = ()
     # Directory the config was loaded from. Relative paths in the config
     # resolve against this — so build artifacts and program files are
     # anchored to quod.toml regardless of CWD.
@@ -198,6 +240,70 @@ def load_config(path: Path) -> Config:
         )
         programs.append(ProgramSpec(name=name, version=version, file=file, bins=bins))
 
+    # Schema:
+    #   [ingest.profile.<name>]  clang_args = [...]
+    #   [[ingest.entry]]         kind, source, (profile | clang_args)
+    #
+    # Both must nest under `[ingest]` because `[[ingest]]` (top-level array)
+    # would collide with `[ingest.profile.*]` (top-level table) — TOML can't
+    # represent the same key as both an array and a table.
+    ingest_raw = raw.get("ingest", {})
+    if not isinstance(ingest_raw, dict):
+        raise ValueError(f"{path}: [ingest] must be a table (use [[ingest.entry]] for entries)")
+    profiles_raw = ingest_raw.get("profile", {})
+    if not isinstance(profiles_raw, dict):
+        raise ValueError(f"{path}: [ingest.profile] must be a table of named profiles")
+    ingest_profiles: dict[str, IngestProfile] = {}
+    for prof_name, prof in profiles_raw.items():
+        if not isinstance(prof, dict):
+            raise ValueError(
+                f"{path}: [ingest.profile.{prof_name}] must be a table"
+            )
+        cargs = prof.get("clang_args", [])
+        if not isinstance(cargs, list):
+            raise ValueError(
+                f"{path}: [ingest.profile.{prof_name}] clang_args must be a list of strings"
+            )
+        ingest_profiles[prof_name] = IngestProfile(
+            clang_args=tuple(str(x) for x in cargs),
+        )
+
+    entries_raw = ingest_raw.get("entry", [])
+    if not isinstance(entries_raw, list):
+        raise ValueError(f"{path}: [[ingest.entry]] must be an array of tables")
+    ingests: list[IngestEntry] = []
+    for entry in entries_raw:
+        if not isinstance(entry, dict):
+            raise ValueError(f"{path}: [[ingest.entry]] entries must be tables")
+        if "kind" not in entry:
+            raise ValueError(f"{path}: [[ingest.entry]] missing required key `kind`")
+        if "source" not in entry:
+            raise ValueError(f"{path}: [[ingest.entry]] missing required key `source`")
+        kind = str(entry["kind"])
+        source = Path(str(entry["source"]))
+        profile = entry.get("profile")
+        cargs = entry.get("clang_args", [])
+        if profile is not None and cargs:
+            raise ValueError(
+                f"{path}: [[ingest.entry]] for {source} sets both `profile` "
+                f"and `clang_args` — pick one"
+            )
+        if profile is not None and profile not in ingest_profiles:
+            raise ValueError(
+                f"{path}: [[ingest.entry]] for {source} references unknown "
+                f"profile {profile!r}; defined: {sorted(ingest_profiles)}"
+            )
+        if not isinstance(cargs, list):
+            raise ValueError(
+                f"{path}: [[ingest.entry]] for {source} clang_args must be a list of strings"
+            )
+        ingests.append(IngestEntry(
+            kind=kind,
+            source=source,
+            profile=str(profile) if profile is not None else None,
+            clang_args=tuple(str(x) for x in cargs),
+        ))
+
     return Config(
         programs=tuple(programs),
         build_dir=build_dir,
@@ -205,6 +311,8 @@ def load_config(path: Path) -> Config:
         build=build,
         link=link,
         enforce=enforce,
+        ingest_profiles=ingest_profiles,
+        ingests=tuple(ingests),
         root=root,
     )
 

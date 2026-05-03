@@ -60,6 +60,7 @@ from quod.editor import (
 )
 from quod.hashing import HASH_DISPLAY_LEN, find_by_prefix, node_hash, short_hash, walk
 from quod.ingest import IngestError, ingest_c, ingest_header
+from quod.merge import merge_program
 from quod.model import (
     CLAIM_KINDS,
     PARAM_CLAIM_KINDS,
@@ -148,6 +149,9 @@ const_app = typer.Typer(no_args_is_help=True, help="Operations on string constan
 struct_app = typer.Typer(no_args_is_help=True, help="Operations on struct definitions.")
 enum_app = typer.Typer(no_args_is_help=True, help="Operations on enum (sum-type) definitions.")
 provider_app = typer.Typer(no_args_is_help=True, help="Inspect registered claim providers.")
+# Bare `quod ingest` runs the [[ingest.entry]] array; subcommands like
+# `quod ingest c <path>` are ad-hoc, single-source forms.
+ingest_app = typer.Typer(invoke_without_command=True, help="Ingest source code into the project's program.")
 
 app.add_typer(fn_app, name="fn")
 app.add_typer(claim_app, name="claim")
@@ -159,6 +163,7 @@ app.add_typer(const_app, name="const")
 app.add_typer(struct_app, name="struct")
 app.add_typer(enum_app, name="enum")
 app.add_typer(provider_app, name="provider")
+app.add_typer(ingest_app, name="ingest")
 
 
 # ---------- Shared state ----------
@@ -359,74 +364,153 @@ def init(
     typer.echo(f"\n{next_steps[template]}")
 
 
-@app.command()
-def ingest(
-    source: Path = typer.Argument(..., help="Source file to ingest (e.g. hello.c)."),
-    name: str = typer.Option(
-        None, "--name", "-n",
-        help="Program name in quod.toml. Defaults to the source file's stem.",
-    ),
-    imports: list[str] = typer.Option(
-        [], "--import",
-        help=(
-            "Stdlib module to add to the resulting program's `imports` list. "
-            "Repeatable. The module must exist under quod's stdlib directory; "
-            "see `quod schema --category program` for what's available."
-        ),
-    ),
-) -> None:
-    """Ingest a source file into a fresh quod project.
+def _empty_program() -> Program:
+    return Program()
 
-    Sibling to `init`: writes `quod.toml` and `program.json` in the cwd, and
-    refuses if either already exists. Currently supports C only.
+
+def _load_or_init_program(path: Path) -> Program:
+    """Read program.json if present; otherwise return an empty Program. Used
+    by the ingest path — the project must exist (quod.toml must be there),
+    but program.json may not yet exist if the user has only just `quod init`'d
+    and never written to it.
     """
-    if source.suffix != ".c":
-        typer.echo(f"error: only `.c` files are supported (got {source.suffix!r})", err=True)
-        raise typer.Exit(2)
-    if not source.exists():
-        typer.echo(f"error: {source} does not exist", err=True)
-        raise typer.Exit(1)
+    if path.exists():
+        return load_program(path)
+    return _empty_program()
 
-    cfg_path = _cfg_path().resolve()
-    program_path = cfg_path.parent / "program.json"
-    if cfg_path.exists():
-        typer.echo(f"error: {cfg_path} already exists", err=True)
-        raise typer.Exit(1)
-    if program_path.exists():
-        typer.echo(f"error: {program_path} already exists", err=True)
-        raise typer.Exit(1)
 
+def _resolve_ingest_args(
+    cfg, entry, *, source_path: Path,
+) -> tuple[str, ...]:
+    """Resolve clang_args for an [[ingest.entry]] by following its profile
+    reference (or returning the entry's inline args). The CLI ad-hoc form
+    bypasses this and passes args directly."""
+    if entry.profile is not None:
+        prof = cfg.ingest_profiles.get(entry.profile)
+        if prof is None:
+            typer.echo(
+                f"error: [[ingest.entry]] for {source_path} references unknown "
+                f"profile {entry.profile!r}", err=True,
+            )
+            raise typer.Exit(1)
+        return prof.clang_args
+    return entry.clang_args
+
+
+def _run_one_c_ingest(
+    source: Path, *, clang_args: tuple[str, ...], string_prefix: str | None = None,
+) -> Program:
     try:
-        program = ingest_c(source)
+        return ingest_c(source, clang_args=clang_args, string_prefix=string_prefix)
     except IngestError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
 
-    if imports:
-        program = program.model_copy(update={"imports": tuple(imports)})
 
-    program_name = name or source.stem
-    main_fn = next((f for f in program.functions if f.name == "main" and not f.params), None)
-    bin_block = (
-        f"\n  [[program.bin]]\n  name  = \"{program_name}\"\n  entry = \"main\"\n"
-        if main_fn is not None
-        else ""
+@ingest_app.callback(invoke_without_command=True)
+def ingest_callback(ctx: typer.Context) -> None:
+    """Replay every [[ingest.entry]] declared in quod.toml, merging each
+    result into the project's program.json. No-op (deterministic) if every
+    source is unchanged. Re-running after a source edit overwrites by name;
+    nodes from a previous ingest that the new run no longer produces stay
+    behind as orphans (cleanup is out of scope for ingest)."""
+    if ctx.invoked_subcommand is not None:
+        return
+
+    cfg = _cfg()
+    program_path = _path()
+    if not cfg.ingests:
+        typer.echo(
+            f"error: no [[ingest.entry]] declared in {_cfg_path()} — either "
+            f"add entries or use `quod ingest c <source>` for an ad-hoc ingest",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    with _exclusive_lock():
+        program = _load_or_init_program(program_path)
+
+        for entry in cfg.ingests:
+            if entry.kind != "c-file":
+                typer.echo(
+                    f"error: [[ingest.entry]] kind {entry.kind!r} not supported "
+                    f"(only 'c-file' today)", err=True,
+                )
+                raise typer.Exit(1)
+            source = cfg.resolve(entry.source)
+            if not source.exists():
+                typer.echo(f"error: ingest source {source} does not exist", err=True)
+                raise typer.Exit(1)
+            clang_args = _resolve_ingest_args(cfg, entry, source_path=source)
+            ingested = _run_one_c_ingest(source, clang_args=clang_args)
+            program = merge_program(program, ingested)
+            typer.echo(
+                f"ingested {source} ({len(ingested.functions)} function(s))"
+            )
+
+        save_program(program, program_path)
+    typer.echo(f"wrote {program_path}")
+
+
+@ingest_app.command(
+    "c",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def ingest_c_cmd(
+    ctx: typer.Context,
+    source: Path = typer.Argument(..., help="C source file to ingest."),
+    profile: str | None = typer.Option(
+        None, "--profile",
+        help="Named [ingest.profile.<name>] to apply (mutually exclusive with -- args).",
+    ),
+) -> None:
+    """Ad-hoc one-off ingest of a single C file into the project's program.json.
+
+    Does not modify quod.toml; for repeatable ingests, declare an
+    [[ingest.entry]] there. Extra args after `--` are forwarded to clang
+    (e.g. `quod ingest c foo.c -- -std=c89`).
+    """
+    if not source.exists():
+        typer.echo(f"error: {source} does not exist", err=True)
+        raise typer.Exit(1)
+    if source.suffix != ".c":
+        typer.echo(
+            f"error: expected a .c file (got {source.suffix!r}); "
+            f"only kind 'c-file' is supported", err=True,
+        )
+        raise typer.Exit(2)
+
+    extra_clang = tuple(ctx.args)
+    if profile is not None and extra_clang:
+        typer.echo(
+            "error: --profile and extra clang args (after `--`) are mutually exclusive",
+            err=True,
+        )
+        raise typer.Exit(2)
+
+    cfg = _cfg()
+    if profile is not None:
+        prof = cfg.ingest_profiles.get(profile)
+        if prof is None:
+            typer.echo(
+                f"error: unknown profile {profile!r}; defined: "
+                f"{sorted(cfg.ingest_profiles)}", err=True,
+            )
+            raise typer.Exit(1)
+        clang_args = prof.clang_args
+    else:
+        clang_args = extra_clang
+
+    program_path = _path()
+    with _exclusive_lock():
+        program = _load_or_init_program(program_path)
+        ingested = _run_one_c_ingest(source, clang_args=clang_args)
+        program = merge_program(program, ingested)
+        save_program(program, program_path)
+
+    typer.echo(
+        f"ingested {source} ({len(ingested.functions)} function(s)) into {program_path}"
     )
-    toml = (
-        "[build]\nprofile = 2\n\n"
-        f"[[program]]\nname    = \"{program_name}\"\nversion = \"0.1.0\"\nfile    = \"program.json\"\n"
-        f"{bin_block}"
-    )
-
-    cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    cfg_path.write_text(toml)
-    save_program(program, program_path)
-
-    typer.echo(f"wrote {cfg_path}")
-    typer.echo(f"wrote {program_path} ({len(program.functions)} function(s) ingested from {source})")
-    if main_fn is None:
-        typer.echo("\nnote: no `int main()` found — add a [[program.bin]] entry to build a binary.")
-    typer.echo("\nnext: `quod show` to inspect, `quod check` to verify it lowers cleanly.")
 
 
 @app.command()

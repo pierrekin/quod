@@ -192,18 +192,26 @@ class _ProgramState:
     are translated; consumed by `ingest_c` to populate the Program.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, string_prefix: str = "") -> None:
         # Dedupe by literal value so identical strings collapse to one constant.
         self._string_by_value: dict[str, str] = {}
         self.constants: list[StringConstant] = []
         # Map external-symbol name → its inferred ExternFunction. First sighting
         # wins; later calls just look up by name.
         self.externs: dict[str, ExternFunction] = {}
+        # Per-source prefix for generated string-constant names. Without it,
+        # two ingests both produce `.str.0` referring to different content,
+        # which collides on merge into a single program.json. Convention:
+        # CLI threads in the source path's sanitized stem.
+        self._string_prefix = string_prefix
 
     def intern_string(self, value: str) -> StringRef:
         if value in self._string_by_value:
             return StringRef(name=self._string_by_value[value])
-        name = f".str.{len(self.constants)}"
+        if self._string_prefix:
+            name = f".str.{self._string_prefix}.{len(self.constants)}"
+        else:
+            name = f".str.{len(self.constants)}"
         self._string_by_value[value] = name
         self.constants.append(StringConstant(name=name, value=value))
         return StringRef(name=name)
@@ -616,7 +624,25 @@ def _detect_resource_dir() -> str | None:
         return None
 
 
-def ingest_c(path: Path, *, clang_args: tuple[str, ...] = ()) -> Program:
+_PREFIX_SAFE = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
+
+
+def _default_string_prefix(path: Path) -> str:
+    """Sanitize a source path's stem for use as a string-constant prefix.
+
+    Two ingests need different prefixes so their string constants don't
+    collide on merge. Stem is short and recognizable; collision-resistant
+    enough for practical corpora — if the same basename appears under two
+    paths, callers should pass an explicit prefix.
+    """
+    return "".join(c if c in _PREFIX_SAFE else "_" for c in path.stem)
+
+
+def ingest_c(
+    path: Path, *,
+    clang_args: tuple[str, ...] = (),
+    string_prefix: str | None = None,
+) -> Program:
     """Parse a C file and return a quod Program.
 
     Anything outside the supported v1 subset raises IngestError with the
@@ -624,6 +650,10 @@ def ingest_c(path: Path, *, clang_args: tuple[str, ...] = ()) -> Program:
     in `path` itself are translated — header-included declarations are
     skipped, but their types/symbols are visible to the parser, so calls
     into stdlib resolve to externs with proper signatures.
+
+    `string_prefix` namespaces auto-generated string-constant names so two
+    ingests can be merged into one program.json without colliding on
+    `.str.0`. Defaults to a sanitized stem of the source path.
     """
     path = path.resolve()
     if not path.exists():
@@ -644,7 +674,9 @@ def ingest_c(path: Path, *, clang_args: tuple[str, ...] = ()) -> Program:
         msg = "; ".join(f"{d.location.file}:{d.location.line}: {d.spelling}" for d in diags)
         raise IngestError(f"{path}: parse errors: {msg}")
 
-    state = _ProgramState()
+    if string_prefix is None:
+        string_prefix = _default_string_prefix(path)
+    state = _ProgramState(string_prefix=string_prefix)
     functions: list[Function] = []
     defined_names: set[str] = set()
 
