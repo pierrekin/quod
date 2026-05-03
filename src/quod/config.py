@@ -73,7 +73,7 @@ class LinkConfig:
 
     `libraries` are bare names — e.g. ("m", "pthread") becomes `-lm -lpthread`.
     libc is always implicitly available (clang links it by default), so don't
-    list "c". Project-wide; per-program overrides aren't supported in v1.
+    list "c". Project-wide; no per-program overrides.
     """
     libraries: tuple[str, ...] = ()
 

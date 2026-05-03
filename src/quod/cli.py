@@ -1992,10 +1992,10 @@ def enum_add(
 ) -> None:
     """Append a new enum.
 
-    The CLI surface for enums is JSON-only (for now) — variant payloads
-    have enough structure that the shorthand `name:type` form for structs
-    doesn't generalize cleanly. Author the EnumDef as a JSON object and
-    pipe it in: `cat enum.json | quod enum add -`.
+    The CLI surface for enums is JSON-only — variant payloads have
+    enough structure that the shorthand `name:type` form for structs
+    doesn't generalize cleanly. Author the EnumDef as a JSON object
+    and pipe it in: `cat enum.json | quod enum add -`.
 
     See `quod schema EnumDef` for the canonical shape.
     """

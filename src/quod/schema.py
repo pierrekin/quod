@@ -308,7 +308,7 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "happy value, evaluates to the payload field. Variant "
             "names don't matter — Ok/Err, Some/None, Found/Missing all "
             "qualify by shape. Function return type must be the same "
-            "enum (no cross-enum conversion in v1)."
+            "enum (no cross-enum conversion)."
         ),
         "example": {"kind": "quod.try", "value": {"kind": "llvm.call", "function": "alloc.json.parse", "args": []}},
         "see_also": ["EnumDef", "quod.match"],

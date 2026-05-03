@@ -22,10 +22,18 @@ read project state from there.
 - `llvm.*` — thin wrappers over LLVM IR ops (`llvm.call`, `llvm.binop`,
   `llvm.const_int`, `llvm.param_ref`, …). One node ≈ one IR instruction.
 - `quod.*` — higher-level sugar (`quod.if`, `quod.while`, `quod.for`,
-  `quod.let`, `quod.assign`, `quod.return_int`, `quod.expr_stmt`, …)
-  that lowers to multi-step IR with basic blocks and entry-block allocas.
+  `quod.let`, `quod.assign`, `quod.return_expr`, `quod.return`,
+  `quod.expr_stmt`, `quod.match`, `quod.with_arena`, `quod.try`,
+  `quod.struct_init`, `quod.enum_init`, `quod.field_set`, `quod.store`,
+  …) that lowers to multi-step IR with basic blocks and entry-block
+  allocas.
 
 Author at the `quod.*` layer mostly; drop to `llvm.*` for primitives.
+
+Structured types: programs may define `StructDef`s (records, by-value)
+and `EnumDef`s (tagged unions, one variant per arm). 2-variant enums
+where exactly one variant has a single payload field and the other has
+none are `?`-eligible — postfix `?` propagates the sad variant up.
 
 ## Three claim regimes
 
@@ -44,53 +52,92 @@ quod schema                              # list categories
 quod schema --category statement         # kinds in a category
 quod schema quod.let                     # full schema + minimal example
 quod schema Function                     # whole-function shape
+quod schema EnumDef                      # whole-enum shape
 ```
+
+`quod <verb> --help` is the authoritative reference for every flag
+(LANGUAGE.md and GUIDE.md don't repeat the help text). When in doubt
+about a flag's semantics, ask the CLI.
+
+## Stdlib tiers
+
+Programs declare `imports` (top-level array). Modules merge in at
+build time, first-wins by name:
+
+- `core.*` — pure quod, no runtime deps. Always available.
+- `alloc.*` — needs the arena allocator. Disable with `--no-alloc`.
+- `std.*` — needs hosted OS / libc. Disable with `--no-std`.
+
+`--no-alloc` also refuses `with_arena` (it desugars to alloc-tier
+externs). Common modules: `core.bytes`, `core.str`, `alloc.arena`,
+`alloc.str`, `alloc.json`, `std.io`. See LANGUAGE.md for the list and
+their entry points; `quod -f src/quod/stdlib/<name>.json show` opens
+any module standalone.
 
 ## CLI tree at a glance
 
-```
-quod init -t {hello|guarded|empty}    # writes quod.toml + program.json
-quod ingest SOURCE [-n NAME]          # ingest a C source file into a fresh project
-quod -p NAME ...                      # select a [[program]] (omit if only one)
-quod check                            # parse, lower, LLVM-verify (no artifacts)
-quod build [--profile N] [--show-ir]  # → object → linked binary, per [[program.bin]]
-quod run [--bin NAME] [-- ARGS...]    # build then exec
-quod show [--hashes]                  # whole program, canonical form
-quod find PREFIX                      # resolve a content-hash prefix
-quod schema [--category C | KIND]     # node shapes
+Globals (apply before any subcommand):
 
-quod fn ls / show REF / add - / rm REF
+```
+quod -c PATH ...     # quod.toml at non-default path
+quod -p NAME ...     # select a [[program]] in a workspace
+quod -f PATH ...     # bypass quod.toml; inspect a standalone program.json
+quod --no-color ...  # ANSI off
+```
+
+Lifecycle / inspection:
+
+```
+quod init -t {hello|guarded|empty} [--force]
+quod ingest SOURCE [-n NAME] [--import MOD]...
+quod check
+quod build [--profile N] [--target T] [--link/--no-link] [--show-ir]
+           [--enforce-axiom V] [--enforce-witness V] [--enforce-lattice V]
+           [--no-std] [--no-alloc]
+quod run   [--bin NAME] [-- ARGS...]
+quod show  [--hashes] [--json]
+quod find  PREFIX [--json]
+quod schema [--category C | KIND]
+```
+
+Functions, claims, statements:
+
+```
+quod fn ls / show REF / add SPEC / add --script "..." / add --script-file F / rename OLD NEW / rm REF
 quod fn callers TARGET
 quod fn data-flow FN PARAM
 quod fn call-graph
-quod fn unconstrained                 # params with no claim attached
+quod fn unconstrained
 
 quod claim ls [FN]
 quod claim add   FN KIND [TARGET] [--min N] [--max N] [--regime ...] [--enforcement ...]
 quod claim relax FN KIND [TARGET]
-quod claim prove FN KIND [TARGET] [--min N] [--max N]
-quod claim verify                     # re-hash + re-run every stored proof
-quod claim suggest [--top-n N]        # rank candidate claims by codegen impact
-quod claim derive                     # show lattice-derived claims
+quod claim prove FN KIND [TARGET] [--min N] [--max N] [--provider NAME]
+quod claim verify
+quod claim suggest [--top-n N]
+quod claim derive
 
 quod stmt add FN - [--at-end | --at-start | --before HASH | --after HASH]
 quod stmt rm FN HASH_PREFIX
+```
 
-quod const ls / add NAME VALUE / rm NAME
-quod extern ls / add NAME [--arity N | --param-type T ...] [--return-type T] [--varargs]
-quod extern rm NAME
+Top-level declarations:
+
+```
+quod const  ls / add NAME VALUE / rm NAME / rename OLD NEW
+quod struct ls / show NAME / add NAME FIELDS... / rm NAME / rename OLD NEW
+quod enum   ls / show NAME / add SPEC / rm NAME / rename OLD NEW / rename-variant ENUM OLD NEW
+quod extern ls / add NAME [...] / rm NAME / ingest HEADER
 
 quod note add FN TEXT
 quod note rm  FN INDEX
 
-quod provider ls                      # registered claim providers (regime + modes)
+quod provider ls
 ```
 
-For `fn add` and `stmt add`, pass JSON on stdin (`-`).
-
-For function bodies of any complexity, prefer `quod fn add --script
-"fn ... { ... }"` — a compact textual surface that emits the same
-JSON nodes (see "Authoring with quod-script" below).
+For `fn add`, `stmt add`, `enum add`, pass JSON on stdin (`-`) or a
+path. For function bodies of any complexity, prefer
+`quod fn add --script "fn ... { ... }"` — see "Authoring code" below.
 
 ## Authoring workflows
 
@@ -108,38 +155,53 @@ Typical next step depends on the template: `quod show` to inspect,
 `quod run` for hello, `quod fn unconstrained` → `quod claim suggest`
 for guarded.
 
-### Adding code
+### Authoring code
 
 Hashes are content-addressable. `quod show` prints them as `[abc123]`
 prefixes; the CLI accepts any unique prefix anywhere a name is taken.
 
-To add a function:
+**Whole functions — preferred:** quod-script via
+`quod fn add --script "fn name(p: T, ...) -> T { ... }"`. Compact
+textual surface that emits the same JSON nodes. The grammar covers:
 
-- **Preferred for non-trivial bodies:** `quod fn add --script "fn name(p: T, ...) -> T { ... }"`.
-  The script grammar covers `let`, `if`/`else`, `while`, `for X: T in lo..hi`,
-  `return [expr]`, `store(p, v)`, `with_arena name (capacity = N) { ... }`,
-  and expressions: int/char/`null`/`true`/`false` literals, `&.const_name`,
-  field reads, calls, `Struct { f: e, ... }`, `load[T](p)`,
-  `widen(e to T)` / `uwiden(e to T)`, `ptr_offset(b, o)`, all binops, `&&` / `||`.
-  Use `--script-file path` (or `-` for stdin) for longer bodies.
-  Script literals are disabled in `if`/`while`/`for` cond positions —
-  wrap in parens if you really need a struct literal there.
-- **JSON path:** `quod schema Function` → construct JSON → `quod fn add -`
-  (stdin). Use this when you need claims, notes, or anything outside the
-  script grammar.
+- statements: `let` / `if`/`else` / `while` / `for X: T in lo..hi` /
+  `return [expr]` / `store(p, v)` / `match expr { Enum::Variant a, b
+  { ... } _ { ... } }` / `with_arena name (capacity = N) { ... }`.
+- expressions: int/char/`null`/`true`/`false` literals (with width
+  suffixes `0i8`/`42i32`), `&.const_name`, field reads, calls (dotted
+  names like `core.str.eq`), `Struct { f: e, ... }`,
+  `Enum::Variant { f: e, ... }`, postfix `?`, `sizeof[T]`,
+  `load[T](p)`, `widen(e to T)` / `uwiden(e to T)`,
+  `ptr_offset(b, o)`, all binops, `&&` / `||`.
 
-To add a statement to an existing function:
+Use `--script-file path` (or `-` for stdin) for longer bodies. Struct
+and enum literals are disabled in `if`/`while`/`for` cond positions to
+avoid `{`-ambiguity — wrap in parens if needed:
+`if ((Parser { … }).had_error == 0) { ... }`.
 
-1. `quod schema --category statement` for the canonical shape.
-2. `quod stmt add FN - --at-end` (or `--at-start` / `--before HASH` /
-   `--after HASH` for precise placement). The script surface covers
-   whole-function authoring, not statement-level edits.
-3. `quod check` to validate.
+Out of script's scope: claims, struct/enum/extern/const/import
+declarations. Use the dedicated CLI verbs for those.
+
+**Whole functions — JSON:** `quod schema Function` → construct JSON →
+`quod fn add -` (stdin). Use this when you want claims/notes attached
+inline.
+
+**Editing one statement:** the script surface is whole-function only.
+For statement-level edits use `quod stmt add FN - --at-end` (or
+`--at-start` / `--before HASH` / `--after HASH`) with a JSON spec on
+stdin. `quod schema --category statement` for valid kinds.
+
+**Top-level declarations:** structs, enums, externs, string
+constants, and notes have their own verbs (`struct add NAME f1:t1 f2:t2`,
+`enum add -` with a JSON `EnumDef`, etc.). Use `rename` / `rename-variant`
+to refactor — they update every reference in the program. Use
+`quod fn callers TARGET` and `quod show` to gauge blast radius before
+removing things.
 
 Removals (`fn rm`, `stmt rm`, `extern rm`, `const rm`) are permissive
-— they don't refuse if other code still references the target. The
-dangling reference surfaces at build time. Use `quod fn callers` first
-to gauge blast radius.
+— they don't refuse if other code still references the target.
+`struct rm` and `enum rm` are strict — they refuse if anything still
+references the type.
 
 ### Building and running
 
@@ -148,9 +210,15 @@ every `[[program.bin]]` in `quod.toml`. With multiple `[[program]]`
 entries, all of them are built unless you pass `quod -p NAME ...` to
 narrow it. `quod run` is build-then-execute.
 
-For an entry function with `int` params, pass them via `quod run -- ARGS...`
-— the synthesized `main` wrapper parses each via `atoll`, then trunc/sext's
-to the param's width.
+Useful build flags (see `quod build --help` for the full list):
+`--profile N` (LLVM opt level 0..3, 0 skips optimize), `--show-ir`
+(print optimized IR), `--enforce-axiom verify` (etc., turn `trust` →
+runtime branch + abort for that regime), `--no-std` /
+`--no-alloc` (refuse to resolve those tier imports).
+
+For an entry function with `int` params, pass them via
+`quod run -- ARGS...` — the synthesized `main` wrapper parses each
+via `atoll`, then trunc/sext's to the param's width.
 
 Use `quod check` as a fast sanity check after edits — no artifacts emitted.
 
@@ -222,9 +290,23 @@ claim-driven optimization.
   function-scoped (no target); `non_negative` / `int_range` need a
   parameter name.
 
-## Project layout in this repo
+## Where to look for more
+
+- **`GUIDE.md`** — end-to-end tour with real CLI sessions. Read first
+  for hello-world + first proof.
+- **`LANGUAGE.md`** — programmer-facing reference. Types (incl. enums),
+  expressions (incl. `?`/`sizeof`/struct+enum init), statements (incl.
+  `match`/`with_arena`), claims, the three stdlib tiers with module
+  contents, the script grammar, the CLI command-by-command. Reach for
+  this when authoring real programs.
+- **`DEVELOPING.md`** — internals + extension points. Module layout,
+  lowering pipeline, claim providers, stdlib resolution, runtime
+  archive, how to add a node kind / CLI command / stdlib module /
+  provider, the case-driven test harness, hashing.
+- **`quod <verb> --help`** — authoritative for flags and arguments.
 
 The quod source lives at `src/quod/` (Typer CLI, Pydantic node types,
 LLVM lowering, SMT-LIB encoding). Examples are under `examples/`,
-grouped by topic (`basics/`, `claims/`, `project_euler/`, …). The
-authoritative end-to-end tour is `GUIDE.md`.
+grouped by topic (`basics/`, `claims/`, `json_v3/`, `project_euler/`,
+…); `examples/json_demo/` is the canonical "consumer of the stdlib"
+program.
