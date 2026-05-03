@@ -260,7 +260,7 @@ it can't be a binary entry point on its own — the starter `quod.toml` for
 validate, and prove things about it.
 
 `quod fn unconstrained` is a helper that lists params with no claims —
-useful to see "what does this function not yet know about its inputs":
+useful to see "what does this function not know about its inputs":
 
 ```sh
 quod fn unconstrained
@@ -299,9 +299,9 @@ added non_negative(x) on f [regime=axiom, enforcement=trust]
 f: non_negative(x)
 ```
 
-If a future version of `f` is called with `x = -5`, the program is wrong:
-the optimizer will have eliminated the `x < 0` branch entirely on the
-strength of the claim, and behavior is undefined.
+If `f` is called with `x = -5`, the program is wrong: the optimizer
+has eliminated the `x < 0` branch entirely on the strength of the
+claim, and behavior is undefined.
 
 To remove a claim:
 
@@ -422,12 +422,11 @@ into narrower struct fields (e.g. `Parser.had_error` is `i8`, so write
 the literal adopts the function's declared return type, so `return 0`
 works from any int-returning function without a suffix.
 
-What it deliberately doesn't do: claims (`@`-style annotations are
-out — claims have their own surface), struct definitions, externs,
-string constants, imports. Those stay on the existing `quod struct
-add` / `quod extern add` / `quod const add` / `quod claim add`
-commands. There's no round-trip with `quod show` (yet) — the script is
-purely an input format.
+Out of scope for the script: claims (`@`-style annotations are out —
+claims have their own surface), struct definitions, externs, string
+constants, imports. Those are CLI verbs (`quod struct add` /
+`quod extern add` / `quod const add` / `quod claim add`). Script is
+one-way: an input format, with no round-trip from `quod show`.
 
 When the grammar can't disambiguate a `{` (e.g. `if (Foo { … })` —
 struct literal or block?), Rust-style: struct literals are disabled

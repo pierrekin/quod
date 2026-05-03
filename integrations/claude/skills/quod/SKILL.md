@@ -132,8 +132,8 @@ To add a statement to an existing function:
 
 1. `quod schema --category statement` for the canonical shape.
 2. `quod stmt add FN - --at-end` (or `--at-start` / `--before HASH` /
-   `--after HASH` for precise placement). The script surface doesn't
-   cover statement-level edits yet.
+   `--after HASH` for precise placement). The script surface covers
+   whole-function authoring, not statement-level edits.
 3. `quod check` to validate.
 
 Removals (`fn rm`, `stmt rm`, `extern rm`, `const rm`) are permissive
