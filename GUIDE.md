@@ -17,8 +17,11 @@ Two layers of nodes:
   `llvm.const_int`, `llvm.param_ref`, …). One node = roughly one IR
   instruction.
 - `quod.*` — higher-level sugar (`quod.if`, `quod.while`, `quod.for`,
-  `quod.let`, `quod.assign`, `quod.return_int`, `quod.expr_stmt`, …) that
-  lowers to multi-step IR — control flow with basic blocks, allocas at the
+  `quod.let`, `quod.assign`, `quod.return_expr`, `quod.expr_stmt`,
+  `quod.match`, `quod.with_arena`, `quod.struct_init`, `quod.enum_init`,
+  `quod.field`, `quod.field_set`, `quod.load`, `quod.load_field`,
+  `quod.store`, `quod.store_field`, `quod.try`, …) that lowers to
+  multi-step IR — control flow with basic blocks, allocas at the
   entry block for locals, etc.
 
 You write at the `quod.*` layer mostly, and drop to `llvm.*` for the
@@ -94,13 +97,17 @@ The `program.json` itself:
                         "args": [{"kind": "quod.string_ref", "name": ".str.greeting"}]
                     }
                 },
-                {"kind": "quod.return_int", "value": 0}
+                {"kind": "quod.return_expr",
+                 "value": {"kind": "llvm.const_int",
+                           "type": {"kind": "llvm.i32"}, "value": 0}}
             ],
             "claims": []
         }
     ],
     "externs": [
-        {"name": "puts", "param_types": [{"kind": "llvm.i8_ptr"}]}
+        {"name": "puts",
+         "param_types": [{"kind": "llvm.i8_ptr"}],
+         "linkage": {"kind": "linkage.libc"}}
     ]
 }
 ```
@@ -108,8 +115,12 @@ The `program.json` itself:
 That's the whole language: a `Program` with `constants`, `externs`, and
 `functions`. Each function declares typed `params` (each a `{name, type}`
 node) and a `return_type` chosen from `llvm.i1` / `i8` / `i16` / `i32` /
-`i64`. The `body` is a list of statements; `claims` are optional. Every
-node has a `kind` discriminator.
+`i64` (or, in non-entry functions, named `llvm.struct` / `llvm.enum`,
+plus `llvm.void`). The `body` is a list of statements; `claims` are
+optional. Every node has a `kind` discriminator. Every `extern` carries
+a `linkage` recording where the symbol comes from — `linkage.libc` for
+clang's default link line, `linkage.runtime` for symbols defined in
+quod's runtime archive (`src/quod/runtime/*.c` compiled into libquodrt).
 
 ## 2. Inspect
 
@@ -122,18 +133,21 @@ quod show
 ```
 
 ```
-[d39337f21f95]  program {
+[4c31e6f98444]  program {
                   constants:
 [cd8f4e38d2c2]      .str.greeting = 'hello, world'
                   externs:
-[a271725532b7]      extern puts(i8*) -> i32
+[f43f3f675bcd]      extern puts(i8*) -> i32  [libc]
                   functions:
-[740bab5f21fd]      main() -> i32 {
+[a76e248957cc]      main() -> i32 {
 [e90990997573]        puts(&.str.greeting)
-[8220f593d9a1]        return 0
+[fdf8c691cafa]        return 0
                     }
                 }
 ```
+
+The `[libc]` tag on the extern line is its declared linkage — every
+extern says where its symbol comes from (`[libc]` or `[runtime]`).
 
 `quod fn ls` lists functions with their signatures:
 
@@ -142,7 +156,7 @@ quod fn ls
 ```
 
 ```
-[740bab5f21fd] main() -> i32
+[a76e248957cc] main() -> i32
 ```
 
 `quod fn show NAME` prints just one function (accepts a name or a hash
@@ -153,9 +167,9 @@ quod fn show main
 ```
 
 ```
-[740bab5f21fd]  main() -> i32 {
+[a76e248957cc]  main() -> i32 {
 [e90990997573]    puts(&.str.greeting)
-[8220f593d9a1]    return 0
+[fdf8c691cafa]    return 0
                 }
 ```
 
@@ -180,16 +194,18 @@ quod show --hashes
 ```
 
 ```
-d39337f21f95  Program
+4c31e6f98444  Program
 cd8f4e38d2c2  StringConstant
-740bab5f21fd  Function
+a76e248957cc  Function
 79cac65d1b69  I32Type
 e90990997573  ExprStmt
 55f87d55fb52  Call
 adfa48c7f0bc  StringRef
-8220f593d9a1  ReturnInt
-a271725532b7  ExternFunction
+fdf8c691cafa  ReturnExpr
+38b5c3b55d7e  IntLit
+f43f3f675bcd  ExternFunction
 617dda8608f6  I8PtrType
+bd1683d9b7f4  LibcLinkage
 ```
 
 ## 3. Build and run
@@ -450,8 +466,14 @@ A few commands that round out the tour:
 - `quod stmt add FN SPEC --at-end` — append a statement (read JSON spec
   from stdin or a path).
 - `quod fn add SPEC` — append a whole function.
-- `quod extern add NAME --param-type i8_ptr --varargs` — declare a libc
-  symbol like `printf`.
+- `quod extern add NAME --param-type i8_ptr --varargs --linkage libc` —
+  declare a libc symbol like `printf`. Use `--linkage runtime` for
+  symbols defined in `src/quod/runtime/*.c`.
+- `quod extern claim add NAME return_in_range --min N --max M` —
+  attach a return-range claim that the optimizer exploits at every
+  call site (lowered as `llvm.assume` after the call).
+- `quod extern set-linkage NAME libc|runtime` — change an extern's
+  declared provenance.
 
 ## 9. The CLI tree at a glance
 
@@ -490,8 +512,13 @@ quod stmt rm FN HASH_PREFIX
 quod const ls / add NAME VALUE / rm NAME
 
 quod extern ls
-quod extern add NAME [--arity N | --param-type T ...] [--return-type T] [--varargs]
+quod extern add NAME [--arity N | --param-type T ...] [--return-type T] [--varargs] [--linkage libc|runtime]
+quod extern set-linkage NAME libc|runtime
 quod extern rm NAME
+quod extern ingest HEADER.h
+quod extern claim ls [NAME]
+quod extern claim add NAME KIND [--min N] [--max N] [--regime ...] [--enforcement ...]
+quod extern claim relax NAME KIND
 
 quod note add FN TEXT
 quod note rm FN INDEX

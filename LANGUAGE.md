@@ -22,10 +22,11 @@ Two layers:
   `llvm.const_int`, `llvm.call`, `llvm.param_ref`, …).
 - `quod.*` — sugar over LLVM: control flow (`quod.if`, `quod.while`,
   `quod.for`, `quod.match`), bindings (`quod.let`, `quod.assign`),
-  effectful statements (`quod.expr_stmt`, `quod.store`,
-  `quod.field_set`), structured types (`quod.struct_init`,
-  `quod.enum_init`, `quod.field`), and a few computed expressions
-  (`quod.sizeof`, `quod.ptr_offset`, `quod.widen`, `quod.load`,
+  effectful statements (`quod.expr_stmt`, `quod.store`, `quod.store_field`,
+  `quod.field_set`, `quod.with_arena`), structured types
+  (`quod.struct_init`, `quod.enum_init`, `quod.field`), and a few
+  computed expressions (`quod.sizeof`, `quod.ptr_offset`, `quod.widen`,
+  `quod.load`, `quod.load_field`, `quod.null_ptr`, `quod.char_lit`,
   `quod.try`).
 
 You write at the `quod.*` layer, dropping to `llvm.*` for primitives.
@@ -62,9 +63,12 @@ extension.
 
 ### Structs
 
-Records, by-value, no recursion (a struct can't contain itself, even
-transitively). Pointers to structs are not modelled; if you need a
-pointer to one, hand-marshal through `i8*`.
+Records, by-value, no by-value recursion (a struct can't contain itself
+directly or transitively as a value field). Pointer-to-struct uses
+`i8*` as the universal pointer type — fine for opaque handles, and for
+self-referential shapes (e.g. linked-list nodes) where the next-pointer
+field is typed `i8*` and accessed via `quod.load_field` /
+`quod.store_field`.
 
 ```sh
 quod struct add Point  x:i32 y:i32
@@ -78,10 +82,21 @@ Author a struct value with `quod.struct_init`:
  "fields": [{"name": "x", "value": ...}, {"name": "y", "value": ...}]}
 ```
 
-Read a field with `quod.field`. Write to a struct-typed local with
-`quod.field_set` (the local must have been introduced by `Let`).
+Two ways to read/write fields:
 
-Lowered to an LLVM identified struct; passed and returned by value.
+- **By value** — `quod.field` (read) and `quod.field_set` (write). The
+  read takes a struct-typed expression and returns the field's value;
+  the write mutates a Let-introduced struct local. Use these when the
+  whole struct lives in a register.
+- **Through a pointer** — `quod.load_field` (read) and
+  `quod.store_field` (write). Both take an `i8*` plus a struct-type
+  name and a field name; lowered as `bitcast(ptr, T*)` + `getelementptr`
+  + `load` / `store`. Use these for struct-on-heap access (arena-
+  allocated records, linked-list nodes, anything whose lifetime
+  outlives a single function).
+
+Lowered to an LLVM identified struct; values are passed and returned
+by value, and the field-pointer accessors emit targeted GEPs.
 
 ### Enums (tagged unions)
 
@@ -196,6 +211,10 @@ Beyond `IntLit`, `ParamRef`, `LocalRef`, `Call`, `BinOp`,
 - **`quod.widen { value, target_type, sign? }`** — sext or zext an
   integer to a wider type. `sign` defaults to "signed".
 - **`quod.load { type, ptr }`** — load `T` from `i8*` (with bitcast).
+- **`quod.load_field { ptr, struct_type, name }`** — read one named
+  field of a struct stored at `ptr`. Lowered as bitcast + GEP + load,
+  so only the field is read (no whole-struct copy). Pair with
+  `quod.store_field` for round-trip access.
 - **`quod.null_ptr`** — `null` of `i8*`. Useful as the placeholder
   field value when an unused pointer field is required by `struct_init`.
 - **`quod.char_lit { value }`** — a single-byte literal written as a
@@ -221,6 +240,9 @@ Beyond `IntLit`, `ParamRef`, `LocalRef`, `Call`, `BinOp`,
 - **`quod.store { ptr, value }`** — write `value` (any scalar) to memory
   at `ptr` (an `i8*`). Bitcast + LLVM `store`. Pair with `ptr_offset`
   to write at non-zero offsets.
+- **`quod.store_field { ptr, struct_type, name, value }`** — write
+  `value` into one named field of a struct stored at `ptr`. Mutating
+  counterpart of `quod.load_field`; lowered as bitcast + GEP + store.
 - **`quod.match { scrutinee, arms[] }`** — see above.
 - **`quod.with_arena { name, capacity, body }`** — bracket a body with
   an arena that's allocated at entry and dropped on every exit edge.
@@ -234,9 +256,11 @@ Three kinds:
 - **`int_range(param, min?, max?)`** — `min <= param <= max` (either
   bound optional). Subsumes `non_negative` (use `int_range(p, min=0)`).
 - **`return_in_range(min?, max?)`** — function-scoped, on the return
-  value. Metadata-only at the lowering layer: provable
-  (`quod claim prove`) and verifiable (`quod claim verify`), but not
-  consumed by the LLVM optimizer.
+  value. Lowered as `llvm.assume` at every return site of the function,
+  so callers (after inlining or interprocedural propagation) see the
+  bound. Also valid on `extern` declarations — there the assume fires
+  at every call site so the optimizer learns the range without needing
+  the body in scope.
 
 Three regimes:
 
@@ -280,9 +304,11 @@ build time (first-wins by name).
 - `core.str` — `core.str.String { ptr: i8*, len: i64 }`,
   `core.str.eq(a, b)`, `core.str.slice(s, lo, hi)`,
   `core.str.from_cstr(c)`. Slice-by-pointer; no copies.
-- `alloc.arena` — externs for the C runtime (`quod_arena_new`,
-  `quod_arena_alloc`, `quod_arena_drop`). Imported transitively by
-  anything that allocates.
+- `alloc.arena` — quod-authored bump allocator with chunk-list growth.
+  Defines `alloc.arena.{new,alloc,drop,used}` and the underlying
+  `Chunk` / `Arena` structs. Calls libc `malloc` / `free` / `memset`
+  via `linkage.libc` externs. Imported transitively by anything that
+  allocates; auto-imported by `quod.with_arena`.
 - `alloc.str` — `alloc.str.to_cstr_in(s, arena)` — copy a `String`
   into the arena and zero-terminate, returning `i8*`. The bridge from
   quod strings to libc-shaped externs.
@@ -316,8 +342,7 @@ program is indistinguishable from one written flat. The on-disk
 ## Arenas
 
 quod's allocator-of-record. The model surface is `quod.with_arena`;
-the runtime is a tiny C bump allocator (`src/quod/runtime/quod_arena.c`)
-linked in as `libquodrt-vN.a`.
+the implementation is the quod-authored `alloc.arena` stdlib module.
 
 ```
 fn parse_one(text: i8_ptr, len: i64) -> i64 {
@@ -329,17 +354,31 @@ fn parse_one(text: i8_ptr, len: i64) -> i64 {
 }
 ```
 
-The desugaring auto-declares the arena externs if the program doesn't
-already have them, so a `with_arena` block is one-stop sugar — you only
-need to declare `quod_arena_alloc` (etc.) yourself when you call them
-directly inside the body.
+`with_arena` desugars to `alloc.arena.new(capacity)` at block entry and
+`alloc.arena.drop(handle)` on every exit edge. The desugaring
+auto-injects `imports: ["alloc.arena"]` when the program doesn't
+already declare it, so a `with_arena` block is one-stop sugar — call
+`alloc.arena.alloc(handle, n)` directly inside the body for typed
+buffer allocations.
 
 Arena pointers are valid until the matching drop. The allocator never
-relocates: when a bump runs out, a fresh chunk is added to a singly
-linked list. Bytes returned are zeroed (calloc-like).
+relocates: when a bump chunk runs out, a fresh chunk is added to a
+singly linked list of chunks owned by the arena. Bytes returned are
+zeroed (calloc-like). 16-byte alignment for every allocation.
 
 `--no-alloc` refuses `with_arena` and refuses to resolve any `alloc.*`
-or `std.*` import. Suitable for bare-metal targets.
+or `std.*` import. Suitable for bare-metal targets where libc `malloc`
+isn't available.
+
+### Optional native runtime
+
+quod also supports symbols defined in `src/quod/runtime/*.c`, compiled
+on demand into `libquodrt-vN.a` and linked by-reference. Declare them
+as externs with `linkage.runtime` and they're picked up automatically.
+The directory ships empty by default — the arena allocator lives in
+quod, not C — so this hook is reserved for primitives that genuinely
+can't be expressed at the language level (SIMD intrinsics, panic
+abort, etc.).
 
 ## quod-script — the textual surface
 
@@ -542,7 +581,8 @@ selects one program from a workspace. `quod -f PATH` bypasses
 | `quod const ls / add NAME VALUE / rm NAME / rename OLD NEW` | String constants. |
 | `quod struct ls / show NAME / add NAME FIELDS... / rm NAME / rename OLD NEW` | Structs. `add` takes `field:type` tokens. |
 | `quod enum ls / show NAME / add SPEC / rm NAME / rename OLD NEW / rename-variant ENUM OLD NEW` | Enums. `add` takes a JSON `EnumDef` on stdin. |
-| `quod extern ls / add NAME [...] / rm NAME / ingest HEADER` | Externs. `add` takes `--arity N` for all-i32, or `--param-type T...` + `--return-type T` for explicit, plus `--varargs` for printf-shaped. |
+| `quod extern ls / add NAME [...] / set-linkage NAME L / rm NAME / ingest HEADER` | Externs. `add` takes `--arity N` for all-i32, or `--param-type T...` + `--return-type T` for explicit, plus `--varargs` for printf-shaped, plus `--linkage libc\|runtime` (default libc). `set-linkage` flips the declared provenance in place. |
+| `quod extern claim ls / add NAME KIND [...] / relax NAME KIND` | Claims attached to extern declarations. Currently restricted to return-scoped kinds (e.g. `return_in_range`); lowered as `llvm.assume` after every call site so the optimizer learns the bound. |
 | `quod note add FN TEXT` / `note rm FN INDEX` | Free-form developer notes; metadata only. |
 
 ### Providers

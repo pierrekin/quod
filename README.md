@@ -49,11 +49,17 @@ src/quod/
     render.py       Span/line model + theme-driven syntax highlighting
     completion.py   Semantic shell completion for the CLI
     ingest/         Source-language importers (C via libclang)
+    stdlib.py       Import resolution + tier classification
+    stdlib/         quod-authored stdlib modules (core.* / alloc.* / std.*)
+    runtime.py      Optional native runtime: compiles src/quod/runtime/*.c
+                    into libquodrt-vN.a (empty by default)
     templates.py    Starter programs `quod init` can write
 examples/
     basics/         Hello-world, system() — minimal programs
+    arenas/         Arena allocator demos
     claims/         Axioms, witnesses, lattice, codegen-impact
     analysis/       Call graphs and cross-procedural lattice
+    json/, json_v2/, json_v3/, json_demo/  JSON parser, end-to-end
     project_euler/  Pretty solutions to PE problems (001..)
     c_ingest/       C sources + their `quod ingest` outputs
 integrations/
@@ -78,7 +84,12 @@ directly (or via the CLI's mutation commands), and quod lowers it to
 LLVM IR.
 
 The interesting part is **claims**: assertions attached to functions
-(`non_negative(x)`, `int_range(x, 0, 100)`, `return_in_range`, …) which
-the optimizer will trust. Claims can be added as axioms (you assert, the
-compiler trusts), proven via Z3 (`quod claim prove`), or derived from a
-fixed-point lattice analysis. See [GUIDE.md](GUIDE.md) for the full walk.
+(or to `extern` declarations, propagating to every call site) which the
+optimizer will trust. Kinds: `non_negative(x)`, `int_range(x, 0, 100)`,
+`return_in_range`. Sources: axioms (you assert, the compiler trusts),
+witnesses (proven via Z3, `quod claim prove`), or lattice (derived by
+quod's own fixed-point analysis on every compile). Externs additionally
+declare a `linkage` — `linkage.libc` for clang's default link line,
+`linkage.runtime` for symbols from the optional native runtime.
+
+See [GUIDE.md](GUIDE.md) for the full walk.

@@ -20,16 +20,16 @@ src/quod/
     proof.py           SMT-LIB lowering for `quod claim prove`
     providers.py       Pluggable claim providers (lattice / Z3)
     lower.py           Program → LLVM IR → object/binary
-    runtime.py         Compiles the C runtime archive (libquodrt-vN.a)
-    runtime/
-        quod_arena.c   Bump allocator runtime helper
+    runtime.py         Optional C runtime: compiles src/quod/runtime/*.c
+                       into libquodrt-vN.a if any sources exist (empty by
+                       default — the arena allocator lives in alloc.arena)
     stdlib.py          Import resolution + tier classification
     stdlib/
         core.bytes.json
         core.str.json
-        alloc.arena.json
+        alloc.arena.json   ← bump allocator (quod-authored)
         alloc.str.json
-        alloc.json.json   ← JSON parser, the keystone module
+        alloc.json.json    ← JSON parser, the keystone module
         std.io.json
     ingest/
         __init__.py
@@ -111,10 +111,13 @@ program).
    profile 0.
 7. **`target_machine.emit_object(parsed)`** → `<bin>.o`.
 8. **`build_runtime_archive(build_dir, target=target)`** — compiles
-   `runtime/*.c` into `libquodrt-<TAG>.a` if stale (cached by mtime);
-   linked unconditionally. Archive linking is by-reference, so unused
-   runtime code stays stripped.
-9. **`clang -target ... <obj> <archive> -o <bin>`** for each bin.
+   `src/quod/runtime/*.c` into `libquodrt-<TAG>.a` if any sources exist
+   (cached by mtime; returns `None` when the directory is empty —
+   the default state since the arena allocator lives in
+   `alloc.arena`). Archive linking is by-reference, so unused runtime
+   code stays stripped.
+9. **`clang -target ... <obj> [<archive>] -o <bin>`** for each bin.
+   The archive arg is omitted when `build_runtime_archive` returns None.
 
 Artifacts (`<bin>.unopt.ll`, `<bin>.opt.ll`, `<bin>.o`, `<bin>`) are
 returned in a `BinResult`.
@@ -122,8 +125,8 @@ returned in a `BinResult`.
 ### Why a static archive for the runtime?
 
 A bare `.o` would always pull every runtime symbol into the binary.
-A static `.a` is by-reference — programs that don't call
-`quod_arena_alloc` don't drag the arena code into their image.
+A static `.a` is by-reference — programs that don't call any runtime
+symbol drag none of it into their image.
 
 The archive is rebuilt per-program inside `build_dir`, not once at
 install time, because the runtime has to match `--target`; the
@@ -132,6 +135,12 @@ install-time host triple is wrong for cross-compiles.
 `_ARCHIVE_TAG` is encoded into the archive filename and bumps with
 any runtime ABI change so old caches invalidate without a manual
 `rm -rf build`.
+
+The runtime hook is reserved for primitives that genuinely can't be
+expressed in quod (SIMD intrinsics, panic abort, signal handlers,
+…). Everything that *can* live in quod should — see `alloc.arena.json`
+for an end-to-end example of authoring infrastructure as a stdlib
+module instead of a C file.
 
 ## Claims: the three regimes plus enforcement
 
@@ -231,9 +240,12 @@ recursively merging an import set into a Program before lowering.
    (`alloc.json.parse`, not `parse`) so user code that imports the
    module can't accidentally shadow a name that another module also
    uses.
-4. If the module requires runtime helpers, declare the externs in this
-   JSON file and arrange the runtime to provide them (see
-   `runtime/quod_arena.c` for the model).
+4. If the module needs library symbols, declare them as externs with
+   the appropriate linkage: `linkage.libc` for libc / clang's default
+   link line (`malloc`, `free`, `read`, `printf`, …), `linkage.runtime`
+   for symbols defined in `src/quod/runtime/*.c`. `alloc.arena.json` is
+   the worked example: it declares `malloc` / `free` / `memset` as
+   libc externs and implements its own bump allocator on top of them.
 5. There's no test runner specific to stdlib modules — write a
    `tests/cases/lang/...` case that imports the module and exercises
    the entry points end-to-end. The conftest auto-collects it.
@@ -312,8 +324,10 @@ Good worked examples in the codebase: `EnumDef` / `EnumInit` /
 `Match` for a structured-type kind with custom validators, `TryExpr`
 (`?`) for postfix-syntax + control-flow desugar, `SizeOf` for a
 target-data-driven constant expression, `WithArena` for a statement
-that desugars + auto-declares externs, `PtrOffset` for an integer-on-
-pointer binop modelled as its own node. All follow the pattern above.
+that desugars + auto-injects an import, `LoadField` / `StoreField`
+for pointer-targeting field access (bitcast + GEP + load/store),
+`PtrOffset` for an integer-on-pointer binop modelled as its own
+node. All follow the pattern above.
 
 ## Adding a CLI command
 

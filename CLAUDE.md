@@ -7,10 +7,13 @@ Guidance for Claude Code when working in this repo.
 quod is a small programming-language toolchain. Programs are JSON trees
 of typed Pydantic nodes (no parser); the `quod` CLI authors and edits
 them, lowers them through llvmlite to LLVM IR, and links a native binary
-via `clang`. Functions can carry **claims** (`non_negative`,
-`int_range`, `return_in_range`) that are either asserted (`axiom`),
-proven by Z3 (`witness`), or derived by a fixed-point analysis
-(`lattice`).
+via `clang`. Functions and `extern` declarations can carry **claims**
+(`non_negative`, `int_range`, `return_in_range`) that are either
+asserted (`axiom`), proven by Z3 (`witness`), or derived by a
+fixed-point analysis (`lattice`). Externs additionally declare a
+`linkage` (`linkage.libc` / `linkage.runtime`) recording where their
+symbol comes from — the linker driver picks up libc and the optional
+`src/quod/runtime/*.c` archive accordingly.
 
 ## Read these before authoring
 

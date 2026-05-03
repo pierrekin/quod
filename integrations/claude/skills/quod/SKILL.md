@@ -24,9 +24,12 @@ read project state from there.
 - `quod.*` — higher-level sugar (`quod.if`, `quod.while`, `quod.for`,
   `quod.let`, `quod.assign`, `quod.return_expr`, `quod.return`,
   `quod.expr_stmt`, `quod.match`, `quod.with_arena`, `quod.try`,
-  `quod.struct_init`, `quod.enum_init`, `quod.field_set`, `quod.store`,
-  …) that lowers to multi-step IR with basic blocks and entry-block
-  allocas.
+  `quod.struct_init`, `quod.enum_init`, `quod.field`, `quod.field_set`,
+  `quod.load`, `quod.load_field`, `quod.store`, `quod.store_field`,
+  `quod.ptr_offset`, `quod.sizeof`, `quod.widen`, `quod.null_ptr`, …)
+  that lowers to multi-step IR with basic blocks and entry-block
+  allocas. `load_field` / `store_field` are the pointer-targeting
+  field accessors — use them for struct-on-heap reads and writes.
 
 Author at the `quod.*` layer mostly; drop to `llvm.*` for primitives.
 
@@ -68,11 +71,11 @@ build time, first-wins by name:
 - `alloc.*` — needs the arena allocator. Disable with `--no-alloc`.
 - `std.*` — needs hosted OS / libc. Disable with `--no-std`.
 
-`--no-alloc` also refuses `with_arena` (it desugars to alloc-tier
-externs). Common modules: `core.bytes`, `core.str`, `alloc.arena`,
-`alloc.str`, `alloc.json`, `std.io`. See LANGUAGE.md for the list and
-their entry points; `quod -f src/quod/stdlib/<name>.json show` opens
-any module standalone.
+`--no-alloc` also refuses `with_arena` (it auto-imports `alloc.arena`).
+Common modules: `core.bytes`, `core.str`, `alloc.arena` (quod-authored
+bump allocator), `alloc.str`, `alloc.json`, `std.io`. See LANGUAGE.md
+for the list and their entry points; `quod -f src/quod/stdlib/<name>.json
+show` opens any module standalone.
 
 ## CLI tree at a glance
 
@@ -127,13 +130,22 @@ Top-level declarations:
 quod const  ls / add NAME VALUE / rm NAME / rename OLD NEW
 quod struct ls / show NAME / add NAME FIELDS... / rm NAME / rename OLD NEW
 quod enum   ls / show NAME / add SPEC / rm NAME / rename OLD NEW / rename-variant ENUM OLD NEW
-quod extern ls / add NAME [...] / rm NAME / ingest HEADER
+quod extern ls / add NAME [...] [--linkage libc|runtime] / set-linkage NAME L / rm NAME / ingest HEADER
+quod extern claim ls [NAME]
+quod extern claim add NAME KIND [--min N] [--max N] [--regime ...] [--enforcement ...]
+quod extern claim relax NAME KIND
 
 quod note add FN TEXT
 quod note rm  FN INDEX
 
 quod provider ls
 ```
+
+`extern add` defaults to `--linkage libc`. Use `--linkage runtime` for
+symbols defined in `src/quod/runtime/*.c` (compiled into libquodrt).
+`extern claim add` currently supports return-scoped kinds (e.g.
+`return_in_range`) — these lower as `llvm.assume` after each call site
+so the optimizer learns the bound at every caller.
 
 For `fn add`, `stmt add`, `enum add`, pass JSON on stdin (`-`) or a
 path. For function bodies of any complexity, prefer
