@@ -19,6 +19,7 @@ from pydantic import TypeAdapter, ValidationError
 from quod.hashing import node_hash
 from quod.model import (
     Function,
+    Linkage,
     Program,
     Statement,
     StringConstant,
@@ -340,6 +341,22 @@ def remove_extern_from_program(program: Program, name: str) -> Program:
     if kept == program.externs:
         raise KeyError(f"no extern named {name!r}")
     return program.model_copy(update={"externs": kept})
+
+
+def set_extern_linkage_in_program(program: Program, name: str, linkage: Linkage) -> Program:
+    """Replace `name`'s extern with one carrying the new `linkage`. Errors
+    if no such extern. Position in `program.externs` is preserved."""
+    found = False
+    new_externs = []
+    for ext in program.externs:
+        if ext.name == name:
+            new_externs.append(ext.model_copy(update={"linkage": linkage}))
+            found = True
+        else:
+            new_externs.append(ext)
+    if not found:
+        raise KeyError(f"no extern named {name!r}")
+    return program.model_copy(update={"externs": tuple(new_externs)})
 
 
 def add_struct_to_program(program: Program, struct_def: StructDef) -> Program:

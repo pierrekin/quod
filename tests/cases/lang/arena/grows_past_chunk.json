@@ -10,6 +10,9 @@
         ],
         "return_type": {
           "kind": "llvm.i8_ptr"
+        },
+        "linkage": {
+          "kind": "linkage.runtime"
         }
       },
       {
@@ -24,6 +27,9 @@
         ],
         "return_type": {
           "kind": "llvm.i8_ptr"
+        },
+        "linkage": {
+          "kind": "linkage.runtime"
         }
       },
       {
@@ -35,6 +41,9 @@
         ],
         "return_type": {
           "kind": "llvm.i64"
+        },
+        "linkage": {
+          "kind": "linkage.runtime"
         }
       },
       {
@@ -46,6 +55,9 @@
         ],
         "return_type": {
           "kind": "llvm.i64"
+        },
+        "linkage": {
+          "kind": "linkage.runtime"
         }
       }
     ],

@@ -229,6 +229,13 @@ def extern_names(ctx, incomplete: str) -> list[str]:
 
 
 @_traced
+def linkage_names(ctx, incomplete: str) -> list[str]:
+    """The fixed enum of valid `--linkage` / set-linkage values. No program
+    load needed; these are language-level, not program-state."""
+    return [n for n in ("libc", "runtime") if n.startswith(incomplete)]
+
+
+@_traced
 def constant_names(ctx, incomplete: str) -> list[str]:
     program = _safe_load_program(ctx)
     if program is None:

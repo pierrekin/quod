@@ -6254,7 +6254,10 @@
           "kind": "llvm.i8_ptr"
         }
       ],
-      "varargs": true
+      "varargs": true,
+      "linkage": {
+        "kind": "linkage.libc"
+      }
     },
     {
       "name": "quod_arena_alloc",
@@ -6268,6 +6271,9 @@
       ],
       "return_type": {
         "kind": "llvm.i8_ptr"
+      },
+      "linkage": {
+        "kind": "linkage.runtime"
       }
     }
   ],

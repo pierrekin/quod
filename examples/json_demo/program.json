@@ -717,7 +717,10 @@
         {
           "kind": "llvm.i8_ptr"
         }
-      ]
+      ],
+      "linkage": {
+        "kind": "linkage.libc"
+      }
     },
     {
       "name": "printf",
@@ -726,7 +729,10 @@
           "kind": "llvm.i8_ptr"
         }
       ],
-      "varargs": true
+      "varargs": true,
+      "linkage": {
+        "kind": "linkage.libc"
+      }
     }
   ],
   "imports": [

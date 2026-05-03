@@ -10,6 +10,7 @@ from quod.model import (
     I32Type,
     If,
     IntLit,
+    LibcLinkage,
     Param,
     ParamRef,
     Program,
@@ -24,7 +25,7 @@ _I32 = I32Type()
 
 HELLO_WORLD = Program(
     constants=(StringConstant(name=".str.greeting", value="hello, world"),),
-    externs=(ExternFunction(name="puts", param_types=(I8PtrType(),)),),
+    externs=(ExternFunction(name="puts", param_types=(I8PtrType(),), linkage=LibcLinkage()),),
     functions=(
         Function(
             name="main",

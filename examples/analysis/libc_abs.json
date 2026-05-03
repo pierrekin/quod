@@ -3,7 +3,10 @@
   "externs": [
     {
       "name": "abs",
-      "arity": 1
+      "arity": 1,
+      "linkage": {
+        "kind": "linkage.libc"
+      }
     }
   ],
   "functions": [

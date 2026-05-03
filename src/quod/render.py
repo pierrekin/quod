@@ -487,12 +487,17 @@ def _function_meta(fn: Function) -> tuple[Span, ...]:
     justification details are left out at this density — see `quod claim ls`
     for the full picture.
     """
-    if not fn.claims:
+    return _claim_meta(fn.claims)
+
+
+def _claim_meta(claims: tuple) -> tuple[Span, ...]:
+    """Regime-grouped claim summary used by both functions and externs."""
+    if not claims:
         return ()
     out: list[Span] = [Span("[", "punct")]
     first = True
     for regime in _REGIME_ORDER:
-        cs = [c for c in fn.claims if c.regime == regime]
+        cs = [c for c in claims if c.regime == regime]
         if not cs:
             continue
         if not first:
@@ -543,7 +548,7 @@ def function_signature_spans(fn: Function) -> tuple[Span, ...]:
 
 
 def extern_signature_spans(ext: ExternFunction) -> tuple[Span, ...]:
-    """`name(types..., ...) -> ret` — leading `extern ` keyword is the caller's choice."""
+    """`name(types..., ...) -> ret  [linkage]` — leading `extern ` keyword is the caller's choice."""
     out: list[Span] = [Span(ext.name, "fn_name"), Span("(", "punct")]
     types = list(ext.effective_param_types())
     for i, t in enumerate(types):
@@ -558,7 +563,16 @@ def extern_signature_spans(ext: ExternFunction) -> tuple[Span, ...]:
         Span(") ", "punct"), Span("->", "op"), Span(" ", "ws"),
         type_span(ext.return_type),
     ))
+    out.extend((Span("  ", "ws"), Span(_linkage_tag(ext.linkage), "comment")))
     return tuple(out)
+
+
+def _linkage_tag(linkage) -> str:
+    """Bracketed shorthand for an extern's linkage. Drops the `linkage.`
+    prefix so the tag stays compact (`[libc]`, `[runtime]`)."""
+    kind = linkage.kind  # e.g. "linkage.libc"
+    short = kind.split(".", 1)[1] if "." in kind else kind
+    return f"[{short}]"
 
 
 def constant_spans(c: StringConstant) -> tuple[Span, ...]:
@@ -604,7 +618,7 @@ def format_function_lines(fn: Function, indent: int = 0) -> Iterator[Line]:
 
 def _extern_line(ext: ExternFunction, indent: int) -> Line:
     spans = (Span("extern", "keyword"), Span(" ", "ws"), *extern_signature_spans(ext))
-    return Line(ext, indent, spans)
+    return Line(ext, indent, spans, meta=_claim_meta(ext.claims))
 
 
 def _constant_line(c: StringConstant, indent: int) -> Line:

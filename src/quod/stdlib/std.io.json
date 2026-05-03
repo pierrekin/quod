@@ -56,7 +56,13 @@
         {
           "kind": "llvm.i32"
         }
-      ]
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "linkage": {
+        "kind": "linkage.libc"
+      }
     },
     {
       "name": "read",
@@ -73,7 +79,16 @@
       ],
       "return_type": {
         "kind": "llvm.i64"
-      }
+      },
+      "linkage": {
+        "kind": "linkage.libc"
+      },
+      "claims": [
+        {
+          "kind": "return_in_range",
+          "min": -1
+        }
+      ]
     },
     {
       "name": "close",
@@ -81,7 +96,13 @@
         {
           "kind": "llvm.i32"
         }
-      ]
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "linkage": {
+        "kind": "linkage.libc"
+      }
     },
     {
       "name": "lseek",
@@ -98,6 +119,9 @@
       ],
       "return_type": {
         "kind": "llvm.i64"
+      },
+      "linkage": {
+        "kind": "linkage.libc"
       }
     }
   ],

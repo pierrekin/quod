@@ -36,6 +36,8 @@ from quod.model import (
     EnumVariant,
     ExprStmt,
     ExternFunction,
+    LibcLinkage,
+    RuntimeLinkage,
     FieldInit,
     FieldRead,
     FieldSet,
@@ -584,12 +586,26 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     },
     "ExternFunction": {
         "class": ExternFunction,
-        "summary": "A libc-or-similar function declared but not defined here. Use `arity` for all-i32 sigs, or `param_types` for typed.",
+        "summary": "A libc-or-similar function declared but not defined here. Use `arity` for all-i32 sigs, or `param_types` for typed. `linkage` is required and records the symbol's home: `linkage.libc` for clang-linked libc symbols, `linkage.runtime` for symbols in quod's runtime archive (libquodrt). `claims` carry contracts the optimizer exploits at every call site (return-scoped only today; lowered as `llvm.assume` after each call).",
         "example": {
-            "name": "printf",
-            "param_types": [{"kind": "llvm.i8_ptr"}],
-            "varargs": True,
+            "name": "read",
+            "param_types": [
+                {"kind": "llvm.i32"}, {"kind": "llvm.i8_ptr"}, {"kind": "llvm.i64"}
+            ],
+            "return_type": {"kind": "llvm.i64"},
+            "linkage": {"kind": "linkage.libc"},
+            "claims": [{"kind": "return_in_range", "min": -1}],
         },
+    },
+    "LibcLinkage": {
+        "class": LibcLinkage,
+        "summary": "Extern provenance: the symbol comes from libc; clang's default link line provides it.",
+        "example": {"kind": "linkage.libc"},
+    },
+    "RuntimeLinkage": {
+        "class": RuntimeLinkage,
+        "summary": "Extern provenance: the symbol comes from quod's runtime archive (every .c file under src/quod/runtime/ is compiled into libquodrt).",
+        "example": {"kind": "linkage.runtime"},
     },
     "Function": {
         "class": Function,
@@ -723,6 +739,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "StructDef", "StructField", "FieldInit",
         "EnumDef", "EnumVariant", "EnumPayloadField", "MatchArm",
     ],
+    "linkage": ["LibcLinkage", "RuntimeLinkage"],
 }
 
 

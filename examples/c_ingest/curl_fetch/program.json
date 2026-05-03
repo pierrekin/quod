@@ -84,6 +84,9 @@
       "name": "curl_easy_init",
       "return_type": {
         "kind": "llvm.i8_ptr"
+      },
+      "linkage": {
+        "kind": "linkage.libc"
       }
     },
     {
@@ -96,7 +99,10 @@
           "kind": "llvm.i32"
         }
       ],
-      "varargs": true
+      "varargs": true,
+      "linkage": {
+        "kind": "linkage.libc"
+      }
     },
     {
       "name": "curl_easy_perform",
@@ -104,7 +110,10 @@
         {
           "kind": "llvm.i8_ptr"
         }
-      ]
+      ],
+      "linkage": {
+        "kind": "linkage.libc"
+      }
     }
   ]
 }

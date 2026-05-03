@@ -889,6 +889,30 @@ class Function(_Node):
         return None
 
 
+# ---------- Extern linkage ----------
+#
+# Records where an extern's symbol is expected to come from. Today this is
+# purely declarative — the build pipeline resolves libc via clang and the
+# quod runtime via libquodrt regardless of what's declared. The annotation
+# exists so future extern-level claims can carry provenance ("axiom: trust
+# the libc manpage" vs "witness: we proved our runtime against this") and
+# so future tools can validate that a `linkage.runtime` symbol actually
+# exists in the shipped runtime.
+
+class LibcLinkage(_Node):
+    kind: Literal["linkage.libc"] = "linkage.libc"
+
+
+class RuntimeLinkage(_Node):
+    kind: Literal["linkage.runtime"] = "linkage.runtime"
+
+
+Linkage = Annotated[
+    Union[LibcLinkage, RuntimeLinkage],
+    Field(discriminator="kind"),
+]
+
+
 class ExternFunction(_Node):
     """A libc-or-similar function declared but not defined by us.
 
@@ -897,12 +921,47 @@ class ExternFunction(_Node):
     use time. For non-i32 sigs, set `param_types` and `return_type` directly
     and leave `arity` at 0. Set `varargs=True` for variadic libc functions
     like printf — callers may pass any number of args after the fixed prefix.
+
+    `linkage` records the symbol's provenance (libc vs quod runtime) and
+    is required — every extern has a home, and "unspecified" is not a
+    real semantic state. The annotation is what lets future extern-level
+    claims carry provenance ("axiom: trust the libc manpage" vs "witness:
+    we proved our runtime against this") and what lets future tools
+    validate that a `linkage.runtime` symbol actually exists in the
+    shipped runtime archive.
+
+    `claims` is a tuple of contracts the caller may exploit at every call
+    site. Currently restricted to return-scoped kinds (e.g.
+    `return_in_range`); param-scoped kinds (`non_negative`, `int_range`)
+    need named extern params, which is a follow-up model migration.
     """
     name: str
     arity: int = 0
     param_types: tuple[Type, ...] = ()
     return_type: ReturnType = I32Type()
     varargs: bool = False
+    linkage: Linkage
+    claims: tuple[Claim, ...] = ()
+
+    @model_validator(mode="after")
+    def _check_claims_supported(self):
+        ret_is_int = isinstance(
+            self.return_type, (I1Type, I8Type, I16Type, I32Type, I64Type)
+        )
+        for c in self.claims:
+            if claim_param(c) is not None:
+                raise ValueError(
+                    f"extern {self.name!r}: claim kind {c.kind!r} targets a "
+                    f"parameter, but externs don't yet carry named params. "
+                    f"Only return-scoped claims (e.g. return_in_range) are "
+                    f"supported on externs in this revision."
+                )
+            if isinstance(c, ReturnInRangeClaim) and not ret_is_int:
+                raise ValueError(
+                    f"extern {self.name!r}: return_in_range claim requires an "
+                    f"integer return type, got {self.return_type.kind!r}"
+                )
+        return self
 
     @model_serializer(mode="wrap")
     def _drop_extern_defaults(self, handler, info):
@@ -917,6 +976,8 @@ class ExternFunction(_Node):
             data.pop("return_type", None)
         if not self.varargs:
             data.pop("varargs", None)
+        if not self.claims:
+            data.pop("claims", None)
         return data
 
     def effective_param_types(self) -> tuple["Type", ...]:
@@ -1425,6 +1486,55 @@ def add_claim(program: Program, function: str, claim: Claim) -> Program:
             )
     new_fn = fn.model_copy(update={"claims": fn.claims + (claim,)})
     return replace_function(program, new_fn)
+
+
+def add_extern_claim(program: Program, extern: str, claim: Claim) -> Program:
+    """Append a claim to the named extern. Mirrors add_claim's duplicate-check
+    contract — re-adding the same kind/target requires `relax` first."""
+    target = claim_param(claim)
+    new_externs = []
+    found = False
+    for ext in program.externs:
+        if ext.name != extern:
+            new_externs.append(ext)
+            continue
+        found = True
+        for existing in ext.claims:
+            if existing.kind == claim.kind and claim_param(existing) == target:
+                scope = f"on {target!r}" if target is not None else "on return value"
+                raise ValueError(
+                    f"{claim.kind} claim {scope} already present on extern "
+                    f"{extern}; relax it first if you need to change bounds"
+                )
+        new_externs.append(ext.model_copy(update={"claims": ext.claims + (claim,)}))
+    if not found:
+        raise KeyError(f"no extern named {extern!r}")
+    return program.model_copy(update={"externs": tuple(new_externs)})
+
+
+def relax_extern_claim(program: Program, extern: str, kind: str, target: str | None) -> Program:
+    """Remove the matching extern claim. target=None matches return-value claims."""
+    new_externs = []
+    found_extern = False
+    removed = False
+    for ext in program.externs:
+        if ext.name != extern:
+            new_externs.append(ext)
+            continue
+        found_extern = True
+        kept = tuple(
+            c for c in ext.claims
+            if not (c.kind == kind and claim_param(c) == target)
+        )
+        if len(kept) != len(ext.claims):
+            removed = True
+        new_externs.append(ext.model_copy(update={"claims": kept}))
+    if not found_extern:
+        raise KeyError(f"no extern named {extern!r}")
+    if not removed:
+        scope = f"on {target!r}" if target is not None else "on return value"
+        raise KeyError(f"no {kind} claim {scope} on extern {extern!r}")
+    return program.model_copy(update={"externs": tuple(new_externs)})
 
 
 def relax_claim(program: Program, function: str, kind: str, target: str | None) -> Program:

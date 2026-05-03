@@ -3,17 +3,20 @@
     {
       "name": "quod_arena_new",
       "param_types": [{ "kind": "llvm.i64" }],
-      "return_type": { "kind": "llvm.i8_ptr" }
+      "return_type": { "kind": "llvm.i8_ptr" },
+      "linkage": { "kind": "linkage.runtime" }
     },
     {
       "name": "quod_arena_alloc",
       "param_types": [{ "kind": "llvm.i8_ptr" }, { "kind": "llvm.i64" }],
-      "return_type": { "kind": "llvm.i8_ptr" }
+      "return_type": { "kind": "llvm.i8_ptr" },
+      "linkage": { "kind": "linkage.runtime" }
     },
     {
       "name": "quod_arena_drop",
       "param_types": [{ "kind": "llvm.i8_ptr" }],
-      "return_type": { "kind": "llvm.void" }
+      "return_type": { "kind": "llvm.void" },
+      "linkage": { "kind": "linkage.runtime" }
     }
   ]
 }

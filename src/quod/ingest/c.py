@@ -33,6 +33,7 @@ from quod.model import (
     I64Type,
     If,
     IntLit,
+    LibcLinkage,
     Let,
     LocalRef,
     Param,
@@ -220,7 +221,11 @@ class _ProgramState:
         if name in self.externs:
             return
         if decl is None:
-            self.externs[name] = ExternFunction(name=name)
+            # Symbol couldn't be resolved (rare — usually a missing #include).
+            # We still emit the extern so the call type-checks; the linker
+            # surfaces the missing symbol later. Provenance is libc-class:
+            # we ingested from C source / a C header.
+            self.externs[name] = ExternFunction(name=name, linkage=LibcLinkage())
             return
         # IngestError propagates up — the caller fails the whole ingest.
         self.externs[name] = _build_extern_from_decl(cursor, decl)
@@ -244,6 +249,7 @@ def _build_extern_from_decl(call_cursor: cx.Cursor, decl: cx.Cursor) -> ExternFu
         param_types=param_types,
         return_type=return_type,
         varargs=fn_type.is_function_variadic(),
+        linkage=LibcLinkage(),
     )
 
 

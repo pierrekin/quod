@@ -53,6 +53,7 @@ from quod.editor import (
     read_json_arg,
     remove_constant_from_program,
     remove_extern_from_program,
+    set_extern_linkage_in_program,
     remove_statement_in_function,
     remove_enum_from_program,
     remove_struct_from_program,
@@ -73,20 +74,25 @@ from quod.model import (
     I64Type,
     IntRangeClaim,
     Justification,
+    LibcLinkage,
+    Linkage,
     ManualJustification,
     NonNegativeClaim,
     Program,
     ReturnInRangeClaim,
+    RuntimeLinkage,
     StringConstant,
     StructDef,
     StructField,
     StructType,
     Z3Justification,
     add_claim,
+    add_extern_claim,
     claim_param,
     function_callees,
     load_program,
     relax_claim,
+    relax_extern_claim,
     remove_function,
     replace_function,
     save_program,
@@ -136,6 +142,7 @@ fn_app = typer.Typer(no_args_is_help=True, help="Operations on functions.")
 claim_app = typer.Typer(no_args_is_help=True, help="Operations on claims.")
 stmt_app = typer.Typer(no_args_is_help=True, help="Operations on statements.")
 extern_app = typer.Typer(no_args_is_help=True, help="Operations on externs.")
+extern_claim_app = typer.Typer(no_args_is_help=True, help="Operations on extern claims.")
 note_app = typer.Typer(no_args_is_help=True, help="Operations on notes.")
 const_app = typer.Typer(no_args_is_help=True, help="Operations on string constants.")
 struct_app = typer.Typer(no_args_is_help=True, help="Operations on struct definitions.")
@@ -146,6 +153,7 @@ app.add_typer(fn_app, name="fn")
 app.add_typer(claim_app, name="claim")
 app.add_typer(stmt_app, name="stmt")
 app.add_typer(extern_app, name="extern")
+extern_app.add_typer(extern_claim_app, name="claim")
 app.add_typer(note_app, name="note")
 app.add_typer(const_app, name="const")
 app.add_typer(struct_app, name="struct")
@@ -1669,6 +1677,21 @@ _TYPE_NAMES = {
 }
 
 
+_LINKAGE_NAMES = {
+    "libc": LibcLinkage,
+    "runtime": RuntimeLinkage,
+}
+
+
+def _parse_linkage(s: str) -> Linkage:
+    cls = _LINKAGE_NAMES.get(s)
+    if cls is None:
+        raise typer.BadParameter(
+            f"unknown linkage {s!r}; choices: {', '.join(_LINKAGE_NAMES)}"
+        )
+    return cls()
+
+
 def _parse_type_name(
     s: str,
     *,
@@ -1721,8 +1744,17 @@ def extern_add(
     ),
     return_type: str = typer.Option("i32", "--return-type"),
     varargs: bool = typer.Option(False, "--varargs"),
+    linkage: str = typer.Option(
+        "libc", "--linkage",
+        help="Symbol provenance: 'libc' (clang links it) or 'runtime' (quod's libquodrt).",
+        autocompletion=_comp.linkage_names,
+    ),
 ) -> None:
-    """Declare an extern (libc-or-similar) function."""
+    """Declare an extern function and record its provenance.
+
+    `--linkage libc` (default) for symbols clang already links from libc;
+    `--linkage runtime` for symbols defined in quod's runtime archive
+    (libquodrt — every src/quod/runtime/*.c is compiled in)."""
     with _exclusive_lock():
         program = _load()
         if any(ext.name == name for ext in program.externs):
@@ -1736,12 +1768,14 @@ def extern_add(
         struct_names = tuple(sd.name for sd in program.structs)
         param_types = tuple(_parse_type_name(t, struct_names=struct_names) for t in param_type)
         ret_ty = _parse_type_name(return_type, struct_names=struct_names)
+        link_obj: Linkage = _parse_linkage(linkage)
         ext = ExternFunction(
             name=name,
             arity=arity if not param_types else 0,
             param_types=param_types,
             return_type=ret_ty,
             varargs=varargs,
+            linkage=link_obj,
         )
         new_externs = program.externs + (ext,)
         program = program.model_copy(update={"externs": new_externs})
@@ -1771,6 +1805,130 @@ def extern_rm(
             raise typer.Exit(1)
         _save(program)
     typer.echo(f"removed extern {name}")
+
+
+@extern_app.command("set-linkage")
+def extern_set_linkage(
+    name: str = typer.Argument(..., help="Extern name.",
+                               autocompletion=_comp.extern_names),
+    linkage: str = typer.Argument(..., help="New linkage: 'libc' or 'runtime'.",
+                                  autocompletion=_comp.linkage_names),
+) -> None:
+    """Change an extern's linkage in place. Useful when a symbol moved
+    between libc and the quod runtime, or to fix a mistaken `extern add`."""
+    link_obj = _parse_linkage(linkage)
+    with _exclusive_lock():
+        program = _load()
+        try:
+            program = set_extern_linkage_in_program(program, name, link_obj)
+        except KeyError as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    typer.echo(f"set linkage of extern {name} to {linkage}")
+
+
+@extern_claim_app.command("ls")
+def extern_claim_ls(
+    extern: str | None = typer.Argument(None, help="Restrict to one extern (omit for all).",
+                                        autocompletion=_comp.extern_names),
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
+    """List claims attached to externs (axiom + witness regimes)."""
+    program = _load()
+    if extern is not None and not any(e.name == extern for e in program.externs):
+        typer.echo(f"error: no extern named {extern!r}", err=True)
+        raise typer.Exit(1)
+    exts = [e for e in program.externs if extern is None or e.name == extern]
+    if json_output:
+        _emit_json([
+            {"extern": e.name, "claim": c}
+            for e in exts for c in e.claims
+        ])
+        return
+    theme = _theme()
+    found = False
+    for e in exts:
+        for c in e.claims:
+            found = True
+            typer.echo(paint((
+                Span(e.name, "fn_name"), Span(": ", "punct"),
+                *claim_full_spans(c),
+            ), theme))
+    if not found:
+        typer.echo("(no claims)")
+
+
+@extern_claim_app.command("add")
+def extern_claim_add(
+    extern: str = typer.Argument(..., help="Extern name.",
+                                 autocompletion=_comp.extern_names),
+    kind: str = typer.Argument(..., help=f"Claim kind. Externs currently support: {', '.join(RETURN_CLAIM_KINDS)}.",
+                               autocompletion=_comp.claim_kinds),
+    lo: int | None = typer.Option(None, "--min"),
+    hi: int | None = typer.Option(None, "--max"),
+    regime: str = typer.Option(
+        "axiom", "--regime",
+        help=f"Epistemic source. One of: {', '.join(STORED_REGIMES)}.",
+        autocompletion=_comp.stored_regimes,
+    ),
+    enforcement: str = typer.Option(
+        "trust", "--enforcement",
+        help=f"trust = llvm.assume (UB if false); verify = runtime branch + abort. "
+             f"One of: {', '.join(ENFORCEMENTS)}.",
+        autocompletion=_comp.enforcements,
+    ),
+    justification: str | None = typer.Option(
+        None, "--justification",
+        help='JSON Justification spec, e.g. \'{"kind":"manual","signed_by":"alice","rationale":"libc(2)"}\'.',
+    ),
+) -> None:
+    """Attach a claim to an extern. Lowered as `llvm.assume` after every
+    call site so the optimizer can exploit the bound at each caller.
+
+    Externs currently only support return-scoped claims (e.g. return_in_range).
+    Param-scoped claims need named extern params, which is a follow-up.
+    """
+    if kind not in RETURN_CLAIM_KINDS:
+        typer.echo(
+            f"error: extern claims currently only support: {', '.join(RETURN_CLAIM_KINDS)}. "
+            f"Param-scoped kinds need named extern params (not yet on the model).",
+            err=True,
+        )
+        raise typer.Exit(1)
+    with _exclusive_lock():
+        program = _load()
+        try:
+            just_obj = _parse_justification_spec(justification) if justification else None
+            claim = _build_claim(
+                kind, target=None, lo=lo, hi=hi,
+                regime=regime, enforcement=enforcement, justification=just_obj,
+            )
+            program = add_extern_claim(program, extern, claim)
+        except (KeyError, ValueError) as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    typer.echo(f"added {kind} on extern {extern} [regime={regime}, enforcement={enforcement}]")
+
+
+@extern_claim_app.command("relax")
+def extern_claim_relax(
+    extern: str = typer.Argument(..., help="Extern name.",
+                                 autocompletion=_comp.extern_names),
+    kind: str = typer.Argument(..., help=f"Claim kind to remove. One of: {', '.join(CLAIM_KINDS)}.",
+                               autocompletion=_comp.claim_kinds),
+) -> None:
+    """Remove a claim from an extern. Use this before re-adding with new bounds."""
+    with _exclusive_lock():
+        program = _load()
+        try:
+            program = relax_extern_claim(program, extern, kind, target=None)
+        except KeyError as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        _save(program)
+    typer.echo(f"relaxed {kind} on extern {extern}")
 
 
 @extern_app.command("ingest")

@@ -47,7 +47,10 @@
         {
           "kind": "llvm.i8_ptr"
         }
-      ]
+      ],
+      "linkage": {
+        "kind": "linkage.libc"
+      }
     }
   ]
 }

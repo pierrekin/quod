@@ -45,11 +45,13 @@ from quod.model import (
     I64Type,
     If,
     IntLit,
+    LibcLinkage,
     Let,
     LocalRef,
     Match,
     MatchArm,
     NullPtr,
+    RuntimeLinkage,
     Param,
     ParamRef,
     Program,
@@ -71,6 +73,7 @@ _PRINTF = ExternFunction(
     param_types=(I8PtrType(),),
     return_type=I32Type(),
     varargs=True,
+    linkage=LibcLinkage(),
 )
 _FMT_INT = StringConstant(name=".fmt_int", value="%lld\n")
 
@@ -661,6 +664,7 @@ def test_enum_round_trip_through_i8_ptr():
         name="quod_arena_alloc",
         param_types=(I8PtrType(), I64Type()),
         return_type=I8PtrType(),
+        linkage=RuntimeLinkage(),
     )
     main = Function(
         name="main", return_type=I32Type(),

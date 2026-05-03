@@ -57,6 +57,7 @@ from quod.model import (
     Program,
     PtrOffset,
     ReturnExpr,
+    RuntimeLinkage,
     SizeOf,
     TryExpr,
     ReturnInRangeClaim,
@@ -260,7 +261,14 @@ def _lower_expr(
                 else:
                     coerced.append(a)
             arg_vals = [go(a) for a in coerced]
-            return builder.call(callee, arg_vals)
+            ret = builder.call(callee, arg_vals)
+            # If the callee is an extern with declared return claims, emit
+            # the postcondition assumes against this call's return value
+            # so the optimizer can exploit the bound at this site.
+            ext = extern_sigs.get(fname)
+            if ext is not None and ext.claims:
+                _emit_extern_call_postconditions(builder, module, ret, ext.claims)
+            return ret
         case StructInit(type=tname, fields=field_inits):
             sd = struct_defs.get(tname)
             sty = struct_tys.get(tname)
@@ -951,6 +959,35 @@ def _icmp_for_bound(
     return builder.icmp_signed(predicate, val, const)
 
 
+def _emit_extern_call_postconditions(
+    builder: ir.IRBuilder, module: ir.Module,
+    ret_val: ir.Value, claims: tuple,
+) -> None:
+    """Emit `llvm.assume` against an extern call's return value, one assume
+    per bound carried by a `ReturnInRangeClaim`.
+
+    Only `enforcement="trust"` is supported here. The verify path needs
+    `llvm_fn` for basic-block creation, which `_lower_expr` doesn't carry.
+    Extern claims default to axiom + trust today, so this is sufficient;
+    add the verify path when there's a real demand.
+    """
+    for claim in claims:
+        if not isinstance(claim, ReturnInRangeClaim):
+            continue
+        if claim.enforcement != "trust":
+            raise NotImplementedError(
+                f"extern return-claim with enforcement={claim.enforcement!r}: "
+                f"only 'trust' is supported in this revision"
+            )
+        assume = _get_or_declare_assume(module)
+        if claim.min is not None:
+            cmp = _icmp_for_bound(builder, ">=", ret_val, claim.min)
+            builder.call(assume, [cmp])
+        if claim.max is not None:
+            cmp = _icmp_for_bound(builder, "<=", ret_val, claim.max)
+            builder.call(assume, [cmp])
+
+
 def _emit_return_claims(
     builder: ir.IRBuilder, ret_val: ir.Value, return_claims: tuple,
     llvm_fn: ir.Function, module: ir.Module, overrides: dict[str, str],
@@ -1211,12 +1248,14 @@ def _ensure_arena_externs(externs: tuple[ExternFunction, ...]) -> tuple[ExternFu
             name=_ARENA_NEW,
             param_types=(I64Type(),),
             return_type=I8PtrType(),
+            linkage=RuntimeLinkage(),
         ))
     if _ARENA_DROP not in by_name:
         additions.append(ExternFunction(
             name=_ARENA_DROP,
             param_types=(I8PtrType(),),
             return_type=I64Type(),
+            linkage=RuntimeLinkage(),
         ))
     return externs + tuple(additions)
 

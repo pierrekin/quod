@@ -13,7 +13,10 @@
           "kind": "llvm.i8_ptr"
         }
       ],
-      "varargs": true
+      "varargs": true,
+      "linkage": {
+        "kind": "linkage.libc"
+      }
     }
   ],
   "functions": [
