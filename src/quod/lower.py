@@ -48,6 +48,7 @@ from quod.model import (
     Let,
     CharLit,
     Load,
+    LoadField,
     LocalRef,
     Match,
     NonNegativeClaim,
@@ -57,7 +58,6 @@ from quod.model import (
     Program,
     PtrOffset,
     ReturnExpr,
-    RuntimeLinkage,
     SizeOf,
     TryExpr,
     ReturnInRangeClaim,
@@ -65,6 +65,7 @@ from quod.model import (
     ShortCircuitOr,
     StringRef,
     Store,
+    StoreField,
     StructDef,
     StructInit,
     StructType,
@@ -297,6 +298,21 @@ def _lower_expr(
                 raise ValueError(f"field read on unknown struct {inner_ty.name!r}")
             idx = sd.field_index(fname)
             return builder.extract_value(inner_val, idx)
+        case LoadField(ptr=p, struct_type=tname, name=fname):
+            base = go(p)
+            if not (isinstance(base.type, ir.PointerType) and base.type.pointee == I8):
+                raise ValueError(f"load_field base must be i8*, got {base.type}")
+            sd = struct_defs.get(tname)
+            sty = struct_tys.get(tname)
+            if sd is None or sty is None:
+                raise ValueError(f"load_field on undefined struct {tname!r}")
+            idx = sd.field_index(fname)
+            casted = builder.bitcast(base, sty.as_pointer())
+            field_ptr = builder.gep(
+                casted, [ir.Constant(I32, 0), ir.Constant(I32, idx)],
+                inbounds=True,
+            )
+            return builder.load(field_ptr)
         case PtrOffset(base=b, offset=o):
             base_val = go(b)
             off_val = go(o)
@@ -728,6 +744,24 @@ def _lower_stmt(
             casted = builder.bitcast(base, val.type.as_pointer())
             builder.store(val, casted)
             return
+        case StoreField(ptr=p, struct_type=tname, name=fname, value=v):
+            base = lower_expr(p)
+            if not (isinstance(base.type, ir.PointerType) and base.type.pointee == I8):
+                raise ValueError(f"store_field base must be i8*, got {base.type}")
+            sd = struct_defs.get(tname)
+            sty = struct_tys.get(tname)
+            if sd is None or sty is None:
+                raise ValueError(f"store_field on undefined struct {tname!r}")
+            idx = sd.field_index(fname)
+            dest_ty = _type_to_llvm(sd.fields[idx].type, struct_tys, enum_tys)
+            val = lower_expr(_coerce_int_lit(v, dest_ty))
+            casted = builder.bitcast(base, sty.as_pointer())
+            field_ptr = builder.gep(
+                casted, [ir.Constant(I32, 0), ir.Constant(I32, idx)],
+                inbounds=True,
+            )
+            builder.store(val, field_ptr)
+            return
         case FieldSet(local=lname, name=fname, value=v):
             if lname not in locals_:
                 raise ValueError(f"field-set on undeclared local {lname!r}")
@@ -1116,8 +1150,9 @@ def _lower_function_body(
         builder.ret_void()
 
 
-_ARENA_NEW = "quod_arena_new"
-_ARENA_DROP = "quod_arena_drop"
+_ARENA_MODULE = "alloc.arena"
+_ARENA_NEW = "alloc.arena.new"
+_ARENA_DROP = "alloc.arena.drop"
 
 
 def _desugar_with_arena(program: Program) -> Program:
@@ -1125,23 +1160,31 @@ def _desugar_with_arena(program: Program) -> Program:
     sequence, threading `arena_drop` calls before every `return` reachable
     from the body.
 
-    Auto-declares the `quod_arena_new` / `quod_arena_drop` externs when any
-    block is present, so downstream lowering sees a regular Program with
-    regular calls. Idempotent on programs that contain no `WithArena`.
+    The arena allocator (`alloc.arena.new` / `alloc.arena.alloc` /
+    `alloc.arena.drop` / `alloc.arena.used`) is shipped as the
+    `alloc.arena` stdlib module. When a program uses `WithArena`, we
+    auto-inject the import and re-run `resolve_imports` so the desugared
+    Call expressions resolve to real Function nodes by the time lowering
+    proper begins. Idempotent: programs with no `WithArena`, or programs
+    that already import `alloc.arena`, pass through unchanged (any inner
+    `resolve_imports` call is itself idempotent — it clears imports after
+    the first run).
     """
     has_block = any(_function_uses_with_arena(fn) for fn in program.functions)
     if not has_block:
         return program
 
+    if _ARENA_MODULE not in program.imports:
+        program = program.model_copy(update={
+            "imports": program.imports + (_ARENA_MODULE,),
+        })
+    program = resolve_imports(program)
+
     new_functions = tuple(
         fn.model_copy(update={"body": _desugar_stmts(fn.body)})
         for fn in program.functions
     )
-    new_externs = _ensure_arena_externs(program.externs)
-    return program.model_copy(update={
-        "functions": new_functions,
-        "externs": new_externs,
-    })
+    return program.model_copy(update={"functions": new_functions})
 
 
 def _function_uses_with_arena(fn: Function) -> bool:
@@ -1238,26 +1281,6 @@ def _always_terminates(stmts) -> bool:
         case If(then_body=t, else_body=e):
             return _always_terminates(t) and _always_terminates(e)
     return False
-
-
-def _ensure_arena_externs(externs: tuple[ExternFunction, ...]) -> tuple[ExternFunction, ...]:
-    by_name = {e.name: e for e in externs}
-    additions: list[ExternFunction] = []
-    if _ARENA_NEW not in by_name:
-        additions.append(ExternFunction(
-            name=_ARENA_NEW,
-            param_types=(I64Type(),),
-            return_type=I8PtrType(),
-            linkage=RuntimeLinkage(),
-        ))
-    if _ARENA_DROP not in by_name:
-        additions.append(ExternFunction(
-            name=_ARENA_DROP,
-            param_types=(I8PtrType(),),
-            return_type=I64Type(),
-            linkage=RuntimeLinkage(),
-        ))
-    return externs + tuple(additions)
 
 
 def lower(

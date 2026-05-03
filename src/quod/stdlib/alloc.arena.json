@@ -1,22 +1,1228 @@
 {
+  "constants": [],
+  "functions": [
+    {
+      "name": "alloc.arena.round_up",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "align",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i64"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "mul",
+            "lhs": {
+              "kind": "llvm.binop",
+              "op": "sdiv",
+              "lhs": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {
+                  "kind": "llvm.param_ref",
+                  "name": "n"
+                },
+                "rhs": {
+                  "kind": "llvm.binop",
+                  "op": "sub",
+                  "lhs": {
+                    "kind": "llvm.param_ref",
+                    "name": "align"
+                  },
+                  "rhs": {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i64"
+                    },
+                    "value": 1
+                  }
+                }
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "align"
+              }
+            },
+            "rhs": {
+              "kind": "llvm.param_ref",
+              "name": "align"
+            }
+          }
+        }
+      ],
+      "claims": []
+    },
+    {
+      "name": "alloc.arena._new_chunk",
+      "params": [
+        {
+          "name": "capacity",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "cap",
+          "type": {
+            "kind": "llvm.i64"
+          },
+          "init": {
+            "kind": "llvm.call",
+            "function": "alloc.arena.round_up",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "capacity"
+              },
+              {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i64"
+                },
+                "value": 16
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "cap"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i64"
+              },
+              "value": 16
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.assign",
+              "name": "cap",
+              "value": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i64"
+                },
+                "value": 16
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "total",
+          "type": {
+            "kind": "llvm.i64"
+          },
+          "init": {
+            "kind": "llvm.binop",
+            "op": "add",
+            "lhs": {
+              "kind": "quod.sizeof",
+              "type": {
+                "kind": "llvm.struct",
+                "name": "alloc.arena.Chunk"
+              }
+            },
+            "rhs": {
+              "kind": "quod.local_ref",
+              "name": "cap"
+            }
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "c",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "init": {
+            "kind": "llvm.call",
+            "function": "malloc",
+            "args": [
+              {
+                "kind": "quod.local_ref",
+                "name": "total"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "c"
+            },
+            "rhs": {
+              "kind": "quod.null_ptr"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.null_ptr"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.store_field",
+          "ptr": {
+            "kind": "quod.local_ref",
+            "name": "c"
+          },
+          "struct_type": "alloc.arena.Chunk",
+          "name": "prev",
+          "value": {
+            "kind": "quod.null_ptr"
+          }
+        },
+        {
+          "kind": "quod.store_field",
+          "ptr": {
+            "kind": "quod.local_ref",
+            "name": "c"
+          },
+          "struct_type": "alloc.arena.Chunk",
+          "name": "cap",
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "cap"
+          }
+        },
+        {
+          "kind": "quod.store_field",
+          "ptr": {
+            "kind": "quod.local_ref",
+            "name": "c"
+          },
+          "struct_type": "alloc.arena.Chunk",
+          "name": "cur",
+          "value": {
+            "kind": "llvm.const_int",
+            "type": {
+              "kind": "llvm.i64"
+            },
+            "value": 0
+          }
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "c"
+          }
+        }
+      ],
+      "claims": []
+    },
+    {
+      "name": "alloc.arena.new",
+      "params": [
+        {
+          "name": "initial_capacity",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "a",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "init": {
+            "kind": "llvm.call",
+            "function": "malloc",
+            "args": [
+              {
+                "kind": "quod.sizeof",
+                "type": {
+                  "kind": "llvm.struct",
+                  "name": "alloc.arena.Arena"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "a"
+            },
+            "rhs": {
+              "kind": "quod.null_ptr"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.null_ptr"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "cap",
+          "type": {
+            "kind": "llvm.i64"
+          },
+          "init": {
+            "kind": "llvm.param_ref",
+            "name": "initial_capacity"
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "cap"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i64"
+              },
+              "value": 1
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.assign",
+              "name": "cap",
+              "value": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i64"
+                },
+                "value": 4096
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "c",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "init": {
+            "kind": "llvm.call",
+            "function": "alloc.arena._new_chunk",
+            "args": [
+              {
+                "kind": "quod.local_ref",
+                "name": "cap"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "c"
+            },
+            "rhs": {
+              "kind": "quod.null_ptr"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "free",
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "a"
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.null_ptr"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.store_field",
+          "ptr": {
+            "kind": "quod.local_ref",
+            "name": "a"
+          },
+          "struct_type": "alloc.arena.Arena",
+          "name": "head",
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "c"
+          }
+        },
+        {
+          "kind": "quod.store_field",
+          "ptr": {
+            "kind": "quod.local_ref",
+            "name": "a"
+          },
+          "struct_type": "alloc.arena.Arena",
+          "name": "default_cap",
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "cap"
+          }
+        },
+        {
+          "kind": "quod.store_field",
+          "ptr": {
+            "kind": "quod.local_ref",
+            "name": "a"
+          },
+          "struct_type": "alloc.arena.Arena",
+          "name": "total_used",
+          "value": {
+            "kind": "llvm.const_int",
+            "type": {
+              "kind": "llvm.i64"
+            },
+            "value": 0
+          }
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "a"
+          }
+        }
+      ],
+      "claims": []
+    },
+    {
+      "name": "alloc.arena.alloc",
+      "params": [
+        {
+          "name": "arena",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "n_bytes",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "arena"
+            },
+            "rhs": {
+              "kind": "quod.null_ptr"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.null_ptr"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "n_bytes"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i64"
+              },
+              "value": 0
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.null_ptr"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "request",
+          "type": {
+            "kind": "llvm.i64"
+          },
+          "init": {
+            "kind": "llvm.param_ref",
+            "name": "n_bytes"
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "request"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i64"
+              },
+              "value": 1
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.assign",
+              "name": "request",
+              "value": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i64"
+                },
+                "value": 1
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "need",
+          "type": {
+            "kind": "llvm.i64"
+          },
+          "init": {
+            "kind": "llvm.call",
+            "function": "alloc.arena.round_up",
+            "args": [
+              {
+                "kind": "quod.local_ref",
+                "name": "request"
+              },
+              {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i64"
+                },
+                "value": 16
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "c",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "init": {
+            "kind": "quod.load_field",
+            "ptr": {
+              "kind": "llvm.param_ref",
+              "name": "arena"
+            },
+            "struct_type": "alloc.arena.Arena",
+            "name": "head"
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "cur",
+          "type": {
+            "kind": "llvm.i64"
+          },
+          "init": {
+            "kind": "quod.load_field",
+            "ptr": {
+              "kind": "quod.local_ref",
+              "name": "c"
+            },
+            "struct_type": "alloc.arena.Chunk",
+            "name": "cur"
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "cap",
+          "type": {
+            "kind": "llvm.i64"
+          },
+          "init": {
+            "kind": "quod.load_field",
+            "ptr": {
+              "kind": "quod.local_ref",
+              "name": "c"
+            },
+            "struct_type": "alloc.arena.Chunk",
+            "name": "cap"
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "sgt",
+            "lhs": {
+              "kind": "llvm.binop",
+              "op": "add",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "cur"
+              },
+              "rhs": {
+                "kind": "quod.local_ref",
+                "name": "need"
+              }
+            },
+            "rhs": {
+              "kind": "quod.local_ref",
+              "name": "cap"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.let",
+              "name": "chunk_cap",
+              "type": {
+                "kind": "llvm.i64"
+              },
+              "init": {
+                "kind": "quod.load_field",
+                "ptr": {
+                  "kind": "llvm.param_ref",
+                  "name": "arena"
+                },
+                "struct_type": "alloc.arena.Arena",
+                "name": "default_cap"
+              }
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "sgt",
+                "lhs": {
+                  "kind": "quod.local_ref",
+                  "name": "need"
+                },
+                "rhs": {
+                  "kind": "quod.local_ref",
+                  "name": "chunk_cap"
+                }
+              },
+              "then_body": [
+                {
+                  "kind": "quod.assign",
+                  "name": "chunk_cap",
+                  "value": {
+                    "kind": "quod.local_ref",
+                    "name": "need"
+                  }
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.let",
+              "name": "nc",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              },
+              "init": {
+                "kind": "llvm.call",
+                "function": "alloc.arena._new_chunk",
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "chunk_cap"
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "eq",
+                "lhs": {
+                  "kind": "quod.local_ref",
+                  "name": "nc"
+                },
+                "rhs": {
+                  "kind": "quod.null_ptr"
+                }
+              },
+              "then_body": [
+                {
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "quod.null_ptr"
+                  }
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.store_field",
+              "ptr": {
+                "kind": "quod.local_ref",
+                "name": "nc"
+              },
+              "struct_type": "alloc.arena.Chunk",
+              "name": "prev",
+              "value": {
+                "kind": "quod.local_ref",
+                "name": "c"
+              }
+            },
+            {
+              "kind": "quod.store_field",
+              "ptr": {
+                "kind": "llvm.param_ref",
+                "name": "arena"
+              },
+              "struct_type": "alloc.arena.Arena",
+              "name": "head",
+              "value": {
+                "kind": "quod.local_ref",
+                "name": "nc"
+              }
+            },
+            {
+              "kind": "quod.assign",
+              "name": "c",
+              "value": {
+                "kind": "quod.local_ref",
+                "name": "nc"
+              }
+            },
+            {
+              "kind": "quod.assign",
+              "name": "cur",
+              "value": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i64"
+                },
+                "value": 0
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "p",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "init": {
+            "kind": "llvm.binop",
+            "op": "add",
+            "lhs": {
+              "kind": "llvm.binop",
+              "op": "add",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "c"
+              },
+              "rhs": {
+                "kind": "quod.sizeof",
+                "type": {
+                  "kind": "llvm.struct",
+                  "name": "alloc.arena.Chunk"
+                }
+              }
+            },
+            "rhs": {
+              "kind": "quod.local_ref",
+              "name": "cur"
+            }
+          }
+        },
+        {
+          "kind": "quod.store_field",
+          "ptr": {
+            "kind": "quod.local_ref",
+            "name": "c"
+          },
+          "struct_type": "alloc.arena.Chunk",
+          "name": "cur",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "add",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "cur"
+            },
+            "rhs": {
+              "kind": "quod.local_ref",
+              "name": "need"
+            }
+          }
+        },
+        {
+          "kind": "quod.store_field",
+          "ptr": {
+            "kind": "llvm.param_ref",
+            "name": "arena"
+          },
+          "struct_type": "alloc.arena.Arena",
+          "name": "total_used",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "add",
+            "lhs": {
+              "kind": "quod.load_field",
+              "ptr": {
+                "kind": "llvm.param_ref",
+                "name": "arena"
+              },
+              "struct_type": "alloc.arena.Arena",
+              "name": "total_used"
+            },
+            "rhs": {
+              "kind": "quod.local_ref",
+              "name": "need"
+            }
+          }
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "memset",
+            "args": [
+              {
+                "kind": "quod.local_ref",
+                "name": "p"
+              },
+              {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 0
+              },
+              {
+                "kind": "quod.local_ref",
+                "name": "need"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "p"
+          }
+        }
+      ],
+      "claims": []
+    },
+    {
+      "name": "alloc.arena.drop",
+      "params": [
+        {
+          "name": "arena",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.void"
+      },
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "arena"
+            },
+            "rhs": {
+              "kind": "quod.null_ptr"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return"
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "c",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "init": {
+            "kind": "quod.load_field",
+            "ptr": {
+              "kind": "llvm.param_ref",
+              "name": "arena"
+            },
+            "struct_type": "alloc.arena.Arena",
+            "name": "head"
+          }
+        },
+        {
+          "kind": "quod.while",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "ne",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "c"
+            },
+            "rhs": {
+              "kind": "quod.null_ptr"
+            }
+          },
+          "body": [
+            {
+              "kind": "quod.let",
+              "name": "prev",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              },
+              "init": {
+                "kind": "quod.load_field",
+                "ptr": {
+                  "kind": "quod.local_ref",
+                  "name": "c"
+                },
+                "struct_type": "alloc.arena.Chunk",
+                "name": "prev"
+              }
+            },
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "free",
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "c"
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.assign",
+              "name": "c",
+              "value": {
+                "kind": "quod.local_ref",
+                "name": "prev"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "free",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "arena"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.return"
+        }
+      ],
+      "claims": []
+    },
+    {
+      "name": "alloc.arena.used",
+      "params": [
+        {
+          "name": "arena",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i64"
+      },
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "arena"
+            },
+            "rhs": {
+              "kind": "quod.null_ptr"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i64"
+                },
+                "value": 0
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.load_field",
+            "ptr": {
+              "kind": "llvm.param_ref",
+              "name": "arena"
+            },
+            "struct_type": "alloc.arena.Arena",
+            "name": "total_used"
+          }
+        }
+      ],
+      "claims": []
+    }
+  ],
   "externs": [
     {
+      "name": "malloc",
+      "param_types": [
+        {
+          "kind": "llvm.i64"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
+      "linkage": {
+        "kind": "linkage.libc"
+      }
+    },
+    {
+      "name": "free",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.void"
+      },
+      "linkage": {
+        "kind": "linkage.libc"
+      }
+    },
+    {
+      "name": "memset",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        },
+        {
+          "kind": "llvm.i32"
+        },
+        {
+          "kind": "llvm.i64"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
+      "linkage": {
+        "kind": "linkage.libc"
+      }
+    },
+    {
       "name": "quod_arena_new",
-      "param_types": [{ "kind": "llvm.i64" }],
-      "return_type": { "kind": "llvm.i8_ptr" },
-      "linkage": { "kind": "linkage.runtime" }
+      "param_types": [
+        {
+          "kind": "llvm.i64"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
+      "linkage": {
+        "kind": "linkage.runtime"
+      }
     },
     {
       "name": "quod_arena_alloc",
-      "param_types": [{ "kind": "llvm.i8_ptr" }, { "kind": "llvm.i64" }],
-      "return_type": { "kind": "llvm.i8_ptr" },
-      "linkage": { "kind": "linkage.runtime" }
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        },
+        {
+          "kind": "llvm.i64"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
+      "linkage": {
+        "kind": "linkage.runtime"
+      }
     },
     {
       "name": "quod_arena_drop",
-      "param_types": [{ "kind": "llvm.i8_ptr" }],
-      "return_type": { "kind": "llvm.void" },
-      "linkage": { "kind": "linkage.runtime" }
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.void"
+      },
+      "linkage": {
+        "kind": "linkage.runtime"
+      }
+    }
+  ],
+  "structs": [
+    {
+      "name": "alloc.arena.Chunk",
+      "fields": [
+        {
+          "name": "prev",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "cap",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "cur",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "alloc.arena.Arena",
+      "fields": [
+        {
+          "name": "head",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "default_cap",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "total_used",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ]
     }
   ]
 }

@@ -54,6 +54,7 @@ from quod.model import (
     IntRangeClaim,
     Let,
     Load,
+    LoadField,
     LocalRef,
     ManualJustification,
     Match,
@@ -77,6 +78,7 @@ from quod.model import (
     StructInit,
     StructType,
     Store,
+    StoreField,
     VoidType,
     While,
     Widen,
@@ -278,6 +280,22 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         },
         "see_also": ["quod.ptr_offset", "quod.widen"],
     },
+    "quod.load_field": {
+        "class": LoadField,
+        "summary": (
+            "Read one named field of a struct stored at an i8* pointer. "
+            "Lowered to bitcast(ptr, T*) + GEP(field index) + load. "
+            "Targeted access — no whole-struct register copy. Use this "
+            "for struct-on-heap field reads."
+        ),
+        "example": {
+            "kind": "quod.load_field",
+            "ptr": {"kind": "quod.local_ref", "name": "arena"},
+            "struct_type": "Arena",
+            "name": "head",
+        },
+        "see_also": ["quod.store_field", "quod.field", "quod.load"],
+    },
     "quod.null_ptr": {
         "class": NullPtr,
         "summary": (
@@ -461,6 +479,23 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 65},
         },
         "see_also": ["quod.load", "quod.ptr_offset"],
+    },
+    "quod.store_field": {
+        "class": StoreField,
+        "summary": (
+            "Write a value into one named field of a struct stored at an "
+            "i8* pointer. Mutating counterpart of quod.load_field; lowered "
+            "to bitcast(ptr, T*) + GEP(field index) + store. Use for "
+            "struct-on-heap field writes."
+        ),
+        "example": {
+            "kind": "quod.store_field",
+            "ptr": {"kind": "quod.local_ref", "name": "arena"},
+            "struct_type": "Arena",
+            "name": "head",
+            "value": {"kind": "quod.local_ref", "name": "new_chunk"},
+        },
+        "see_also": ["quod.load_field", "quod.field_set", "quod.store"],
     },
     "quod.with_arena": {
         "class": WithArena,
@@ -719,14 +754,15 @@ _CATEGORIES: dict[str, list[str]] = {
     "expression": [
         "llvm.const_int", "llvm.param_ref", "quod.local_ref", "llvm.binop",
         "quod.sc_or", "quod.sc_and", "llvm.call", "quod.string_ref",
-        "quod.struct_init", "quod.field", "quod.ptr_offset", "quod.widen",
-        "quod.load", "quod.null_ptr", "quod.char_lit", "quod.enum_init",
-        "quod.sizeof", "quod.try",
+        "quod.struct_init", "quod.field", "quod.load_field",
+        "quod.ptr_offset", "quod.widen", "quod.load", "quod.null_ptr",
+        "quod.char_lit", "quod.enum_init", "quod.sizeof", "quod.try",
     ],
     "statement": [
         "quod.return_expr", "quod.return", "quod.if",
         "quod.let", "quod.assign", "quod.while", "quod.for", "quod.expr_stmt",
-        "quod.field_set", "quod.store", "quod.with_arena", "quod.match",
+        "quod.field_set", "quod.store", "quod.store_field",
+        "quod.with_arena", "quod.match",
     ],
     "type": [
         "llvm.i1", "llvm.i8", "llvm.i16", "llvm.i32", "llvm.i64",

@@ -125,6 +125,25 @@ class FieldRead(_Node):
     name: str
 
 
+class LoadField(_Node):
+    """Read a named field from a struct stored at an i8* pointer.
+
+    `ptr` must lower to i8*; `struct_type` names a StructDef; `name` is
+    a field of that struct's def. Lowered as `bitcast(ptr, T*)` +
+    `getelementptr` (field index) + `load` — a direct field access, no
+    whole-struct copy.
+
+    Equivalent in effect to `FieldRead(Load(ptr, StructType(struct_type)),
+    name)` but emits the targeted GEP+load instead of materializing the
+    whole struct first. Use this for struct-on-heap field reads where the
+    register-pressure of a whole-struct load would be wasteful (the arena
+    allocator's hot path is the canonical example)."""
+    kind: Literal["quod.load_field"] = "quod.load_field"
+    ptr: "Expr"
+    struct_type: str
+    name: str
+
+
 class FieldInit(_Node):
     """One field's value in a `StructInit`."""
     name: str
@@ -285,8 +304,8 @@ class CharLit(_Node):
 Expr = Annotated[
     Union[
         IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
-        Call, StringRef, FieldRead, StructInit, PtrOffset, Widen, Load,
-        NullPtr, CharLit, EnumInit, SizeOf, TryExpr,
+        Call, StringRef, FieldRead, LoadField, StructInit, PtrOffset, Widen,
+        Load, NullPtr, CharLit, EnumInit, SizeOf, TryExpr,
     ],
     Field(discriminator="kind"),
 ]
@@ -487,6 +506,22 @@ class Store(_Node):
     value: Expr   # iN or named struct value
 
 
+class StoreField(_Node):
+    """Write a value into a named field of a struct stored at an i8*
+    pointer. Same shape and lowering rationale as `LoadField` but
+    mutating: lowered as `bitcast(ptr, T*)` + `getelementptr` + `store`.
+
+    Equivalent in effect to loading the whole struct, mutating one
+    field, and storing it back, but emits a targeted GEP+store instead.
+    The point is the same as `LoadField` — make struct-on-heap mutation
+    expressible without forcing the whole struct through a register."""
+    kind: Literal["quod.store_field"] = "quod.store_field"
+    ptr: Expr           # must lower to i8*
+    struct_type: str    # name of a StructDef
+    name: str           # field name
+    value: Expr         # the field's declared type
+
+
 class WithArena(_Node):
     """Bracket a body with an arena that's freed automatically.
 
@@ -543,7 +578,7 @@ class Match(_Node):
 
 
 Statement = Annotated[
-    Union[ReturnExpr, Return, If, Let, Assign, While, For, ExprStmt, FieldSet, Store, WithArena, Match],
+    Union[ReturnExpr, Return, If, Let, Assign, While, For, ExprStmt, FieldSet, Store, StoreField, WithArena, Match],
     Field(discriminator="kind"),
 ]
 
@@ -1190,6 +1225,16 @@ def _check_struct_uses_in_stmt(
         case Store(ptr=p, value=v):
             _check_struct_uses_in_expr(p, by_name, enums_by_name, where=where)
             _check_struct_uses_in_expr(v, by_name, enums_by_name, where=where)
+        case StoreField(ptr=p, struct_type=tname, name=fname, value=v):
+            _check_struct_uses_in_expr(p, by_name, enums_by_name, where=where)
+            _check_struct_uses_in_expr(v, by_name, enums_by_name, where=where)
+            sd = by_name.get(tname)
+            if sd is None:
+                raise ValueError(f"{where}: store_field references undefined struct {tname!r}")
+            if sd.field(fname) is None:
+                raise ValueError(
+                    f"{where}: store_field references unknown field {fname!r} of struct {tname!r}"
+                )
         case While(cond=cond, body=body):
             _check_struct_uses_in_expr(cond, by_name, enums_by_name, where=where)
             for s in body:
@@ -1349,6 +1394,15 @@ def _check_struct_uses_in_expr(
                 _check_struct_uses_in_expr(fi.value, by_name, enums_by_name, where=where)
         case FieldRead(value=inner):
             _check_struct_uses_in_expr(inner, by_name, enums_by_name, where=where)
+        case LoadField(ptr=p, struct_type=tname, name=fname):
+            _check_struct_uses_in_expr(p, by_name, enums_by_name, where=where)
+            sd = by_name.get(tname)
+            if sd is None:
+                raise ValueError(f"{where}: load_field references undefined struct {tname!r}")
+            if sd.field(fname) is None:
+                raise ValueError(
+                    f"{where}: load_field references unknown field {fname!r} of struct {tname!r}"
+                )
         case BinOp(lhs=l, rhs=r) | ShortCircuitOr(lhs=l, rhs=r) | ShortCircuitAnd(lhs=l, rhs=r):
             _check_struct_uses_in_expr(l, by_name, enums_by_name, where=where)
             _check_struct_uses_in_expr(r, by_name, enums_by_name, where=where)
@@ -1721,6 +1775,8 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
             return f"{pad}{prefix}{loc}.{fname} = {_format_expr(v)}"
         case Store(ptr=p, value=v):
             return f"{pad}{prefix}store({_format_expr(p)}, {_format_expr(v)})"
+        case StoreField(ptr=p, struct_type=tname, name=fname, value=v):
+            return f"{pad}{prefix}{_format_expr(p)}->{tname}.{fname} = {_format_expr(v)}"
         case While(cond=cond, body=body):
             body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body)
             return f"{pad}{prefix}while ({_format_expr(cond)}) {{\n{body_lines}\n{pad}}}"
@@ -1785,6 +1841,8 @@ def _format_expr(expr) -> str:
             return f"&{n}"
         case FieldRead(value=inner, name=fname):
             return f"{_format_expr(inner)}.{fname}"
+        case LoadField(ptr=p, struct_type=tname, name=fname):
+            return f"{_format_expr(p)}->{tname}.{fname}"
         case StructInit(type=tname, fields=field_inits):
             inner = ", ".join(f"{fi.name}: {_format_expr(fi.value)}" for fi in field_inits)
             return f"{tname} {{ {inner} }}"

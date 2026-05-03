@@ -32,6 +32,8 @@ from quod.model import (
     ExternFunction,
     FieldRead,
     FieldSet,
+    LoadField,
+    StoreField,
     For,
     Function,
     I1Type,
@@ -263,6 +265,14 @@ def _expr_spans(expr) -> tuple[Span, ...]:
                 Span(".", "op"),
                 Span(fname, "param"),
             )
+        case LoadField(ptr=p, struct_type=tname, name=fname):
+            return (
+                *_expr_spans(p),
+                Span("->", "op"),
+                Span(tname, "type"),
+                Span(".", "op"),
+                Span(fname, "param"),
+            )
         case StructInit(type=tname, fields=field_inits):
             out: list[Span] = [
                 Span(tname, "type"), Span(" {", "punct"), Span(" ", "ws"),
@@ -383,6 +393,14 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
                 Span(", ", "punct"),
                 *_expr_spans(v),
                 Span(")", "punct"),
+            ))
+        case StoreField(ptr=p, struct_type=tname, name=fname, value=v):
+            yield Line(stmt, indent, (
+                *_expr_spans(p),
+                Span("->", "op"), Span(tname, "type"), Span(".", "op"),
+                Span(fname, "param"),
+                Span(" ", "ws"), Span("=", "op"), Span(" ", "ws"),
+                *_expr_spans(v),
             ))
         case While(cond=c, body=body):
             yield Line(stmt, indent, (
