@@ -525,16 +525,16 @@ class StoreField(_Node):
 class WithArena(_Node):
     """Bracket a body with an arena that's freed automatically.
 
-    Lowering is a desugar: at block entry the runtime's `quod_arena_new` is
-    called with `capacity` (i64) and the result (i8*) bound to a local named
-    `name` for the duration of `body`. On every exit edge — fall-through and
-    every `return` reachable from `body` — `quod_arena_drop` is called on
-    that handle.
+    Lowering is a desugar: at block entry `alloc.arena.new` is called with
+    `capacity` (i64) and the result (i8*) bound to a local named `name`
+    for the duration of `body`. On every exit edge — fall-through and
+    every `return` reachable from `body` — `alloc.arena.drop` is called
+    on that handle.
 
-    The desugaring auto-declares the `quod_arena_new` / `quod_arena_drop`
-    externs if the program doesn't already have them, so a `with_arena`
-    block is one-stop sugar; users only need to declare `quod_arena_alloc`
-    (and friends) explicitly when they call them inside the body.
+    The desugaring auto-injects `imports: ["alloc.arena"]` if the program
+    doesn't already declare it, so a `with_arena` block is one-stop sugar;
+    `alloc.arena.alloc` (and the other arena functions) are visible to
+    code inside the body via the same import.
     """
     kind: Literal["quod.with_arena"] = "quod.with_arena"
     name: str

@@ -1627,14 +1627,19 @@ def compile_program(
         binary: Path | None = None
         if link:
             binary = build_dir / bin_name
-            # Build the runtime archive (arena allocator etc.) into the same
-            # build_dir, matching the user's target. Archive linking is
-            # by-reference, so unused runtime symbols stay stripped.
+            # Build the optional runtime archive into the same build_dir,
+            # matching the user's target. Empty by default (the stdlib
+            # arena lives in quod now); when a user adds a runtime/*.c,
+            # archive linking is by-reference so unused symbols stay
+            # stripped.
             runtime_archive = build_runtime_archive(build_dir, target=target)
             cmd = ["clang"]
             if target:
                 cmd += ["-target", target]
-            cmd += [str(object_path), str(runtime_archive), "-o", str(binary)]
+            cmd += [str(object_path)]
+            if runtime_archive is not None:
+                cmd += [str(runtime_archive)]
+            cmd += ["-o", str(binary)]
             cmd += [f"-l{lib}" for lib in libraries]
             subprocess.run(cmd, check=True)
 

@@ -399,7 +399,7 @@
                   },
                   "init": {
                     "kind": "llvm.call",
-                    "function": "quod_arena_alloc",
+                    "function": "alloc.arena.alloc",
                     "args": [
                       {
                         "kind": "llvm.param_ref",

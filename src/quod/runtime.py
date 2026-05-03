@@ -1,10 +1,15 @@
-"""quod's tiny C runtime — compiled on demand into a static archive.
-Currently ships the arena allocator (`runtime/quod_arena.c`); future runtime
-helpers (string copies, panic abort, etc.) drop in alongside as new .c files.
+"""quod's optional C runtime — compiled on demand into a static archive.
+
+Empty by default since the arena allocator was lifted into the
+`alloc.arena` quod stdlib module. The infrastructure remains so a user
+(or a future stdlib bit that genuinely can't be written in quod, like
+SIMD intrinsics or a panic handler) can drop a .c file into
+`src/quod/runtime/` and declare externs with `linkage.runtime` to call
+into it.
 
 Why a static `.a` and not a plain `.o`?
   Archive members are pulled in by reference: a binary that never calls
-  `quod_arena_alloc` doesn't drag the arena code into its image. A bare .o
+  any runtime symbol doesn't drag any of it into its image. A bare .o
   would always be linked in.
 
 Why build per-program (in build_dir) instead of once at install time?
@@ -38,16 +43,18 @@ def runtime_archive_path(build_dir: Path) -> Path:
     return build_dir / "rt" / f"libquodrt-{_ARCHIVE_TAG}.a"
 
 
-def build_runtime_archive(build_dir: Path, *, target: str | None = None) -> Path:
-    """Compile every runtime/*.c into one static archive. Idempotent: returns
-    the cached archive when every source's mtime is older than the archive's.
+def build_runtime_archive(build_dir: Path, *, target: str | None = None) -> Path | None:
+    """Compile every runtime/*.c into one static archive, or return None
+    when there are no runtime sources to compile (the post-self-host
+    default — see module docstring). Idempotent: returns the cached
+    archive when every source's mtime is older than the archive's.
 
     `clang` is used as the C compiler (matches the linker driver). `ar` is
     used to bundle the resulting objects into the archive.
     """
     sources = runtime_sources()
     if not sources:
-        raise RuntimeError(f"no runtime sources found under {_RUNTIME_SOURCE_DIR}")
+        return None
 
     archive = runtime_archive_path(build_dir)
     if _archive_is_fresh(archive, sources):

@@ -51,7 +51,6 @@ from quod.model import (
     Match,
     MatchArm,
     NullPtr,
-    RuntimeLinkage,
     Param,
     ParamRef,
     Program,
@@ -660,12 +659,6 @@ def test_enum_round_trip_through_i8_ptr():
     outer = EnumDef(name="Outer", variants=(
         EnumVariant(name="W", fields=(EnumPayloadField(name="i", type=EnumType(name="Inner")),)),
     ))
-    arena_alloc = ExternFunction(
-        name="quod_arena_alloc",
-        param_types=(I8PtrType(), I64Type()),
-        return_type=I8PtrType(),
-        linkage=RuntimeLinkage(),
-    )
     main = Function(
         name="main", return_type=I32Type(),
         body=(
@@ -674,7 +667,7 @@ def test_enum_round_trip_through_i8_ptr():
                 body=(
                     # Allocate a buffer big enough for one Outer
                     Let(name="buf", type=I8PtrType(), init=Call(
-                        function="quod_arena_alloc",
+                        function="alloc.arena.alloc",
                         args=(LocalRef(name="a"), IntLit(type=I64Type(), value=128)),
                     )),
                     # Construct an Outer and store it through the buffer ptr
@@ -707,7 +700,8 @@ def test_enum_round_trip_through_i8_ptr():
         ),
     )
     prog = Program(
-        constants=(_FMT_INT,), externs=(_PRINTF, arena_alloc),
+        constants=(_FMT_INT,), externs=(_PRINTF,),
+        imports=("alloc.arena",),
         enums=(inner, outer), functions=(main,),
     )
     assert _build_and_run(prog) == "66\n"

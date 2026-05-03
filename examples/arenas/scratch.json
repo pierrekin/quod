@@ -21,65 +21,6 @@
       "linkage": {
         "kind": "linkage.libc"
       }
-    },
-    {
-      "name": "quod_arena_new",
-      "param_types": [
-        {
-          "kind": "llvm.i64"
-        }
-      ],
-      "return_type": {
-        "kind": "llvm.i8_ptr"
-      },
-      "linkage": {
-        "kind": "linkage.runtime"
-      }
-    },
-    {
-      "name": "quod_arena_alloc",
-      "param_types": [
-        {
-          "kind": "llvm.i8_ptr"
-        },
-        {
-          "kind": "llvm.i64"
-        }
-      ],
-      "return_type": {
-        "kind": "llvm.i8_ptr"
-      },
-      "linkage": {
-        "kind": "linkage.runtime"
-      }
-    },
-    {
-      "name": "quod_arena_drop",
-      "param_types": [
-        {
-          "kind": "llvm.i8_ptr"
-        }
-      ],
-      "return_type": {
-        "kind": "llvm.i64"
-      },
-      "linkage": {
-        "kind": "linkage.runtime"
-      }
-    },
-    {
-      "name": "quod_arena_used",
-      "param_types": [
-        {
-          "kind": "llvm.i8_ptr"
-        }
-      ],
-      "return_type": {
-        "kind": "llvm.i64"
-      },
-      "linkage": {
-        "kind": "linkage.runtime"
-      }
     }
   ],
   "functions": [
@@ -98,7 +39,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "quod_arena_new",
+            "function": "alloc.arena.new",
             "args": [
               {
                 "kind": "llvm.const_int",
@@ -118,7 +59,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "quod_arena_alloc",
+            "function": "alloc.arena.alloc",
             "args": [
               {
                 "kind": "quod.local_ref",
@@ -153,7 +94,7 @@
               },
               {
                 "kind": "llvm.call",
-                "function": "quod_arena_used",
+                "function": "alloc.arena.used",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -172,7 +113,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "quod_arena_alloc",
+            "function": "alloc.arena.alloc",
             "args": [
               {
                 "kind": "quod.local_ref",
@@ -207,7 +148,7 @@
               },
               {
                 "kind": "llvm.call",
-                "function": "quod_arena_used",
+                "function": "alloc.arena.used",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -222,7 +163,7 @@
           "kind": "quod.expr_stmt",
           "value": {
             "kind": "llvm.call",
-            "function": "quod_arena_drop",
+            "function": "alloc.arena.drop",
             "args": [
               {
                 "kind": "quod.local_ref",
@@ -257,5 +198,8 @@
       ],
       "claims": []
     }
+  ],
+  "imports": [
+    "alloc.arena"
   ]
 }

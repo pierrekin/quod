@@ -10,27 +10,32 @@
       {
         "name": "printf",
         "param_types": [
-          { "kind": "llvm.i8_ptr" }
+          {
+            "kind": "llvm.i8_ptr"
+          }
         ],
         "varargs": true,
-        "linkage": { "kind": "linkage.libc" }
-      },
-      {
-        "name": "quod_arena_alloc",
-        "param_types": [
-          { "kind": "llvm.i8_ptr" },
-          { "kind": "llvm.i64" }
-        ],
-        "return_type": { "kind": "llvm.i8_ptr" },
-        "linkage": { "kind": "linkage.runtime" }
+        "linkage": {
+          "kind": "linkage.libc"
+        }
       }
     ],
     "structs": [
       {
         "name": "Point",
         "fields": [
-          { "name": "x", "type": { "kind": "llvm.i32" } },
-          { "name": "y", "type": { "kind": "llvm.i32" } }
+          {
+            "name": "x",
+            "type": {
+              "kind": "llvm.i32"
+            }
+          },
+          {
+            "name": "y",
+            "type": {
+              "kind": "llvm.i32"
+            }
+          }
         ]
       }
     ],
@@ -38,36 +43,51 @@
       {
         "name": "main",
         "params": [],
-        "return_type": { "kind": "llvm.i32" },
+        "return_type": {
+          "kind": "llvm.i32"
+        },
         "body": [
           {
             "kind": "quod.with_arena",
             "name": "a",
             "capacity": {
               "kind": "llvm.const_int",
-              "type": { "kind": "llvm.i64" },
+              "type": {
+                "kind": "llvm.i64"
+              },
               "value": 4096
             },
             "body": [
               {
                 "kind": "quod.let",
                 "name": "p",
-                "type": { "kind": "llvm.i8_ptr" },
+                "type": {
+                  "kind": "llvm.i8_ptr"
+                },
                 "init": {
                   "kind": "llvm.call",
-                  "function": "quod_arena_alloc",
+                  "function": "alloc.arena.alloc",
                   "args": [
-                    { "kind": "quod.local_ref", "name": "a" },
+                    {
+                      "kind": "quod.local_ref",
+                      "name": "a"
+                    },
                     {
                       "kind": "quod.sizeof",
-                      "type": { "kind": "llvm.struct", "name": "Point" }
+                      "type": {
+                        "kind": "llvm.struct",
+                        "name": "Point"
+                      }
                     }
                   ]
                 }
               },
               {
                 "kind": "quod.store",
-                "ptr": { "kind": "quod.local_ref", "name": "p" },
+                "ptr": {
+                  "kind": "quod.local_ref",
+                  "name": "p"
+                },
                 "value": {
                   "kind": "quod.struct_init",
                   "type": "Point",
@@ -76,7 +96,9 @@
                       "name": "x",
                       "value": {
                         "kind": "llvm.const_int",
-                        "type": { "kind": "llvm.i32" },
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 100
                       }
                     },
@@ -84,7 +106,9 @@
                       "name": "y",
                       "value": {
                         "kind": "llvm.const_int",
-                        "type": { "kind": "llvm.i32" },
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 200
                       }
                     }
@@ -97,16 +121,25 @@
                   "kind": "llvm.call",
                   "function": "printf",
                   "args": [
-                    { "kind": "quod.string_ref", "name": ".fmt" },
+                    {
+                      "kind": "quod.string_ref",
+                      "name": ".fmt"
+                    },
                     {
                       "kind": "quod.load_field",
-                      "ptr": { "kind": "quod.local_ref", "name": "p" },
+                      "ptr": {
+                        "kind": "quod.local_ref",
+                        "name": "p"
+                      },
                       "struct_type": "Point",
                       "name": "x"
                     },
                     {
                       "kind": "quod.load_field",
-                      "ptr": { "kind": "quod.local_ref", "name": "p" },
+                      "ptr": {
+                        "kind": "quod.local_ref",
+                        "name": "p"
+                      },
                       "struct_type": "Point",
                       "name": "y"
                     }
@@ -119,13 +152,18 @@
             "kind": "quod.return_expr",
             "value": {
               "kind": "llvm.const_int",
-              "type": { "kind": "llvm.i32" },
+              "type": {
+                "kind": "llvm.i32"
+              },
               "value": 0
             }
           }
         ],
         "claims": []
       }
+    ],
+    "imports": [
+      "alloc.arena"
     ]
   },
   "expect": {

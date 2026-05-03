@@ -2822,7 +2822,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "quod_arena_alloc",
+            "function": "alloc.arena.alloc",
             "args": [
               {
                 "kind": "quod.field",
@@ -3684,7 +3684,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "quod_arena_alloc",
+            "function": "alloc.arena.alloc",
             "args": [
               {
                 "kind": "quod.field",
@@ -4575,7 +4575,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "quod_arena_alloc",
+            "function": "alloc.arena.alloc",
             "args": [
               {
                 "kind": "quod.field",
@@ -4611,7 +4611,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "quod_arena_alloc",
+            "function": "alloc.arena.alloc",
             "args": [
               {
                 "kind": "quod.field",
@@ -6000,7 +6000,7 @@
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "quod_arena_alloc",
+                "function": "alloc.arena.alloc",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -6081,7 +6081,7 @@
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "quod_arena_alloc",
+                "function": "alloc.arena.alloc",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -6196,7 +6196,7 @@
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "quod_arena_alloc",
+                "function": "alloc.arena.alloc",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -6277,7 +6277,7 @@
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "quod_arena_alloc",
+                "function": "alloc.arena.alloc",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -6392,7 +6392,7 @@
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "quod_arena_alloc",
+                "function": "alloc.arena.alloc",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -6473,7 +6473,7 @@
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "quod_arena_alloc",
+                "function": "alloc.arena.alloc",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -6588,7 +6588,7 @@
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "quod_arena_alloc",
+                "function": "alloc.arena.alloc",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -6669,7 +6669,7 @@
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "quod_arena_alloc",
+                "function": "alloc.arena.alloc",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -6784,7 +6784,7 @@
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "quod_arena_alloc",
+                "function": "alloc.arena.alloc",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -6865,7 +6865,7 @@
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "quod_arena_alloc",
+                "function": "alloc.arena.alloc",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -7000,23 +7000,6 @@
       "linkage": {
         "kind": "linkage.libc"
       }
-    },
-    {
-      "name": "quod_arena_alloc",
-      "param_types": [
-        {
-          "kind": "llvm.i8_ptr"
-        },
-        {
-          "kind": "llvm.i64"
-        }
-      ],
-      "return_type": {
-        "kind": "llvm.i8_ptr"
-      },
-      "linkage": {
-        "kind": "linkage.runtime"
-      }
     }
   ],
   "structs": [
@@ -7120,5 +7103,8 @@
         }
       ]
     }
+  ],
+  "imports": [
+    "alloc.arena"
   ]
 }
