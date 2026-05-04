@@ -1593,6 +1593,14 @@ def compile_program(
     # visible to the analysis pass and to lowering, just like user functions.
     program = resolve_imports(program, disabled_tiers=disabled_tiers)
 
+    # Monomorphize generic types: drop generic templates, emit one fresh
+    # nominal struct/enum per concrete `(template, args)` instantiation,
+    # rewrite all references to the mangled names. Post-mono the program
+    # has no remaining `type_params` / `type_args` / `TypeParamRef`s —
+    # what the lowerer expects.
+    from .monomorphize import monomorphize as _monomorphize
+    program = _monomorphize(program)
+
     # Elaborate: derive lattice claims and merge them into the program before
     # lowering. Override flags (--enforce-lattice etc.) apply uniformly to
     # both stored and derived claims via the override map.

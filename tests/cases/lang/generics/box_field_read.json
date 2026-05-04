@@ -1,0 +1,53 @@
+{
+  "program": {
+    "structs": [
+      {
+        "name": "Box",
+        "type_params": ["T"],
+        "fields": [
+          {"name": "value", "type": {"kind": "quod.type_param", "name": "T"}}
+        ]
+      }
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": {"kind": "llvm.i32"},
+        "body": [
+          {
+            "kind": "quod.let",
+            "name": "b",
+            "type": {
+              "kind": "llvm.struct",
+              "name": "Box",
+              "type_args": [{"kind": "llvm.i32"}]
+            },
+            "init": {
+              "kind": "quod.struct_init",
+              "type": "Box",
+              "type_args": [{"kind": "llvm.i32"}],
+              "fields": [
+                {
+                  "name": "value",
+                  "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42}
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.field",
+              "value": {"kind": "quod.local_ref", "name": "b"},
+              "name": "value"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "exit": 42
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "program": {
+    "enums": [
+      {
+        "name": "Option",
+        "type_params": ["T"],
+        "variants": [
+          {"name": "Some", "fields": [{"name": "value", "type": {"kind": "quod.type_param", "name": "T"}}]},
+          {"name": "None"}
+        ]
+      }
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": {"kind": "llvm.i32"},
+        "body": [
+          {
+            "kind": "quod.let",
+            "name": "o",
+            "type": {
+              "kind": "llvm.enum",
+              "name": "Option",
+              "type_args": [{"kind": "llvm.i32"}]
+            },
+            "init": {
+              "kind": "quod.enum_init",
+              "enum": "Option",
+              "type_args": [{"kind": "llvm.i32"}],
+              "variant": "Some",
+              "fields": [
+                {
+                  "name": "value",
+                  "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42}
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.match",
+            "scrutinee": {"kind": "quod.local_ref", "name": "o"},
+            "arms": [
+              {
+                "variant": "Some",
+                "bindings": ["v"],
+                "body": [
+                  {
+                    "kind": "quod.return_expr",
+                    "value": {"kind": "quod.local_ref", "name": "v"}
+                  }
+                ]
+              },
+              {
+                "variant": "None",
+                "bindings": [],
+                "body": [
+                  {
+                    "kind": "quod.return_expr",
+                    "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "exit": 42
+  }
+}

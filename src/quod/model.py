@@ -153,10 +153,23 @@ class FieldInit(_Node):
 class StructInit(_Node):
     """Construct a struct value. v1: every field of the named def must be
     initialized exactly once, in any order. Lowered to an `insertvalue`
-    chain on `undef`."""
+    chain on `undef`.
+
+    For a generic struct, `type_args` provides the concrete instantiation.
+    Post-monomorphization, `type` carries the mangled name and `type_args`
+    is empty.
+    """
     kind: Literal["quod.struct_init"] = "quod.struct_init"
     type: str
+    type_args: tuple["Type", ...] = ()
     fields: tuple[FieldInit, ...]
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_type_args(self, handler, info):
+        data = handler(self)
+        if not self.type_args:
+            data.pop("type_args", None)
+        return data
 
 
 class PtrOffset(_Node):
@@ -266,11 +279,23 @@ class EnumInit(_Node):
     Validation: `enum` must name an `EnumDef`, `variant` must name one of
     its variants, and `fields` must cover exactly the variant's payload
     fields by name with matching types.
+
+    For a generic enum, `type_args` provides the concrete instantiation.
+    Post-monomorphization, `enum` carries the mangled name and
+    `type_args` is empty.
     """
     kind: Literal["quod.enum_init"] = "quod.enum_init"
     enum: str
+    type_args: tuple["Type", ...] = ()
     variant: str
     fields: tuple[FieldInit, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_type_args(self, handler, info):
+        data = handler(self)
+        if not self.type_args:
+            data.pop("type_args", None)
+        return data
 
 
 class CharLit(_Node):
@@ -347,9 +372,24 @@ class StructType(_Node):
 
     The `name` must match a `StructDef.name` in the same Program; the
     Program-level validator catches dangling refs at load time.
+
+    `type_args` populates the type parameters of a generic StructDef. An
+    empty tuple is the non-generic case (matches a StructDef with empty
+    `type_params`). The monomorphization pass walks every StructType
+    with non-empty `type_args`, generates a fresh nominal struct, and
+    rewrites this reference to the mangled name with empty type_args.
+    Post-mono, every StructType has empty `type_args`.
     """
     kind: Literal["llvm.struct"] = "llvm.struct"
     name: str
+    type_args: tuple["Type", ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_type_args(self, handler, info):
+        data = handler(self)
+        if not self.type_args:
+            data.pop("type_args", None)
+        return data
 
 
 class EnumType(_Node):
@@ -360,8 +400,34 @@ class EnumType(_Node):
     one i64-sized slot (so payload field types are restricted to scalar
     types — int widths up to i64, plus i8*; no struct or enum payload
     fields in v1).
+
+    `type_args`: same story as StructType — the monomorphization pass
+    rewrites generic instantiations to mangled-name references with
+    empty `type_args`.
     """
     kind: Literal["llvm.enum"] = "llvm.enum"
+    name: str
+    type_args: tuple["Type", ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_type_args(self, handler, info):
+        data = handler(self)
+        if not self.type_args:
+            data.pop("type_args", None)
+        return data
+
+
+class TypeParamRef(_Node):
+    """A reference to an in-scope type parameter, e.g. `T` inside a generic
+    `struct List<T> { ptr: *T, ... }`.
+
+    Only valid inside the body of a generic StructDef / EnumDef / Function
+    whose `type_params` includes `name`. The monomorphization pass
+    substitutes every TypeParamRef for the corresponding concrete `Type`
+    when emitting a monomorphized def. Post-mono, no TypeParamRef
+    survives — encountering one at lower time is a bug.
+    """
+    kind: Literal["quod.type_param"] = "quod.type_param"
     name: str
 
 
@@ -384,14 +450,18 @@ IntType = Annotated[
 # Full type union, including pointer, struct, and enum types — used for
 # Let bindings, struct fields, and other value-bearing contexts. Void is
 # deliberately excluded; see ReturnType for return positions.
+# TypeParamRef is included for pre-monomorphization use; the mono pass
+# substitutes them before lowering.
 Type = Annotated[
-    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType, StructType, EnumType],
+    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType,
+          StructType, EnumType, TypeParamRef],
     Field(discriminator="kind"),
 ]
 
 # Type that can appear at a function return position, including void.
 ReturnType = Annotated[
-    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType, StructType, EnumType, VoidType],
+    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType,
+          StructType, EnumType, TypeParamRef, VoidType],
     Field(discriminator="kind"),
 ]
 
@@ -838,9 +908,24 @@ class StructDef(_Node):
     and returned as values, no implicit pointer indirection. Pointers to
     structs are out of v1 scope — opaque `i8*` if you need to hand one
     to an extern.
+
+    `type_params` lists the names of the type parameters for a generic
+    struct, e.g. `("T",)` for `struct Box<T> { value: T }`. Field types
+    may then reference these via `TypeParamRef`. A struct with non-empty
+    `type_params` is generic and is *not* directly lowered — it gets
+    monomorphized into one fresh nominal struct per concrete `type_args`
+    tuple before lowering.
     """
     name: str
+    type_params: tuple[str, ...] = ()
     fields: tuple[StructField, ...]
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_type_params(self, handler, info):
+        data = handler(self)
+        if not self.type_params:
+            data.pop("type_params", None)
+        return data
 
     def field(self, name: str) -> StructField | None:
         for f in self.fields:
@@ -891,9 +976,20 @@ class EnumDef(_Node):
     where N = max(1, max(len(v.fields) for v in variants)). EnumInit
     bitcasts payload to a per-variant LLVM struct type to set fields;
     Match likewise bitcasts to extract bindings.
+
+    `type_params` is the same generic-parameter list as on StructDef.
+    Generic enums are monomorphized away before lowering.
     """
     name: str
+    type_params: tuple[str, ...] = ()
     variants: tuple[EnumVariant, ...]
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_type_params(self, handler, info):
+        data = handler(self)
+        if not self.type_params:
+            data.pop("type_params", None)
+        return data
 
     def variant(self, name: str) -> EnumVariant | None:
         for v in self.variants:
@@ -1192,7 +1288,14 @@ def _validate_structs(program: "_ProgramBase") -> None:
 
 
 def _check_no_struct_cycle(start: str, by_name: dict[str, "StructDef"]) -> None:
-    """DFS: refuse if `start` reaches itself through StructType fields."""
+    """DFS: refuse if `start` reaches itself through StructType fields.
+
+    Skips StructType references with non-empty `type_args` — those are
+    generic instantiations that resolve to a *different* nominal type
+    post-monomorphization, so they don't form a cycle with the
+    template. The post-mono cycle check (which validates the
+    monomorphized program) catches real cycles between concrete types.
+    """
     visiting: set[str] = set()
 
     def go(name: str, path: tuple[str, ...]) -> None:
@@ -1209,7 +1312,7 @@ def _check_no_struct_cycle(start: str, by_name: dict[str, "StructDef"]) -> None:
         if sd is None:
             return
         for f in sd.fields:
-            if isinstance(f.type, StructType):
+            if isinstance(f.type, StructType) and not f.type.type_args:
                 go(f.type.name, path + (name,))
         visiting.discard(name)
 
@@ -1217,7 +1320,7 @@ def _check_no_struct_cycle(start: str, by_name: dict[str, "StructDef"]) -> None:
     if sd is None:
         return
     for f in sd.fields:
-        if isinstance(f.type, StructType):
+        if isinstance(f.type, StructType) and not f.type.type_args:
             go(f.type.name, (start,))
 
 

@@ -80,6 +80,7 @@ from quod.model import (
     StructType,
     Store,
     StoreField,
+    TypeParamRef,
     VoidType,
     While,
     Widen,
@@ -591,6 +592,17 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "example": {"kind": "llvm.void"},
         "see_also": ["quod.return"],
     },
+    "quod.type_param": {
+        "class": TypeParamRef,
+        "summary": (
+            "Reference to an in-scope type parameter (e.g. T inside a generic "
+            "struct/enum). Substituted for a concrete Type by the "
+            "monomorphization pass before lowering — never reaches the "
+            "lowerer."
+        ),
+        "example": {"kind": "quod.type_param", "name": "T"},
+        "see_also": ["StructDef", "EnumDef"],
+    },
 
     # ---------- claim ----------
     "non_negative": {
@@ -781,6 +793,7 @@ _CATEGORIES: dict[str, list[str]] = {
     "type": [
         "llvm.i1", "llvm.i8", "llvm.i16", "llvm.i32", "llvm.i64",
         "llvm.i8_ptr", "llvm.struct", "llvm.enum", "llvm.void",
+        "quod.type_param",
     ],
     "claim": ["non_negative", "int_range", "return_in_range"],
     "justification": ["z3", "manual", "derived"],
