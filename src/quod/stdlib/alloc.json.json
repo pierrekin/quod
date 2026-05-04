@@ -3180,117 +3180,43 @@
     {
       "name": "alloc.json.array_get",
       "params": [
-        {
-          "name": "v",
-          "type": {
-            "kind": "llvm.enum",
-            "name": "alloc.json.JsonValue"
-          }
-        },
-        {
-          "name": "i",
-          "type": {
-            "kind": "llvm.i64"
-          }
-        }
+        {"name": "v", "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"}},
+        {"name": "i", "type": {"kind": "llvm.i64"}}
       ],
-      "return_type": {
-        "kind": "llvm.enum",
-        "name": "alloc.json.JsonOpt"
-      },
+      "return_type": {"kind": "llvm.enum", "name": "alloc.json.JsonOpt"},
       "body": [
         {
           "kind": "quod.match",
-          "scrutinee": {
-            "kind": "llvm.param_ref",
-            "name": "v"
-          },
+          "scrutinee": {"kind": "llvm.param_ref", "name": "v"},
           "arms": [
             {
               "variant": "Array",
-              "bindings": [
-                "items",
-                "count"
-              ],
+              "bindings": ["items"],
               "body": [
                 {
                   "kind": "quod.if",
                   "cond": {
-                    "kind": "llvm.binop",
-                    "op": "sge",
-                    "lhs": {
-                      "kind": "llvm.param_ref",
-                      "name": "i"
-                    },
-                    "rhs": {
-                      "kind": "quod.local_ref",
-                      "name": "count"
-                    }
+                    "kind": "llvm.binop", "op": "sge",
+                    "lhs": {"kind": "llvm.param_ref", "name": "i"},
+                    "rhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "items"}, "name": "len"}
                   },
                   "then_body": [
                     {
                       "kind": "quod.return_expr",
-                      "value": {
-                        "kind": "quod.enum_init",
-                        "enum": "alloc.json.JsonOpt",
-                        "variant": "None",
-                        "fields": []
-                      }
+                      "value": {"kind": "quod.enum_init", "enum": "alloc.json.JsonOpt", "variant": "None", "fields": []}
                     }
                   ],
                   "else_body": []
                 },
                 {
-                  "kind": "quod.let",
-                  "name": "stride",
-                  "type": {
-                    "kind": "llvm.i64"
-                  },
-                  "init": {
-                    "kind": "quod.sizeof",
-                    "type": {
-                      "kind": "llvm.enum",
-                      "name": "alloc.json.JsonValue"
-                    }
-                  }
-                },
-                {
                   "kind": "quod.return_expr",
                   "value": {
-                    "kind": "quod.enum_init",
-                    "enum": "alloc.json.JsonOpt",
-                    "variant": "Some",
+                    "kind": "quod.enum_init", "enum": "alloc.json.JsonOpt", "variant": "Some",
                     "fields": [
-                      {
-                        "name": "value",
-                        "value": {
-                          "kind": "quod.load",
-                          "ptr": {
-                            "kind": "llvm.binop",
-                            "op": "add",
-                            "lhs": {
-                              "kind": "quod.local_ref",
-                              "name": "items"
-                            },
-                            "rhs": {
-                              "kind": "llvm.binop",
-                              "op": "mul",
-                              "lhs": {
-                                "kind": "llvm.param_ref",
-                                "name": "i"
-                              },
-                              "rhs": {
-                                "kind": "quod.local_ref",
-                                "name": "stride"
-                              }
-                            }
-                          },
-                          "type": {
-                            "kind": "llvm.enum",
-                            "name": "alloc.json.JsonValue"
-                          }
-                        }
-                      }
+                      {"name": "value",
+                       "value": {"kind": "llvm.call", "function": "alloc.json.list_get",
+                                 "args": [{"kind": "quod.local_ref", "name": "items"},
+                                          {"kind": "llvm.param_ref", "name": "i"}]}}
                     ]
                   }
                 }
@@ -3300,15 +3226,8 @@
               "variant": "_",
               "bindings": [],
               "body": [
-                {
-                  "kind": "quod.return_expr",
-                  "value": {
-                    "kind": "quod.enum_init",
-                    "enum": "alloc.json.JsonOpt",
-                    "variant": "None",
-                    "fields": []
-                  }
-                }
+                {"kind": "quod.return_expr",
+                 "value": {"kind": "quod.enum_init", "enum": "alloc.json.JsonOpt", "variant": "None", "fields": []}}
               ]
             }
           ]
@@ -3319,200 +3238,59 @@
     {
       "name": "alloc.json.object_get",
       "params": [
-        {
-          "name": "v",
-          "type": {
-            "kind": "llvm.enum",
-            "name": "alloc.json.JsonValue"
-          }
-        },
-        {
-          "name": "key_ptr",
-          "type": {
-            "kind": "llvm.i8_ptr"
-          }
-        },
-        {
-          "name": "key_len",
-          "type": {
-            "kind": "llvm.i64"
-          }
-        }
+        {"name": "v",       "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"}},
+        {"name": "key_ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "key_len", "type": {"kind": "llvm.i64"}}
       ],
-      "return_type": {
-        "kind": "llvm.enum",
-        "name": "alloc.json.JsonOpt"
-      },
+      "return_type": {"kind": "llvm.enum", "name": "alloc.json.JsonOpt"},
       "body": [
         {
           "kind": "quod.match",
-          "scrutinee": {
-            "kind": "llvm.param_ref",
-            "name": "v"
-          },
+          "scrutinee": {"kind": "llvm.param_ref", "name": "v"},
           "arms": [
             {
               "variant": "Object",
-              "bindings": [
-                "keys",
-                "values",
-                "count"
-              ],
+              "bindings": ["keys", "values"],
               "body": [
-                {
-                  "kind": "quod.let",
-                  "name": "stride",
-                  "type": {
-                    "kind": "llvm.i64"
-                  },
-                  "init": {
-                    "kind": "quod.sizeof",
-                    "type": {
-                      "kind": "llvm.enum",
-                      "name": "alloc.json.JsonValue"
-                    }
-                  }
-                },
-                {
-                  "kind": "quod.let",
-                  "name": "i",
-                  "type": {
-                    "kind": "llvm.i64"
-                  },
-                  "init": {
-                    "kind": "llvm.const_int",
-                    "type": {
-                      "kind": "llvm.i64"
-                    },
-                    "value": 0
-                  }
-                },
+                {"kind": "quod.let", "name": "i", "type": {"kind": "llvm.i64"},
+                 "init": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}},
+                {"kind": "quod.let", "name": "n", "type": {"kind": "llvm.i64"},
+                 "init": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "keys"}, "name": "len"}},
                 {
                   "kind": "quod.while",
-                  "cond": {
-                    "kind": "llvm.binop",
-                    "op": "slt",
-                    "lhs": {
-                      "kind": "quod.local_ref",
-                      "name": "i"
-                    },
-                    "rhs": {
-                      "kind": "quod.local_ref",
-                      "name": "count"
-                    }
-                  },
+                  "cond": {"kind": "llvm.binop", "op": "slt",
+                           "lhs": {"kind": "quod.local_ref", "name": "i"},
+                           "rhs": {"kind": "quod.local_ref", "name": "n"}},
                   "body": [
-                    {
-                      "kind": "quod.let",
-                      "name": "k",
-                      "type": {
-                        "kind": "llvm.enum",
-                        "name": "alloc.json.JsonValue"
-                      },
-                      "init": {
-                        "kind": "quod.load",
-                        "ptr": {
-                          "kind": "llvm.binop",
-                          "op": "add",
-                          "lhs": {
-                            "kind": "quod.local_ref",
-                            "name": "keys"
-                          },
-                          "rhs": {
-                            "kind": "llvm.binop",
-                            "op": "mul",
-                            "lhs": {
-                              "kind": "quod.local_ref",
-                              "name": "i"
-                            },
-                            "rhs": {
-                              "kind": "quod.local_ref",
-                              "name": "stride"
-                            }
-                          }
-                        },
-                        "type": {
-                          "kind": "llvm.enum",
-                          "name": "alloc.json.JsonValue"
-                        }
-                      }
-                    },
+                    {"kind": "quod.let", "name": "k", "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"},
+                     "init": {"kind": "llvm.call", "function": "alloc.json.list_get",
+                              "args": [{"kind": "quod.local_ref", "name": "keys"},
+                                       {"kind": "quod.local_ref", "name": "i"}]}},
                     {
                       "kind": "quod.match",
-                      "scrutinee": {
-                        "kind": "quod.local_ref",
-                        "name": "k"
-                      },
+                      "scrutinee": {"kind": "quod.local_ref", "name": "k"},
                       "arms": [
                         {
                           "variant": "String",
-                          "bindings": [
-                            "p",
-                            "l"
-                          ],
+                          "bindings": ["p", "l"],
                           "body": [
                             {
                               "kind": "quod.if",
-                              "cond": {
-                                "kind": "llvm.call",
-                                "function": "core.bytes.eq",
-                                "args": [
-                                  {
-                                    "kind": "quod.local_ref",
-                                    "name": "p"
-                                  },
-                                  {
-                                    "kind": "quod.local_ref",
-                                    "name": "l"
-                                  },
-                                  {
-                                    "kind": "llvm.param_ref",
-                                    "name": "key_ptr"
-                                  },
-                                  {
-                                    "kind": "llvm.param_ref",
-                                    "name": "key_len"
-                                  }
-                                ]
-                              },
+                              "cond": {"kind": "llvm.call", "function": "core.bytes.eq",
+                                       "args": [{"kind": "quod.local_ref", "name": "p"},
+                                                {"kind": "quod.local_ref", "name": "l"},
+                                                {"kind": "llvm.param_ref", "name": "key_ptr"},
+                                                {"kind": "llvm.param_ref", "name": "key_len"}]},
                               "then_body": [
                                 {
                                   "kind": "quod.return_expr",
                                   "value": {
-                                    "kind": "quod.enum_init",
-                                    "enum": "alloc.json.JsonOpt",
-                                    "variant": "Some",
+                                    "kind": "quod.enum_init", "enum": "alloc.json.JsonOpt", "variant": "Some",
                                     "fields": [
-                                      {
-                                        "name": "value",
-                                        "value": {
-                                          "kind": "quod.load",
-                                          "ptr": {
-                                            "kind": "llvm.binop",
-                                            "op": "add",
-                                            "lhs": {
-                                              "kind": "quod.local_ref",
-                                              "name": "values"
-                                            },
-                                            "rhs": {
-                                              "kind": "llvm.binop",
-                                              "op": "mul",
-                                              "lhs": {
-                                                "kind": "quod.local_ref",
-                                                "name": "i"
-                                              },
-                                              "rhs": {
-                                                "kind": "quod.local_ref",
-                                                "name": "stride"
-                                              }
-                                            }
-                                          },
-                                          "type": {
-                                            "kind": "llvm.enum",
-                                            "name": "alloc.json.JsonValue"
-                                          }
-                                        }
-                                      }
+                                      {"name": "value",
+                                       "value": {"kind": "llvm.call", "function": "alloc.json.list_get",
+                                                 "args": [{"kind": "quod.local_ref", "name": "values"},
+                                                          {"kind": "quod.local_ref", "name": "i"}]}}
                                     ]
                                   }
                                 }
@@ -3521,43 +3299,17 @@
                             }
                           ]
                         },
-                        {
-                          "variant": "_",
-                          "bindings": [],
-                          "body": []
-                        }
+                        {"variant": "_", "bindings": [], "body": []}
                       ]
                     },
-                    {
-                      "kind": "quod.assign",
-                      "name": "i",
-                      "value": {
-                        "kind": "llvm.binop",
-                        "op": "add",
-                        "lhs": {
-                          "kind": "quod.local_ref",
-                          "name": "i"
-                        },
-                        "rhs": {
-                          "kind": "llvm.const_int",
-                          "type": {
-                            "kind": "llvm.i64"
-                          },
-                          "value": 1
-                        }
-                      }
-                    }
+                    {"kind": "quod.assign", "name": "i",
+                     "value": {"kind": "llvm.binop", "op": "add",
+                               "lhs": {"kind": "quod.local_ref", "name": "i"},
+                               "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}}}
                   ]
                 },
-                {
-                  "kind": "quod.return_expr",
-                  "value": {
-                    "kind": "quod.enum_init",
-                    "enum": "alloc.json.JsonOpt",
-                    "variant": "None",
-                    "fields": []
-                  }
-                }
+                {"kind": "quod.return_expr",
+                 "value": {"kind": "quod.enum_init", "enum": "alloc.json.JsonOpt", "variant": "None", "fields": []}}
               ]
             },
             {
@@ -3604,17 +3356,12 @@
           "arms": [
             {
               "variant": "Array",
-              "bindings": [
-                "items",
-                "count"
-              ],
+              "bindings": ["items"],
               "body": [
                 {
                   "kind": "quod.return_expr",
-                  "value": {
-                    "kind": "quod.local_ref",
-                    "name": "count"
-                  }
+                  "value": {"kind": "llvm.call", "function": "alloc.json.list_len",
+                            "args": [{"kind": "quod.local_ref", "name": "items"}]}
                 }
               ]
             },
@@ -4333,15 +4080,14 @@
                     {
                       "name": "items",
                       "value": {
-                        "kind": "quod.local_ref",
-                        "name": "buf"
-                      }
-                    },
-                    {
-                      "name": "count",
-                      "value": {
-                        "kind": "quod.local_ref",
-                        "name": "count"
+                        "kind": "quod.struct_init",
+                        "type": "alloc.json.ListJsonValue",
+                        "fields": [
+                          {"name": "ptr",   "value": {"kind": "quod.local_ref", "name": "buf"}},
+                          {"name": "len",   "value": {"kind": "quod.local_ref", "name": "count"}},
+                          {"name": "cap",   "value": {"kind": "quod.local_ref", "name": "max_elems"}},
+                          {"name": "arena", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "parser"}, "name": "arena"}}
+                        ]
                       }
                     }
                   ]
@@ -5155,22 +4901,27 @@
                     {
                       "name": "keys",
                       "value": {
-                        "kind": "quod.local_ref",
-                        "name": "keys_buf"
+                        "kind": "quod.struct_init",
+                        "type": "alloc.json.ListJsonValue",
+                        "fields": [
+                          {"name": "ptr",   "value": {"kind": "quod.local_ref", "name": "keys_buf"}},
+                          {"name": "len",   "value": {"kind": "quod.local_ref", "name": "count"}},
+                          {"name": "cap",   "value": {"kind": "quod.local_ref", "name": "max_pairs"}},
+                          {"name": "arena", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "parser"}, "name": "arena"}}
+                        ]
                       }
                     },
                     {
                       "name": "values",
                       "value": {
-                        "kind": "quod.local_ref",
-                        "name": "vals_buf"
-                      }
-                    },
-                    {
-                      "name": "count",
-                      "value": {
-                        "kind": "quod.local_ref",
-                        "name": "count"
+                        "kind": "quod.struct_init",
+                        "type": "alloc.json.ListJsonValue",
+                        "fields": [
+                          {"name": "ptr",   "value": {"kind": "quod.local_ref", "name": "vals_buf"}},
+                          {"name": "len",   "value": {"kind": "quod.local_ref", "name": "count"}},
+                          {"name": "cap",   "value": {"kind": "quod.local_ref", "name": "max_pairs"}},
+                          {"name": "arena", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "parser"}, "name": "arena"}}
+                        ]
                       }
                     }
                   ]
@@ -5179,6 +4930,184 @@
             ]
           }
         }
+      ],
+      "claims": []
+    },
+    {
+      "name": "alloc.json.list_new",
+      "params": [
+        {"name": "arena", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "initial_cap", "type": {"kind": "llvm.i64"}}
+      ],
+      "return_type": {"kind": "llvm.i8_ptr"},
+      "body": [
+        {"kind": "quod.let", "name": "p", "type": {"kind": "llvm.i8_ptr"},
+         "init": {"kind": "llvm.call", "function": "alloc.arena.alloc",
+                  "args": [{"kind": "llvm.param_ref", "name": "arena"},
+                           {"kind": "quod.sizeof", "type": {"kind": "llvm.struct", "name": "alloc.json.ListJsonValue"}}]}},
+        {"kind": "quod.let", "name": "stride", "type": {"kind": "llvm.i64"},
+         "init": {"kind": "quod.sizeof", "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"}}},
+        {"kind": "quod.let", "name": "buf", "type": {"kind": "llvm.i8_ptr"},
+         "init": {"kind": "llvm.call", "function": "alloc.arena.alloc",
+                  "args": [{"kind": "llvm.param_ref", "name": "arena"},
+                           {"kind": "llvm.binop", "op": "mul",
+                            "lhs": {"kind": "llvm.param_ref", "name": "initial_cap"},
+                            "rhs": {"kind": "quod.local_ref", "name": "stride"}}]}},
+        {"kind": "quod.let", "name": "l", "type": {"kind": "llvm.struct", "name": "alloc.json.ListJsonValue"},
+         "init": {"kind": "quod.struct_init", "type": "alloc.json.ListJsonValue",
+                  "fields": [
+                    {"name": "ptr",   "value": {"kind": "quod.local_ref", "name": "buf"}},
+                    {"name": "len",   "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}},
+                    {"name": "cap",   "value": {"kind": "llvm.param_ref", "name": "initial_cap"}},
+                    {"name": "arena", "value": {"kind": "llvm.param_ref", "name": "arena"}}
+                  ]}},
+        {"kind": "quod.store", "ptr": {"kind": "quod.local_ref", "name": "p"},
+         "value": {"kind": "quod.local_ref", "name": "l"}},
+        {"kind": "quod.return_expr", "value": {"kind": "quod.local_ref", "name": "p"}}
+      ],
+      "claims": []
+    },
+    {
+      "name": "alloc.json.list_ensure_cap",
+      "params": [
+        {"name": "p",      "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "needed", "type": {"kind": "llvm.i64"}}
+      ],
+      "return_type": {"kind": "llvm.void"},
+      "body": [
+        {"kind": "quod.let", "name": "l", "type": {"kind": "llvm.struct", "name": "alloc.json.ListJsonValue"},
+         "init": {"kind": "quod.load", "ptr": {"kind": "llvm.param_ref", "name": "p"},
+                  "type": {"kind": "llvm.struct", "name": "alloc.json.ListJsonValue"}}},
+        {"kind": "quod.if",
+         "cond": {"kind": "llvm.binop", "op": "slt",
+                  "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "l"}, "name": "cap"},
+                  "rhs": {"kind": "llvm.param_ref", "name": "needed"}},
+         "then_body": [
+           {"kind": "quod.let", "name": "new_cap", "type": {"kind": "llvm.i64"},
+            "init": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "l"}, "name": "cap"}},
+           {"kind": "quod.if",
+            "cond": {"kind": "llvm.binop", "op": "slt",
+                     "lhs": {"kind": "quod.local_ref", "name": "new_cap"},
+                     "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 8}},
+            "then_body": [
+              {"kind": "quod.assign", "name": "new_cap",
+               "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 8}}
+            ],
+            "else_body": []},
+           {"kind": "quod.while",
+            "cond": {"kind": "llvm.binop", "op": "slt",
+                     "lhs": {"kind": "quod.local_ref", "name": "new_cap"},
+                     "rhs": {"kind": "llvm.param_ref", "name": "needed"}},
+            "body": [
+              {"kind": "quod.assign", "name": "new_cap",
+               "value": {"kind": "llvm.binop", "op": "mul",
+                         "lhs": {"kind": "quod.local_ref", "name": "new_cap"},
+                         "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 2}}}
+            ]},
+           {"kind": "quod.let", "name": "stride", "type": {"kind": "llvm.i64"},
+            "init": {"kind": "quod.sizeof", "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"}}},
+           {"kind": "quod.let", "name": "new_ptr", "type": {"kind": "llvm.i8_ptr"},
+            "init": {"kind": "llvm.call", "function": "alloc.arena.alloc",
+                     "args": [{"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "l"}, "name": "arena"},
+                              {"kind": "llvm.binop", "op": "mul",
+                               "lhs": {"kind": "quod.local_ref", "name": "new_cap"},
+                               "rhs": {"kind": "quod.local_ref", "name": "stride"}}]}},
+           {"kind": "quod.expr_stmt",
+            "value": {"kind": "llvm.call", "function": "core.bytes.copy",
+                      "args": [{"kind": "quod.local_ref", "name": "new_ptr"},
+                               {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "l"}, "name": "ptr"},
+                               {"kind": "llvm.binop", "op": "mul",
+                                "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "l"}, "name": "len"},
+                                "rhs": {"kind": "quod.local_ref", "name": "stride"}}]}},
+           {"kind": "quod.field_set", "local": "l", "name": "ptr", "value": {"kind": "quod.local_ref", "name": "new_ptr"}},
+           {"kind": "quod.field_set", "local": "l", "name": "cap", "value": {"kind": "quod.local_ref", "name": "new_cap"}},
+           {"kind": "quod.store", "ptr": {"kind": "llvm.param_ref", "name": "p"},
+            "value": {"kind": "quod.local_ref", "name": "l"}}
+         ],
+         "else_body": []}
+      ],
+      "claims": []
+    },
+    {
+      "name": "alloc.json.list_push",
+      "params": [
+        {"name": "p", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "v", "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"}}
+      ],
+      "return_type": {"kind": "llvm.void"},
+      "body": [
+        {"kind": "quod.let", "name": "l1", "type": {"kind": "llvm.struct", "name": "alloc.json.ListJsonValue"},
+         "init": {"kind": "quod.load", "ptr": {"kind": "llvm.param_ref", "name": "p"},
+                  "type": {"kind": "llvm.struct", "name": "alloc.json.ListJsonValue"}}},
+        {"kind": "quod.expr_stmt",
+         "value": {"kind": "llvm.call", "function": "alloc.json.list_ensure_cap",
+                   "args": [{"kind": "llvm.param_ref", "name": "p"},
+                            {"kind": "llvm.binop", "op": "add",
+                             "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "l1"}, "name": "len"},
+                             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}}]}},
+        {"kind": "quod.let", "name": "l", "type": {"kind": "llvm.struct", "name": "alloc.json.ListJsonValue"},
+         "init": {"kind": "quod.load", "ptr": {"kind": "llvm.param_ref", "name": "p"},
+                  "type": {"kind": "llvm.struct", "name": "alloc.json.ListJsonValue"}}},
+        {"kind": "quod.let", "name": "stride", "type": {"kind": "llvm.i64"},
+         "init": {"kind": "quod.sizeof", "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"}}},
+        {"kind": "quod.store",
+         "ptr": {"kind": "llvm.binop", "op": "add",
+                 "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "l"}, "name": "ptr"},
+                 "rhs": {"kind": "llvm.binop", "op": "mul",
+                         "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "l"}, "name": "len"},
+                         "rhs": {"kind": "quod.local_ref", "name": "stride"}}},
+         "value": {"kind": "llvm.param_ref", "name": "v"}},
+        {"kind": "quod.field_set", "local": "l", "name": "len",
+         "value": {"kind": "llvm.binop", "op": "add",
+                   "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "l"}, "name": "len"},
+                   "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}}},
+        {"kind": "quod.store", "ptr": {"kind": "llvm.param_ref", "name": "p"},
+         "value": {"kind": "quod.local_ref", "name": "l"}}
+      ],
+      "claims": []
+    },
+    {
+      "name": "alloc.json.list_get",
+      "params": [
+        {"name": "l", "type": {"kind": "llvm.struct", "name": "alloc.json.ListJsonValue"}},
+        {"name": "i", "type": {"kind": "llvm.i64"}}
+      ],
+      "return_type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"},
+      "body": [
+        {"kind": "quod.let", "name": "stride", "type": {"kind": "llvm.i64"},
+         "init": {"kind": "quod.sizeof", "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"}}},
+        {"kind": "quod.return_expr",
+         "value": {"kind": "quod.load",
+                   "ptr": {"kind": "llvm.binop", "op": "add",
+                           "lhs": {"kind": "quod.field", "value": {"kind": "llvm.param_ref", "name": "l"}, "name": "ptr"},
+                           "rhs": {"kind": "llvm.binop", "op": "mul",
+                                   "lhs": {"kind": "llvm.param_ref", "name": "i"},
+                                   "rhs": {"kind": "quod.local_ref", "name": "stride"}}},
+                   "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"}}}
+      ],
+      "claims": []
+    },
+    {
+      "name": "alloc.json.list_len",
+      "params": [
+        {"name": "l", "type": {"kind": "llvm.struct", "name": "alloc.json.ListJsonValue"}}
+      ],
+      "return_type": {"kind": "llvm.i64"},
+      "body": [
+        {"kind": "quod.return_expr",
+         "value": {"kind": "quod.field", "value": {"kind": "llvm.param_ref", "name": "l"}, "name": "len"}}
+      ],
+      "claims": []
+    },
+    {
+      "name": "alloc.json.list_cap",
+      "params": [
+        {"name": "l", "type": {"kind": "llvm.struct", "name": "alloc.json.ListJsonValue"}}
+      ],
+      "return_type": {"kind": "llvm.i64"},
+      "body": [
+        {"kind": "quod.return_expr",
+         "value": {"kind": "quod.field", "value": {"kind": "llvm.param_ref", "name": "l"}, "name": "cap"}}
       ],
       "claims": []
     }
@@ -5218,6 +5147,15 @@
             "kind": "llvm.i8"
           }
         }
+      ]
+    },
+    {
+      "name": "alloc.json.ListJsonValue",
+      "fields": [
+        {"name": "ptr",   "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "len",   "type": {"kind": "llvm.i64"}},
+        {"name": "cap",   "type": {"kind": "llvm.i64"}},
+        {"name": "arena", "type": {"kind": "llvm.i8_ptr"}}
       ]
     }
   ],
@@ -5274,13 +5212,8 @@
             {
               "name": "items",
               "type": {
-                "kind": "llvm.i8_ptr"
-              }
-            },
-            {
-              "name": "count",
-              "type": {
-                "kind": "llvm.i64"
+                "kind": "llvm.struct",
+                "name": "alloc.json.ListJsonValue"
               }
             }
           ]
@@ -5291,19 +5224,15 @@
             {
               "name": "keys",
               "type": {
-                "kind": "llvm.i8_ptr"
+                "kind": "llvm.struct",
+                "name": "alloc.json.ListJsonValue"
               }
             },
             {
               "name": "values",
               "type": {
-                "kind": "llvm.i8_ptr"
-              }
-            },
-            {
-              "name": "count",
-              "type": {
-                "kind": "llvm.i64"
+                "kind": "llvm.struct",
+                "name": "alloc.json.ListJsonValue"
               }
             }
           ]
