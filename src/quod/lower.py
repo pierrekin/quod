@@ -1191,11 +1191,14 @@ def _desugar_with_arena(program: Program) -> Program:
         })
     program = resolve_imports(program)
 
-    new_functions = tuple(
-        fn.model_copy(update={"body": _desugar_stmts(fn.body)})
-        for fn in program.functions
-    )
-    return program.model_copy(update={"functions": new_functions})
+    new_functions = []
+    for fn in program.functions:
+        # Per-function counter for `__arena_retval_N` locals introduced
+        # by hoisting return-expr values across an arena drop.
+        next_id = [0]
+        new_body = _desugar_stmts(fn.body, fn.return_type, next_id)
+        new_functions.append(fn.model_copy(update={"body": new_body}))
+    return program.model_copy(update={"functions": tuple(new_functions)})
 
 
 def _function_uses_with_arena(fn: Function) -> bool:
@@ -1213,16 +1216,18 @@ def _stmt_contains_with_arena(s) -> bool:
     return False
 
 
-def _desugar_stmts(stmts) -> tuple:
+def _desugar_stmts(stmts, return_type, next_id) -> tuple:
     out: list = []
     for s in stmts:
         match s:
             case WithArena(name=name, capacity=cap, body=body):
-                inner = _desugar_stmts(body)
+                inner = _desugar_stmts(body, return_type, next_id)
                 drop_stmt = ExprStmt(value=Call(
                     function=_ARENA_DROP, args=(LocalRef(name=name),),
                 ))
-                inner_with_drops = _prepend_drop_before_returns(inner, drop_stmt)
+                inner_with_drops = _prepend_drop_before_returns(
+                    inner, drop_stmt, return_type, next_id,
+                )
                 out.append(Let(
                     name=name, type=I8PtrType(),
                     init=Call(function=_ARENA_NEW, args=(cap,)),
@@ -1238,56 +1243,64 @@ def _desugar_stmts(stmts) -> tuple:
                 out.append(drop_stmt)
             case If(then_body=t, else_body=e):
                 out.append(s.model_copy(update={
-                    "then_body": _desugar_stmts(t),
-                    "else_body": _desugar_stmts(e),
+                    "then_body": _desugar_stmts(t, return_type, next_id),
+                    "else_body": _desugar_stmts(e, return_type, next_id),
                 }))
             case While(body=b):
-                out.append(s.model_copy(update={"body": _desugar_stmts(b)}))
+                out.append(s.model_copy(update={
+                    "body": _desugar_stmts(b, return_type, next_id),
+                }))
             case For(body=b):
-                out.append(s.model_copy(update={"body": _desugar_stmts(b)}))
+                out.append(s.model_copy(update={
+                    "body": _desugar_stmts(b, return_type, next_id),
+                }))
             case _:
                 out.append(s)
     return tuple(out)
 
 
-def _prepend_drop_before_returns(stmts, drop_stmt) -> tuple:
-    """Walk `stmts` and emit `drop_stmt` immediately before each
-    `ReturnExpr` / bare `Return`. Recurses into branches and loop bodies;
-    nested `WithArena`s have already been desugared (their own drops
-    already in place), so we only need to add ours.
+def _prepend_drop_before_returns(stmts, drop_stmt, return_type, next_id) -> tuple:
+    """Walk `stmts` and emit `drop_stmt` between each `ReturnExpr` /
+    bare `Return` and the actual exit. Recurses into branches and loop
+    bodies; nested `WithArena`s have already been desugared (their own
+    drops already in place), so we only need to add ours.
 
-    KNOWN BUG (TODO): for `ReturnExpr(value=v)` where `v` reads memory
-    inside the arena, the drop runs BEFORE `v` is evaluated, so the
-    return reads dangling memory. The IR emitted is morally:
-        drop(arena);
-        ret v
-    but should be:
-        let __retval: T = v
-        drop(arena);
-        ret __retval
-    The fix is to thread the function's `return_type` through this pass
-    and hoist the value into a Let with a fresh name. Optimized builds
-    (`profile=2`) hide the bug because the optimizer hoists the load
-    above the drop. Unoptimized builds expose UB.
+    For `ReturnExpr(value=v)`, the value is hoisted into a fresh local
+    BEFORE the drop runs:
+        let __arena_retval_N: T = v
+        drop(arena)
+        ret __arena_retval_N
+    Otherwise the drop would invalidate any arena-resident memory that
+    `v` reads (e.g. a struct loaded out of the arena, or a List<T>'s
+    backing buffer). Without this hoist, the IR is morally
+    `drop; ret v` and `v`'s loads happen AFTER drop — UB. (Optimized
+    builds happen to hoist the load themselves; unoptimized builds
+    blow up.)
     """
     out: list = []
     for s in stmts:
         match s:
-            case ReturnExpr() | Return():
+            case ReturnExpr(value=v):
+                next_id[0] += 1
+                tmp = f"__arena_retval_{next_id[0]}"
+                out.append(Let(name=tmp, type=return_type, init=v))
+                out.append(drop_stmt)
+                out.append(ReturnExpr(value=LocalRef(name=tmp)))
+            case Return():
                 out.append(drop_stmt)
                 out.append(s)
             case If(then_body=t, else_body=e):
                 out.append(s.model_copy(update={
-                    "then_body": _prepend_drop_before_returns(t, drop_stmt),
-                    "else_body": _prepend_drop_before_returns(e, drop_stmt),
+                    "then_body": _prepend_drop_before_returns(t, drop_stmt, return_type, next_id),
+                    "else_body": _prepend_drop_before_returns(e, drop_stmt, return_type, next_id),
                 }))
             case While(body=b):
                 out.append(s.model_copy(update={
-                    "body": _prepend_drop_before_returns(b, drop_stmt),
+                    "body": _prepend_drop_before_returns(b, drop_stmt, return_type, next_id),
                 }))
             case For(body=b):
                 out.append(s.model_copy(update={
-                    "body": _prepend_drop_before_returns(b, drop_stmt),
+                    "body": _prepend_drop_before_returns(b, drop_stmt, return_type, next_id),
                 }))
             case _:
                 out.append(s)
