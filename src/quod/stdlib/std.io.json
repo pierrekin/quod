@@ -1,50 +1,8 @@
 {
   "imports": [
     "core.str",
-    "mem.arena"
-  ],
-  "enums": [
-    {
-      "name": "std.io.IoResult",
-      "variants": [
-        {
-          "name": "Ok",
-          "fields": [
-            {
-              "name": "value",
-              "type": {
-                "kind": "llvm.i64"
-              }
-            }
-          ]
-        },
-        {
-          "name": "Err",
-          "fields": []
-        }
-      ]
-    },
-    {
-      "name": "std.io.ReadResult",
-      "variants": [
-        {
-          "name": "Ok",
-          "fields": [
-            {
-              "name": "text",
-              "type": {
-                "kind": "llvm.struct",
-                "name": "core.str.String"
-              }
-            }
-          ]
-        },
-        {
-          "name": "Err",
-          "fields": []
-        }
-      ]
-    }
+    "mem.arena",
+    "core.option"
   ],
   "externs": [
     {
@@ -138,7 +96,12 @@
       ],
       "return_type": {
         "kind": "llvm.enum",
-        "name": "std.io.IoResult"
+        "name": "core.option.Option",
+        "type_args": [
+          {
+            "kind": "llvm.i64"
+          }
+        ]
       },
       "body": [
         {
@@ -194,9 +157,13 @@
               "kind": "quod.return_expr",
               "value": {
                 "kind": "quod.enum_init",
-                "enum": "std.io.IoResult",
-                "variant": "Err",
-                "fields": []
+                "enum": "core.option.Option",
+                "type_args": [
+                  {
+                    "kind": "llvm.i64"
+                  }
+                ],
+                "variant": "None"
               }
             }
           ],
@@ -237,8 +204,13 @@
           "kind": "quod.return_expr",
           "value": {
             "kind": "quod.enum_init",
-            "enum": "std.io.IoResult",
-            "variant": "Ok",
+            "enum": "core.option.Option",
+            "type_args": [
+              {
+                "kind": "llvm.i64"
+              }
+            ],
+            "variant": "Some",
             "fields": [
               {
                 "name": "value",
@@ -271,7 +243,13 @@
       ],
       "return_type": {
         "kind": "llvm.enum",
-        "name": "std.io.ReadResult"
+        "name": "core.option.Option",
+        "type_args": [
+          {
+            "kind": "llvm.struct",
+            "name": "core.str.String"
+          }
+        ]
       },
       "body": [
         {
@@ -320,9 +298,14 @@
               "kind": "quod.return_expr",
               "value": {
                 "kind": "quod.enum_init",
-                "enum": "std.io.ReadResult",
-                "variant": "Err",
-                "fields": []
+                "enum": "core.option.Option",
+                "type_args": [
+                  {
+                    "kind": "llvm.struct",
+                    "name": "core.str.String"
+                  }
+                ],
+                "variant": "None"
               }
             }
           ],
@@ -333,7 +316,12 @@
           "name": "size_result",
           "type": {
             "kind": "llvm.enum",
-            "name": "std.io.IoResult"
+            "name": "core.option.Option",
+            "type_args": [
+              {
+                "kind": "llvm.i64"
+              }
+            ]
           },
           "init": {
             "kind": "llvm.call",
@@ -354,7 +342,7 @@
           },
           "arms": [
             {
-              "variant": "Err",
+              "variant": "None",
               "bindings": [],
               "body": [
                 {
@@ -378,15 +366,20 @@
                   "kind": "quod.return_expr",
                   "value": {
                     "kind": "quod.enum_init",
-                    "enum": "std.io.ReadResult",
-                    "variant": "Err",
-                    "fields": []
+                    "enum": "core.option.Option",
+                    "type_args": [
+                      {
+                        "kind": "llvm.struct",
+                        "name": "core.str.String"
+                      }
+                    ],
+                    "variant": "None"
                   }
                 }
               ]
             },
             {
-              "variant": "Ok",
+              "variant": "Some",
               "bindings": [
                 "size"
               ],
@@ -476,9 +469,14 @@
                       "kind": "quod.return_expr",
                       "value": {
                         "kind": "quod.enum_init",
-                        "enum": "std.io.ReadResult",
-                        "variant": "Err",
-                        "fields": []
+                        "enum": "core.option.Option",
+                        "type_args": [
+                          {
+                            "kind": "llvm.struct",
+                            "name": "core.str.String"
+                          }
+                        ],
+                        "variant": "None"
                       }
                     }
                   ],
@@ -516,11 +514,17 @@
                   "kind": "quod.return_expr",
                   "value": {
                     "kind": "quod.enum_init",
-                    "enum": "std.io.ReadResult",
-                    "variant": "Ok",
+                    "enum": "core.option.Option",
+                    "type_args": [
+                      {
+                        "kind": "llvm.struct",
+                        "name": "core.str.String"
+                      }
+                    ],
+                    "variant": "Some",
                     "fields": [
                       {
-                        "name": "text",
+                        "name": "value",
                         "value": {
                           "kind": "quod.local_ref",
                           "name": "s"

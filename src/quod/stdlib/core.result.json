@@ -1,0 +1,22 @@
+{
+  "enums": [
+    {
+      "name": "core.result.Result",
+      "type_params": ["T", "E"],
+      "variants": [
+        {
+          "name": "Ok",
+          "fields": [
+            {"name": "value", "type": {"kind": "quod.type_param", "name": "T"}}
+          ]
+        },
+        {
+          "name": "Err",
+          "fields": [
+            {"name": "err", "type": {"kind": "quod.type_param", "name": "E"}}
+          ]
+        }
+      ]
+    }
+  ]
+}

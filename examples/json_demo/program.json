@@ -91,7 +91,13 @@
       ],
       "return_type": {
         "kind": "llvm.enum",
-        "name": "alloc.json.JsonOpt"
+        "name": "core.option.Option",
+        "type_args": [
+          {
+            "kind": "llvm.enum",
+            "name": "alloc.json.JsonValue"
+          }
+        ]
       },
       "body": [
         {
@@ -190,7 +196,13 @@
           "kind": "quod.return_expr",
           "value": {
             "kind": "quod.enum_init",
-            "enum": "alloc.json.JsonOpt",
+            "enum": "core.option.Option",
+            "type_args": [
+              {
+                "kind": "llvm.enum",
+                "name": "alloc.json.JsonValue"
+              }
+            ],
             "variant": "Some",
             "fields": [
               {
@@ -219,7 +231,13 @@
       ],
       "return_type": {
         "kind": "llvm.enum",
-        "name": "alloc.json.JsonOpt"
+        "name": "core.option.Option",
+        "type_args": [
+          {
+            "kind": "llvm.enum",
+            "name": "alloc.json.JsonValue"
+          }
+        ]
       },
       "body": [
         {
@@ -318,7 +336,13 @@
           "kind": "quod.return_expr",
           "value": {
             "kind": "quod.enum_init",
-            "enum": "alloc.json.JsonOpt",
+            "enum": "core.option.Option",
+            "type_args": [
+              {
+                "kind": "llvm.enum",
+                "name": "alloc.json.JsonValue"
+              }
+            ],
             "variant": "Some",
             "fields": [
               {
@@ -357,7 +381,13 @@
               "name": "read_result",
               "type": {
                 "kind": "llvm.enum",
-                "name": "std.io.ReadResult"
+                "name": "core.option.Option",
+                "type_args": [
+                  {
+                    "kind": "llvm.struct",
+                    "name": "core.str.String"
+                  }
+                ]
               },
               "init": {
                 "kind": "llvm.call",
@@ -382,7 +412,7 @@
               },
               "arms": [
                 {
-                  "variant": "Err",
+                  "variant": "None",
                   "bindings": [],
                   "body": [
                     {
@@ -401,7 +431,7 @@
                   ]
                 },
                 {
-                  "variant": "Ok",
+                  "variant": "Some",
                   "bindings": [
                     "text"
                   ],
@@ -411,7 +441,13 @@
                       "name": "pr",
                       "type": {
                         "kind": "llvm.enum",
-                        "name": "alloc.json.ParseResult"
+                        "name": "core.option.Option",
+                        "type_args": [
+                          {
+                            "kind": "llvm.enum",
+                            "name": "alloc.json.JsonValue"
+                          }
+                        ]
                       },
                       "init": {
                         "kind": "llvm.call",
@@ -448,7 +484,7 @@
                       },
                       "arms": [
                         {
-                          "variant": "Err",
+                          "variant": "None",
                           "bindings": [],
                           "body": [
                             {
@@ -467,7 +503,7 @@
                           ]
                         },
                         {
-                          "variant": "Ok",
+                          "variant": "Some",
                           "bindings": [
                             "prog"
                           ],

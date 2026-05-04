@@ -97,7 +97,8 @@ def _round_trip_body() -> list[dict]:
         },
         {
             "kind": "quod.let", "name": "result",
-            "type": {"kind": "llvm.enum", "name": "alloc.json.ParseResult"},
+            "type": {"kind": "llvm.enum", "name": "core.option.Option",
+                     "type_args": [{"kind": "llvm.enum", "name": "alloc.json.JsonValue"}]},
             "init": {
                 "kind": "llvm.call", "function": "alloc.json.parse",
                 "args": [
@@ -112,7 +113,7 @@ def _round_trip_body() -> list[dict]:
             "scrutinee": {"kind": "quod.local_ref", "name": "result"},
             "arms": [
                 {
-                    "variant": "Ok", "bindings": ["v"],
+                    "variant": "Some", "bindings": ["v"],
                     "body": [
                         {
                             "kind": "quod.let", "name": "out",
@@ -147,7 +148,7 @@ def _round_trip_body() -> list[dict]:
                     ],
                 },
                 {
-                    "variant": "Err", "bindings": [],
+                    "variant": "None", "bindings": [],
                     "body": [
                         {
                             "kind": "quod.expr_stmt",
