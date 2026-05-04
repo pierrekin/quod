@@ -1,0 +1,79 @@
+{
+  "program": {
+    "imports": ["mem.arena"],
+    "functions": [
+      {
+        "name": "alloc_via",
+        "type_params": [{"name": "A", "bound": "mem.Allocator"}],
+        "params": [
+          {"name": "handle", "type": {"kind": "llvm.i8_ptr"}},
+          {"name": "n",      "type": {"kind": "llvm.i64"}}
+        ],
+        "return_type": {"kind": "llvm.i8_ptr"},
+        "body": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.trait_call",
+              "trait": "mem.Allocator",
+              "method": "alloc",
+              "dispatch_type": {"kind": "quod.type_param", "name": "A"},
+              "args": [
+                {"kind": "llvm.param_ref", "name": "handle"},
+                {"kind": "llvm.param_ref", "name": "n"}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "main",
+        "params": [],
+        "return_type": {"kind": "llvm.i32"},
+        "body": [
+          {
+            "kind": "quod.with_arena",
+            "name": "a",
+            "capacity": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4096},
+            "body": [
+              {
+                "kind": "quod.let",
+                "name": "buf",
+                "type": {"kind": "llvm.i8_ptr"},
+                "init": {
+                  "kind": "llvm.call",
+                  "function": "alloc_via",
+                  "type_args": [{"kind": "llvm.struct", "name": "mem.arena.Arena"}],
+                  "args": [
+                    {"kind": "quod.local_ref", "name": "a"},
+                    {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 16}
+                  ]
+                }
+              },
+              {
+                "kind": "quod.store",
+                "ptr": {"kind": "quod.local_ref", "name": "buf"},
+                "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42}
+              },
+              {
+                "kind": "quod.return_expr",
+                "value": {
+                  "kind": "quod.load",
+                  "ptr": {"kind": "quod.local_ref", "name": "buf"},
+                  "type": {"kind": "llvm.i32"}
+                }
+              }
+            ]
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "exit": 42
+  }
+}

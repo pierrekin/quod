@@ -1,0 +1,17 @@
+{
+  "traits": [
+    {
+      "name": "mem.Allocator",
+      "methods": [
+        {
+          "name": "alloc",
+          "params": [
+            {"name": "handle", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "n",      "type": {"kind": "llvm.i64"}}
+          ],
+          "return_type": {"kind": "llvm.i8_ptr"}
+        }
+      ]
+    }
+  ]
+}

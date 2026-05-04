@@ -1179,5 +1179,58 @@
         }
       ]
     }
+  ],
+  "imports": [
+    "mem"
+  ],
+  "impls": [
+    {
+      "trait": "mem.Allocator",
+      "for_type": {
+        "kind": "llvm.struct",
+        "name": "mem.arena.Arena"
+      },
+      "methods": [
+        {
+          "name": "alloc",
+          "params": [
+            {
+              "name": "handle",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              }
+            },
+            {
+              "name": "n",
+              "type": {
+                "kind": "llvm.i64"
+              }
+            }
+          ],
+          "return_type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.call",
+                "function": "mem.arena.alloc",
+                "args": [
+                  {
+                    "kind": "llvm.param_ref",
+                    "name": "handle"
+                  },
+                  {
+                    "kind": "llvm.param_ref",
+                    "name": "n"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
   ]
 }
