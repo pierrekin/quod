@@ -895,9 +895,16 @@
       ],
       "params": [
         {
-          "name": "list_ptr",
+          "name": "list",
           "type": {
-            "kind": "llvm.i8_ptr"
+            "kind": "llvm.struct",
+            "name": "alloc.list.List",
+            "type_args": [
+              {
+                "kind": "quod.type_param",
+                "name": "T"
+              }
+            ]
           }
         },
         {
@@ -912,37 +919,6 @@
         "name": "T"
       },
       "body": [
-        {
-          "kind": "quod.let",
-          "name": "l",
-          "type": {
-            "kind": "llvm.struct",
-            "name": "alloc.list.List",
-            "type_args": [
-              {
-                "kind": "quod.type_param",
-                "name": "T"
-              }
-            ]
-          },
-          "init": {
-            "kind": "quod.load",
-            "ptr": {
-              "kind": "llvm.param_ref",
-              "name": "list_ptr"
-            },
-            "type": {
-              "kind": "llvm.struct",
-              "name": "alloc.list.List",
-              "type_args": [
-                {
-                  "kind": "quod.type_param",
-                  "name": "T"
-                }
-              ]
-            }
-          }
-        },
         {
           "kind": "quod.let",
           "name": "stride",
@@ -966,8 +942,8 @@
               "base": {
                 "kind": "quod.field",
                 "value": {
-                  "kind": "quod.local_ref",
-                  "name": "l"
+                  "kind": "llvm.param_ref",
+                  "name": "list"
                 },
                 "name": "ptr"
               },
@@ -1001,19 +977,7 @@
       ],
       "params": [
         {
-          "name": "list_ptr",
-          "type": {
-            "kind": "llvm.i8_ptr"
-          }
-        }
-      ],
-      "return_type": {
-        "kind": "llvm.i64"
-      },
-      "body": [
-        {
-          "kind": "quod.let",
-          "name": "l",
+          "name": "list",
           "type": {
             "kind": "llvm.struct",
             "name": "alloc.list.List",
@@ -1023,32 +987,20 @@
                 "name": "T"
               }
             ]
-          },
-          "init": {
-            "kind": "quod.load",
-            "ptr": {
-              "kind": "llvm.param_ref",
-              "name": "list_ptr"
-            },
-            "type": {
-              "kind": "llvm.struct",
-              "name": "alloc.list.List",
-              "type_args": [
-                {
-                  "kind": "quod.type_param",
-                  "name": "T"
-                }
-              ]
-            }
           }
-        },
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i64"
+      },
+      "body": [
         {
           "kind": "quod.return_expr",
           "value": {
             "kind": "quod.field",
             "value": {
-              "kind": "quod.local_ref",
-              "name": "l"
+              "kind": "llvm.param_ref",
+              "name": "list"
             },
             "name": "len"
           }
@@ -1064,19 +1016,7 @@
       ],
       "params": [
         {
-          "name": "list_ptr",
-          "type": {
-            "kind": "llvm.i8_ptr"
-          }
-        }
-      ],
-      "return_type": {
-        "kind": "llvm.i64"
-      },
-      "body": [
-        {
-          "kind": "quod.let",
-          "name": "l",
+          "name": "list",
           "type": {
             "kind": "llvm.struct",
             "name": "alloc.list.List",
@@ -1086,32 +1026,20 @@
                 "name": "T"
               }
             ]
-          },
-          "init": {
-            "kind": "quod.load",
-            "ptr": {
-              "kind": "llvm.param_ref",
-              "name": "list_ptr"
-            },
-            "type": {
-              "kind": "llvm.struct",
-              "name": "alloc.list.List",
-              "type_args": [
-                {
-                  "kind": "quod.type_param",
-                  "name": "T"
-                }
-              ]
-            }
           }
-        },
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i64"
+      },
+      "body": [
         {
           "kind": "quod.return_expr",
           "value": {
             "kind": "quod.field",
             "value": {
-              "kind": "quod.local_ref",
-              "name": "l"
+              "kind": "llvm.param_ref",
+              "name": "list"
             },
             "name": "cap"
           }

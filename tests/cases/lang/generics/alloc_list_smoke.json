@@ -34,7 +34,7 @@
           },
           {
             "kind": "quod.let",
-            "name": "xs",
+            "name": "xs_ptr",
             "type": {
               "kind": "llvm.i8_ptr"
             },
@@ -82,7 +82,7 @@
               "args": [
                 {
                   "kind": "quod.local_ref",
-                  "name": "xs"
+                  "name": "xs_ptr"
                 },
                 {
                   "kind": "llvm.const_int",
@@ -111,7 +111,7 @@
               "args": [
                 {
                   "kind": "quod.local_ref",
-                  "name": "xs"
+                  "name": "xs_ptr"
                 },
                 {
                   "kind": "llvm.const_int",
@@ -121,6 +121,35 @@
                   "value": 32
                 }
               ]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "xs",
+            "type": {
+              "kind": "llvm.struct",
+              "name": "alloc.list.List",
+              "type_args": [
+                {
+                  "kind": "llvm.i32"
+                }
+              ]
+            },
+            "init": {
+              "kind": "quod.load",
+              "ptr": {
+                "kind": "quod.local_ref",
+                "name": "xs_ptr"
+              },
+              "type": {
+                "kind": "llvm.struct",
+                "name": "alloc.list.List",
+                "type_args": [
+                  {
+                    "kind": "llvm.i32"
+                  }
+                ]
+              }
             }
           },
           {
