@@ -9,8 +9,8 @@
         {
           "name": "A",
           "type": {
-            "kind": "llvm.struct",
-            "name": "mem.arena.Arena"
+            "kind": "quod.type_param",
+            "name": "A"
           }
         }
       ]
@@ -631,6 +631,12 @@
           }
         }
       ]
+    }
+  ],
+  "wirables": [
+    {
+      "name": "A",
+      "bound": "mem.Allocator"
     }
   ]
 }

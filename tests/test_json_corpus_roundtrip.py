@@ -28,7 +28,7 @@ import pytest
 
 from quod.lower import compile_program
 from quod.model import Program
-from quod.stdlib import resolve_imports
+from quod.resolve import resolve_imports
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -50,7 +50,7 @@ CORPUS = [
 
 def _make_program(input_text: str, *, capacity: int) -> Program:
     return Program.model_validate_json(json.dumps({
-        "imports": ["alloc.json", "alloc.json.write", "alloc.str"],
+        "imports": [{"module": "alloc.json", "wire": [{"name": "A", "type": {"kind": "llvm.struct", "name": "mem.arena.Arena"}}]}, {"module": "alloc.json.write", "wire": [{"name": "A", "type": {"kind": "llvm.struct", "name": "mem.arena.Arena"}}]}, {"module": "alloc.str", "wire": [{"name": "A", "type": {"kind": "llvm.struct", "name": "mem.arena.Arena"}}]}],
         "constants": [
             {"name": ".input", "value": input_text},
             {"name": ".err",   "value": "ERR"},

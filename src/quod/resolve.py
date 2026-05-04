@@ -1,8 +1,8 @@
-"""Stdlib module loading + import resolution.
+"""Import resolution — the language's module system.
 
-Programs declare what they want to use via `imports`; this module knows
-where to find those modules on disk and how to merge their contents into
-a Program before it heads to the lowering pipeline.
+Programs declare what they need via `imports`; this module resolves
+those imports by loading modules, applying `wire` bindings (including
+transitive forwarding), and merging the result into a flat Program.
 
 The merge is first-wins by name: if a user-declared struct/extern/function
 shadows an imported one (same `name`), the user's wins. Signature mismatch
@@ -11,7 +11,11 @@ boundary at the model layer.
 
 After resolution `program.imports` is cleared, so a resolved program is
 indistinguishable from one the user wrote flat. Don't `save_program` on
-a resolved program — it would inline the stdlib into the user's source.
+a resolved program — it would inline imported modules into the user's source.
+
+Module loading: by default, modules are looked up as `<name>.json` under
+the shipped-modules directory (`src/quod/stdlib/`). The loader is a plain
+function — tests or alternative toolchains can supply their own.
 """
 
 from __future__ import annotations
@@ -21,12 +25,12 @@ from pathlib import Path
 from quod.model import InputProgram, Program
 
 
-_STDLIB_DIR = Path(__file__).parent / "stdlib"
+_MODULE_DIR = Path(__file__).parent / "stdlib"
 
 
-def stdlib_dir() -> Path:
-    """Public for tests / introspection — modules live here as `<name>.json`."""
-    return _STDLIB_DIR
+def module_dir() -> Path:
+    """The default module search path. Modules live here as `<name>.json`."""
+    return _MODULE_DIR
 
 
 class ImportError_(Exception):
@@ -174,17 +178,23 @@ def _apply_wires(mod: InputProgram, imp) -> InputProgram:
     Errors out when:
       - any of `mod.wirables` is unbound by `imp.wire`
       - `imp.wire` names a binding for a wirable that doesn't exist
-      - a wire RHS is a `TypeParamRef` (v1 forwarding-through-your-own
-        -wirable is not yet supported; the bound type must be concrete)
+      - a wire RHS is still a `TypeParamRef` at apply time. By the time
+        we get here, the parent (if any) should have substituted the
+        forwarding chain to a concrete type. A remaining `TypeParamRef`
+        means either (a) the program itself wrote a non-substitutable
+        wire (no enclosing wirable to forward from), or (b) a parent
+        module's wire forwards a name that isn't one of its wirables.
     """
     from .model import TypeParamRef
     for w in imp.wire:
         if isinstance(w.type, TypeParamRef):
             raise ImportError_(
                 f"import {imp.module!r}: wire {w.name!r} binds to "
-                f"TypeParamRef({w.type.name!r}), but v1 requires concrete "
-                f"types — forwarding a wirable through an intermediate "
-                f"module's own wirable is post-v1"
+                f"unresolved TypeParamRef({w.type.name!r}). The wire RHS "
+                f"must be a concrete type by the time the import is "
+                f"applied — either bind it directly here, or ensure the "
+                f"enclosing module declares a wirable named "
+                f"{w.type.name!r} that gets substituted at *its* import."
             )
     wire_map = {w.name: w.type for w in imp.wire}
     wirable_names = {w.name for w in mod.wirables}
@@ -308,6 +318,24 @@ def _substitute_wirables(mod: InputProgram, wire_map: dict) -> InputProgram:
             "return_type": sub_type(ext.return_type, set()),
         }))
 
+    # Substitute inside the module's own imports — this is what makes
+    # transitive forwarding work. If this module declares `wirable A`
+    # and one of its imports says `wire X=A` (a TypeParamRef("A")),
+    # the substitution replaces it with the concrete type the parent
+    # bound A to. When the resolver later processes that nested import,
+    # its wire RHS is concrete.
+    from .model import Import, WireBinding
+    new_imports = []
+    for imp in mod.imports:
+        if imp.wire:
+            new_wire = tuple(
+                WireBinding(name=w.name, type=sub_type(w.type, set()))
+                for w in imp.wire
+            )
+            new_imports.append(Import(module=imp.module, wire=new_wire))
+        else:
+            new_imports.append(imp)
+
     return mod.model_copy(update={
         "wirables":  (),
         "structs":   tuple(new_structs),
@@ -315,6 +343,7 @@ def _substitute_wirables(mod: InputProgram, wire_map: dict) -> InputProgram:
         "functions": tuple(new_functions),
         "impls":     tuple(new_impls),
         "externs":   tuple(new_externs),
+        "imports":   tuple(new_imports),
     })
 
 
@@ -324,9 +353,9 @@ def _load_module(name: str) -> InputProgram:
     Modules are validated through `InputProgram` — the same gate user files
     pass. They may declare their own `imports`, which the caller queues
     for the recursive resolution."""
-    path = _STDLIB_DIR / f"{name}.json"
+    path = _MODULE_DIR / f"{name}.json"
     if not path.is_file():
-        available = sorted(p.stem for p in _STDLIB_DIR.glob("*.json"))
+        available = sorted(p.stem for p in _MODULE_DIR.glob("*.json"))
         raise ImportError_(
             f"unknown stdlib module {name!r}; available: "
             f"{', '.join(available) or '(none)'}"

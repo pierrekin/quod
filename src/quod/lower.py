@@ -20,7 +20,7 @@ from llvmlite import ir
 
 from quod.analysis import derive_lattice_claims, elaborate
 from quod.runtime import build_runtime_archive
-from quod.stdlib import resolve_imports
+from quod.resolve import resolve_imports
 from quod.model import (
     Assign,
     BinOp,

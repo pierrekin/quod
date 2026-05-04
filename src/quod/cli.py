@@ -960,7 +960,7 @@ def fn_add(
         try:
             if script is not None or script_file is not None:
                 from quod.script import parse_function as _parse_script
-                from quod.stdlib import resolve_imports as _resolve_imports
+                from quod.resolve import resolve_imports as _resolve_imports
                 if script_file is not None:
                     text = (sys.stdin.read() if script_file == "-"
                             else Path(script_file).read_text())

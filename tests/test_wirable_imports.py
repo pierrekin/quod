@@ -22,7 +22,7 @@ from quod.model import (
     TypeParamRef,
     WireBinding,
 )
-from quod.stdlib import resolve_imports, ImportError_
+from quod.resolve import resolve_imports, ImportError_
 
 
 def _arena_wire_binding() -> WireBinding:
@@ -87,13 +87,13 @@ def test_wire_to_wirable_on_module_with_no_wirables_errors():
         resolve_imports(prog)
 
 
-def test_wire_typeparamref_rhs_rejected_v1():
-    """v1 doesn't support forwarding-through-your-own-wirable. A wire
-    RHS that's a TypeParamRef (rather than a concrete type) errors
-    with a clear message."""
+def test_wire_typeparamref_rhs_at_toplevel_errors():
+    """A TypeParamRef wire RHS at the program level (no enclosing module
+    to substitute it) is an error — the program is the bottom of the
+    stack, there's no wirable to forward from."""
     prog = Program(imports=(Import(
         module="alloc.list",
         wire=(WireBinding(name="A", type=TypeParamRef(name="A")),),
     ),))
-    with pytest.raises(ImportError_, match="forwarding"):
+    with pytest.raises(ImportError_, match="unresolved TypeParamRef"):
         resolve_imports(prog)

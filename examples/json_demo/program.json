@@ -772,7 +772,18 @@
     }
   ],
   "imports": [
-    "alloc.json",
+    {
+      "module": "alloc.json",
+      "wire": [
+        {
+          "name": "A",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "mem.arena.Arena"
+          }
+        }
+      ]
+    },
     "std.io"
   ]
 }

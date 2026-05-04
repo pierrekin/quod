@@ -1,8 +1,41 @@
 {
   "imports": [
-    "alloc.json",
-    "alloc.json.write",
-    "alloc.str"
+    {
+      "module": "alloc.json",
+      "wire": [
+        {
+          "name": "A",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "mem.arena.Arena"
+          }
+        }
+      ]
+    },
+    {
+      "module": "alloc.json.write",
+      "wire": [
+        {
+          "name": "A",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "mem.arena.Arena"
+          }
+        }
+      ]
+    },
+    {
+      "module": "alloc.str",
+      "wire": [
+        {
+          "name": "A",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "mem.arena.Arena"
+          }
+        }
+      ]
+    }
   ],
   "constants": [
     {

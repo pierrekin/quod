@@ -1,7 +1,18 @@
 {
   "imports": [
     "core.str",
-    "alloc.str"
+    {
+      "module": "alloc.str",
+      "wire": [
+        {
+          "name": "A",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "mem.arena.Arena"
+          }
+        }
+      ]
+    }
   ],
   "constants": [
     {
