@@ -2,42 +2,63 @@
   "imports": [
     "core.str",
     "core.bytes",
-    "mem.arena"
-  ],
-  "structs": [
-    {
-      "name": "alloc.str.Builder",
-      "fields": [
-        {"name": "buf",   "type": {"kind": "llvm.i8_ptr"}},
-        {"name": "len",   "type": {"kind": "llvm.i64"}},
-        {"name": "cap",   "type": {"kind": "llvm.i64"}},
-        {"name": "arena", "type": {"kind": "llvm.i8_ptr"}}
-      ]
-    }
+    "mem.arena",
+    "alloc.list"
   ],
   "functions": [
     {
       "name": "alloc.str.to_cstr_in",
       "params": [
-        {"name": "s",     "type": {"kind": "llvm.struct", "name": "core.str.String"}},
-        {"name": "arena", "type": {"kind": "llvm.i8_ptr"}}
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.str.String"
+          }
+        },
+        {
+          "name": "arena",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        }
       ],
-      "return_type": {"kind": "llvm.i8_ptr"},
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
       "body": [
         {
           "kind": "quod.let",
           "name": "p",
-          "type": {"kind": "llvm.i8_ptr"},
+          "type": {
+            "kind": "llvm.i8_ptr"
+          },
           "init": {
             "kind": "llvm.call",
             "function": "mem.arena.alloc",
             "args": [
-              {"kind": "llvm.param_ref", "name": "arena"},
+              {
+                "kind": "llvm.param_ref",
+                "name": "arena"
+              },
               {
                 "kind": "llvm.binop",
                 "op": "add",
-                "lhs": {"kind": "quod.field", "value": {"kind": "llvm.param_ref", "name": "s"}, "name": "len"},
-                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
+                "lhs": {
+                  "kind": "quod.field",
+                  "value": {
+                    "kind": "llvm.param_ref",
+                    "name": "s"
+                  },
+                  "name": "len"
+                },
+                "rhs": {
+                  "kind": "llvm.const_int",
+                  "type": {
+                    "kind": "llvm.i64"
+                  },
+                  "value": 1
+                }
               }
             ]
           }
@@ -48,9 +69,26 @@
             "kind": "llvm.call",
             "function": "core.bytes.copy",
             "args": [
-              {"kind": "quod.local_ref", "name": "p"},
-              {"kind": "quod.field", "value": {"kind": "llvm.param_ref", "name": "s"}, "name": "ptr"},
-              {"kind": "quod.field", "value": {"kind": "llvm.param_ref", "name": "s"}, "name": "len"}
+              {
+                "kind": "quod.local_ref",
+                "name": "p"
+              },
+              {
+                "kind": "quod.field",
+                "value": {
+                  "kind": "llvm.param_ref",
+                  "name": "s"
+                },
+                "name": "ptr"
+              },
+              {
+                "kind": "quod.field",
+                "value": {
+                  "kind": "llvm.param_ref",
+                  "name": "s"
+                },
+                "name": "len"
+              }
             ]
           }
         },
@@ -59,14 +97,33 @@
           "ptr": {
             "kind": "llvm.binop",
             "op": "add",
-            "lhs": {"kind": "quod.local_ref", "name": "p"},
-            "rhs": {"kind": "quod.field", "value": {"kind": "llvm.param_ref", "name": "s"}, "name": "len"}
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "p"
+            },
+            "rhs": {
+              "kind": "quod.field",
+              "value": {
+                "kind": "llvm.param_ref",
+                "name": "s"
+              },
+              "name": "len"
+            }
           },
-          "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 0}
+          "value": {
+            "kind": "llvm.const_int",
+            "type": {
+              "kind": "llvm.i8"
+            },
+            "value": 0
+          }
         },
         {
           "kind": "quod.return_expr",
-          "value": {"kind": "quod.local_ref", "name": "p"}
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "p"
+          }
         }
       ],
       "claims": []
@@ -74,334 +131,274 @@
     {
       "name": "alloc.str.builder_new",
       "params": [
-        {"name": "arena",       "type": {"kind": "llvm.i8_ptr"}},
-        {"name": "initial_cap", "type": {"kind": "llvm.i64"}}
-      ],
-      "return_type": {"kind": "llvm.i8_ptr"},
-      "body": [
         {
-          "kind": "quod.let",
-          "name": "p",
-          "type": {"kind": "llvm.i8_ptr"},
-          "init": {
-            "kind": "llvm.call",
-            "function": "mem.arena.alloc",
-            "args": [
-              {"kind": "llvm.param_ref", "name": "arena"},
-              {"kind": "quod.sizeof", "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"}}
-            ]
+          "name": "arena",
+          "type": {
+            "kind": "llvm.i8_ptr"
           }
         },
         {
-          "kind": "quod.let",
-          "name": "buf",
-          "type": {"kind": "llvm.i8_ptr"},
-          "init": {
-            "kind": "llvm.call",
-            "function": "mem.arena.alloc",
-            "args": [
-              {"kind": "llvm.param_ref", "name": "arena"},
-              {"kind": "llvm.param_ref", "name": "initial_cap"}
-            ]
+          "name": "initial_cap",
+          "type": {
+            "kind": "llvm.i64"
           }
-        },
-        {
-          "kind": "quod.let",
-          "name": "b",
-          "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"},
-          "init": {
-            "kind": "quod.struct_init",
-            "type": "alloc.str.Builder",
-            "fields": [
-              {"name": "buf",   "value": {"kind": "quod.local_ref", "name": "buf"}},
-              {"name": "len",   "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}},
-              {"name": "cap",   "value": {"kind": "llvm.param_ref", "name": "initial_cap"}},
-              {"name": "arena", "value": {"kind": "llvm.param_ref", "name": "arena"}}
-            ]
-          }
-        },
-        {
-          "kind": "quod.store",
-          "ptr": {"kind": "quod.local_ref", "name": "p"},
-          "value": {"kind": "quod.local_ref", "name": "b"}
-        },
-        {
-          "kind": "quod.return_expr",
-          "value": {"kind": "quod.local_ref", "name": "p"}
         }
       ],
-      "claims": []
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.list.list_new",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "arena"
+              },
+              {
+                "kind": "llvm.param_ref",
+                "name": "initial_cap"
+              }
+            ],
+            "type_args": [
+              {
+                "kind": "llvm.i8"
+              },
+              {
+                "kind": "llvm.struct",
+                "name": "mem.arena.Arena"
+              }
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "alloc.str.builder_ensure_cap",
       "params": [
-        {"name": "p",      "type": {"kind": "llvm.i8_ptr"}},
-        {"name": "needed", "type": {"kind": "llvm.i64"}}
-      ],
-      "return_type": {"kind": "llvm.void"},
-      "body": [
         {
-          "kind": "quod.let",
-          "name": "b",
-          "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"},
-          "init": {
-            "kind": "quod.load",
-            "ptr": {"kind": "llvm.param_ref", "name": "p"},
-            "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"}
+          "name": "p",
+          "type": {
+            "kind": "llvm.i8_ptr"
           }
         },
         {
-          "kind": "quod.if",
-          "cond": {
-            "kind": "llvm.binop",
-            "op": "slt",
-            "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "cap"},
-            "rhs": {"kind": "llvm.param_ref", "name": "needed"}
+          "name": "needed",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.void"
+      },
+      "body": [
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.list.list_ensure_cap",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "p"
+              },
+              {
+                "kind": "llvm.param_ref",
+                "name": "needed"
+              }
+            ],
+            "type_args": [
+              {
+                "kind": "llvm.i8"
+              },
+              {
+                "kind": "llvm.struct",
+                "name": "mem.arena.Arena"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.return"
+        }
+      ]
+    },
+    {
+      "name": "alloc.str.builder_push_byte",
+      "params": [
+        {
+          "name": "p",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "byte",
+          "type": {
+            "kind": "llvm.i8"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.void"
+      },
+      "body": [
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.list.list_push",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "p"
+              },
+              {
+                "kind": "llvm.param_ref",
+                "name": "byte"
+              }
+            ],
+            "type_args": [
+              {
+                "kind": "llvm.i8"
+              },
+              {
+                "kind": "llvm.struct",
+                "name": "mem.arena.Arena"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.return"
+        }
+      ]
+    },
+    {
+      "name": "alloc.str.builder_push_bytes",
+      "params": [
+        {
+          "name": "p",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "src",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.void"
+      },
+      "body": [
+        {
+          "kind": "quod.for",
+          "var": "i",
+          "type": {
+            "kind": "llvm.i64"
           },
-          "then_body": [
+          "lo": {
+            "kind": "llvm.const_int",
+            "type": {
+              "kind": "llvm.i64"
+            },
+            "value": 0
+          },
+          "hi": {
+            "kind": "llvm.param_ref",
+            "name": "n"
+          },
+          "body": [
             {
               "kind": "quod.let",
-              "name": "new_cap",
-              "type": {"kind": "llvm.i64"},
-              "init": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "cap"}
-            },
-            {
-              "kind": "quod.if",
-              "cond": {
-                "kind": "llvm.binop",
-                "op": "slt",
-                "lhs": {"kind": "quod.local_ref", "name": "new_cap"},
-                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 16}
+              "name": "byte",
+              "type": {
+                "kind": "llvm.i8"
               },
-              "then_body": [
-                {
-                  "kind": "quod.assign",
-                  "name": "new_cap",
-                  "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 16}
-                }
-              ],
-              "else_body": []
-            },
-            {
-              "kind": "quod.while",
-              "cond": {
-                "kind": "llvm.binop",
-                "op": "slt",
-                "lhs": {"kind": "quod.local_ref", "name": "new_cap"},
-                "rhs": {"kind": "llvm.param_ref", "name": "needed"}
-              },
-              "body": [
-                {
-                  "kind": "quod.assign",
-                  "name": "new_cap",
-                  "value": {
-                    "kind": "llvm.binop",
-                    "op": "mul",
-                    "lhs": {"kind": "quod.local_ref", "name": "new_cap"},
-                    "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 2}
-                  }
-                }
-              ]
-            },
-            {
-              "kind": "quod.let",
-              "name": "new_buf",
-              "type": {"kind": "llvm.i8_ptr"},
               "init": {
-                "kind": "llvm.call",
-                "function": "mem.arena.alloc",
-                "args": [
-                  {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "arena"},
-                  {"kind": "quod.local_ref", "name": "new_cap"}
-                ]
+                "kind": "quod.load",
+                "ptr": {
+                  "kind": "quod.ptr_offset",
+                  "base": {
+                    "kind": "llvm.param_ref",
+                    "name": "src"
+                  },
+                  "offset": {
+                    "kind": "quod.local_ref",
+                    "name": "i"
+                  }
+                },
+                "type": {
+                  "kind": "llvm.i8"
+                }
               }
             },
             {
               "kind": "quod.expr_stmt",
               "value": {
                 "kind": "llvm.call",
-                "function": "core.bytes.copy",
+                "function": "alloc.list.list_push",
                 "args": [
-                  {"kind": "quod.local_ref", "name": "new_buf"},
-                  {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "buf"},
-                  {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "len"}
+                  {
+                    "kind": "llvm.param_ref",
+                    "name": "p"
+                  },
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "byte"
+                  }
+                ],
+                "type_args": [
+                  {
+                    "kind": "llvm.i8"
+                  },
+                  {
+                    "kind": "llvm.struct",
+                    "name": "mem.arena.Arena"
+                  }
                 ]
               }
-            },
-            {"kind": "quod.field_set", "local": "b", "name": "buf", "value": {"kind": "quod.local_ref", "name": "new_buf"}},
-            {"kind": "quod.field_set", "local": "b", "name": "cap", "value": {"kind": "quod.local_ref", "name": "new_cap"}},
-            {
-              "kind": "quod.store",
-              "ptr": {"kind": "llvm.param_ref", "name": "p"},
-              "value": {"kind": "quod.local_ref", "name": "b"}
             }
-          ],
-          "else_body": []
+          ]
+        },
+        {
+          "kind": "quod.return"
         }
-      ],
-      "claims": []
-    },
-    {
-      "name": "alloc.str.builder_push_byte",
-      "params": [
-        {"name": "p",    "type": {"kind": "llvm.i8_ptr"}},
-        {"name": "byte", "type": {"kind": "llvm.i8"}}
-      ],
-      "return_type": {"kind": "llvm.void"},
-      "body": [
-        {
-          "kind": "quod.let",
-          "name": "b1",
-          "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"},
-          "init": {
-            "kind": "quod.load",
-            "ptr": {"kind": "llvm.param_ref", "name": "p"},
-            "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"}
-          }
-        },
-        {
-          "kind": "quod.expr_stmt",
-          "value": {
-            "kind": "llvm.call",
-            "function": "alloc.str.builder_ensure_cap",
-            "args": [
-              {"kind": "llvm.param_ref", "name": "p"},
-              {
-                "kind": "llvm.binop",
-                "op": "add",
-                "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b1"}, "name": "len"},
-                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
-              }
-            ]
-          }
-        },
-        {
-          "kind": "quod.let",
-          "name": "b",
-          "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"},
-          "init": {
-            "kind": "quod.load",
-            "ptr": {"kind": "llvm.param_ref", "name": "p"},
-            "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"}
-          }
-        },
-        {
-          "kind": "quod.store",
-          "ptr": {
-            "kind": "llvm.binop",
-            "op": "add",
-            "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "buf"},
-            "rhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "len"}
-          },
-          "value": {"kind": "llvm.param_ref", "name": "byte"}
-        },
-        {
-          "kind": "quod.field_set",
-          "local": "b",
-          "name": "len",
-          "value": {
-            "kind": "llvm.binop",
-            "op": "add",
-            "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "len"},
-            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
-          }
-        },
-        {
-          "kind": "quod.store",
-          "ptr": {"kind": "llvm.param_ref", "name": "p"},
-          "value": {"kind": "quod.local_ref", "name": "b"}
-        }
-      ],
-      "claims": []
-    },
-    {
-      "name": "alloc.str.builder_push_bytes",
-      "params": [
-        {"name": "p",   "type": {"kind": "llvm.i8_ptr"}},
-        {"name": "src", "type": {"kind": "llvm.i8_ptr"}},
-        {"name": "n",   "type": {"kind": "llvm.i64"}}
-      ],
-      "return_type": {"kind": "llvm.void"},
-      "body": [
-        {
-          "kind": "quod.let",
-          "name": "b1",
-          "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"},
-          "init": {
-            "kind": "quod.load",
-            "ptr": {"kind": "llvm.param_ref", "name": "p"},
-            "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"}
-          }
-        },
-        {
-          "kind": "quod.expr_stmt",
-          "value": {
-            "kind": "llvm.call",
-            "function": "alloc.str.builder_ensure_cap",
-            "args": [
-              {"kind": "llvm.param_ref", "name": "p"},
-              {
-                "kind": "llvm.binop",
-                "op": "add",
-                "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b1"}, "name": "len"},
-                "rhs": {"kind": "llvm.param_ref", "name": "n"}
-              }
-            ]
-          }
-        },
-        {
-          "kind": "quod.let",
-          "name": "b",
-          "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"},
-          "init": {
-            "kind": "quod.load",
-            "ptr": {"kind": "llvm.param_ref", "name": "p"},
-            "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"}
-          }
-        },
-        {
-          "kind": "quod.expr_stmt",
-          "value": {
-            "kind": "llvm.call",
-            "function": "core.bytes.copy",
-            "args": [
-              {
-                "kind": "llvm.binop",
-                "op": "add",
-                "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "buf"},
-                "rhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "len"}
-              },
-              {"kind": "llvm.param_ref", "name": "src"},
-              {"kind": "llvm.param_ref", "name": "n"}
-            ]
-          }
-        },
-        {
-          "kind": "quod.field_set",
-          "local": "b",
-          "name": "len",
-          "value": {
-            "kind": "llvm.binop",
-            "op": "add",
-            "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "len"},
-            "rhs": {"kind": "llvm.param_ref", "name": "n"}
-          }
-        },
-        {
-          "kind": "quod.store",
-          "ptr": {"kind": "llvm.param_ref", "name": "p"},
-          "value": {"kind": "quod.local_ref", "name": "b"}
-        }
-      ],
-      "claims": []
+      ]
     },
     {
       "name": "alloc.str.builder_push_str",
       "params": [
-        {"name": "p", "type": {"kind": "llvm.i8_ptr"}},
-        {"name": "s", "type": {"kind": "llvm.struct", "name": "core.str.String"}}
+        {
+          "name": "p",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.str.String"
+          }
+        }
       ],
-      "return_type": {"kind": "llvm.void"},
+      "return_type": {
+        "kind": "llvm.void"
+      },
       "body": [
         {
           "kind": "quod.expr_stmt",
@@ -409,30 +406,76 @@
             "kind": "llvm.call",
             "function": "alloc.str.builder_push_bytes",
             "args": [
-              {"kind": "llvm.param_ref", "name": "p"},
-              {"kind": "quod.field", "value": {"kind": "llvm.param_ref", "name": "s"}, "name": "ptr"},
-              {"kind": "quod.field", "value": {"kind": "llvm.param_ref", "name": "s"}, "name": "len"}
+              {
+                "kind": "llvm.param_ref",
+                "name": "p"
+              },
+              {
+                "kind": "quod.field",
+                "value": {
+                  "kind": "llvm.param_ref",
+                  "name": "s"
+                },
+                "name": "ptr"
+              },
+              {
+                "kind": "quod.field",
+                "value": {
+                  "kind": "llvm.param_ref",
+                  "name": "s"
+                },
+                "name": "len"
+              }
             ]
           }
+        },
+        {
+          "kind": "quod.return"
         }
-      ],
-      "claims": []
+      ]
     },
     {
       "name": "alloc.str.builder_into_str",
       "params": [
-        {"name": "p", "type": {"kind": "llvm.i8_ptr"}}
+        {
+          "name": "p",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        }
       ],
-      "return_type": {"kind": "llvm.struct", "name": "core.str.String"},
+      "return_type": {
+        "kind": "llvm.struct",
+        "name": "core.str.String"
+      },
       "body": [
         {
           "kind": "quod.let",
-          "name": "b",
-          "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"},
+          "name": "l",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "alloc.list.List",
+            "type_args": [
+              {
+                "kind": "llvm.i8"
+              }
+            ]
+          },
           "init": {
             "kind": "quod.load",
-            "ptr": {"kind": "llvm.param_ref", "name": "p"},
-            "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"}
+            "ptr": {
+              "kind": "llvm.param_ref",
+              "name": "p"
+            },
+            "type": {
+              "kind": "llvm.struct",
+              "name": "alloc.list.List",
+              "type_args": [
+                {
+                  "kind": "llvm.i8"
+                }
+              ]
+            }
           }
         },
         {
@@ -441,61 +484,158 @@
             "kind": "quod.struct_init",
             "type": "core.str.String",
             "fields": [
-              {"name": "ptr", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "buf"}},
-              {"name": "len", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "len"}}
+              {
+                "name": "ptr",
+                "value": {
+                  "kind": "quod.field",
+                  "value": {
+                    "kind": "quod.local_ref",
+                    "name": "l"
+                  },
+                  "name": "ptr"
+                }
+              },
+              {
+                "name": "len",
+                "value": {
+                  "kind": "quod.field",
+                  "value": {
+                    "kind": "quod.local_ref",
+                    "name": "l"
+                  },
+                  "name": "len"
+                }
+              }
             ]
           }
         }
-      ],
-      "claims": []
+      ]
     },
     {
       "name": "alloc.str.builder_len",
       "params": [
-        {"name": "p", "type": {"kind": "llvm.i8_ptr"}}
+        {
+          "name": "p",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        }
       ],
-      "return_type": {"kind": "llvm.i64"},
+      "return_type": {
+        "kind": "llvm.i64"
+      },
       "body": [
         {
           "kind": "quod.let",
-          "name": "b",
-          "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"},
+          "name": "l",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "alloc.list.List",
+            "type_args": [
+              {
+                "kind": "llvm.i8"
+              }
+            ]
+          },
           "init": {
             "kind": "quod.load",
-            "ptr": {"kind": "llvm.param_ref", "name": "p"},
-            "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"}
+            "ptr": {
+              "kind": "llvm.param_ref",
+              "name": "p"
+            },
+            "type": {
+              "kind": "llvm.struct",
+              "name": "alloc.list.List",
+              "type_args": [
+                {
+                  "kind": "llvm.i8"
+                }
+              ]
+            }
           }
         },
         {
           "kind": "quod.return_expr",
-          "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "len"}
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.list.list_len",
+            "args": [
+              {
+                "kind": "quod.local_ref",
+                "name": "l"
+              }
+            ],
+            "type_args": [
+              {
+                "kind": "llvm.i8"
+              }
+            ]
+          }
         }
-      ],
-      "claims": []
+      ]
     },
     {
       "name": "alloc.str.builder_cap",
       "params": [
-        {"name": "p", "type": {"kind": "llvm.i8_ptr"}}
+        {
+          "name": "p",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        }
       ],
-      "return_type": {"kind": "llvm.i64"},
+      "return_type": {
+        "kind": "llvm.i64"
+      },
       "body": [
         {
           "kind": "quod.let",
-          "name": "b",
-          "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"},
+          "name": "l",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "alloc.list.List",
+            "type_args": [
+              {
+                "kind": "llvm.i8"
+              }
+            ]
+          },
           "init": {
             "kind": "quod.load",
-            "ptr": {"kind": "llvm.param_ref", "name": "p"},
-            "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"}
+            "ptr": {
+              "kind": "llvm.param_ref",
+              "name": "p"
+            },
+            "type": {
+              "kind": "llvm.struct",
+              "name": "alloc.list.List",
+              "type_args": [
+                {
+                  "kind": "llvm.i8"
+                }
+              ]
+            }
           }
         },
         {
           "kind": "quod.return_expr",
-          "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "cap"}
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.list.list_cap",
+            "args": [
+              {
+                "kind": "quod.local_ref",
+                "name": "l"
+              }
+            ],
+            "type_args": [
+              {
+                "kind": "llvm.i8"
+              }
+            ]
+          }
         }
-      ],
-      "claims": []
+      ]
     }
   ]
 }
