@@ -5656,6 +5656,17 @@
     "mem.arena",
     "core.bytes",
     "core.option",
-    "alloc.list"
+    {
+      "module": "alloc.list",
+      "wire": [
+        {
+          "name": "A",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "mem.arena.Arena"
+          }
+        }
+      ]
+    }
   ]
 }

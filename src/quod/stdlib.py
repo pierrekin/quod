@@ -56,6 +56,12 @@ def resolve_imports(program: Program, *, disabled_tiers: frozenset[str] = frozen
     `program`, and clear `program.imports`. First-wins dedupe by name —
     user-declared items always shadow imports.
 
+    For imports with a `wire` clause, the resolver substitutes the
+    imported module's wirables to the bound types throughout the
+    module's body BEFORE merging it. v1: no transitive forwarding —
+    wirables in a stdlib module that's transitively imported (rather
+    than directly wired by the consumer) are an error.
+
     `disabled_tiers` lists tiers that must NOT be resolved (e.g.
     `frozenset({"std"})` for --no-std). If a transitive import lives in
     a disabled tier, raise ImportError_ pointing at the offender."""
@@ -81,10 +87,16 @@ def resolve_imports(program: Program, *, disabled_tiers: frozenset[str] = frozen
     # ively imported twice is fine.
     seen_impl: set[tuple[str, str]] = {(i.trait, repr(i.for_type)) for i in impls}
 
-    queue: list[str] = list(program.imports)
+    # Queue of Import objects. Each import's `wire` clauses are applied
+    # to the imported module when it's loaded — regardless of whether
+    # the import is the program's direct import or another module's
+    # nested import. (Whoever wrote `import X wire A=Y` chose the wiring
+    # in their own source.)
+    queue: list = list(program.imports)
     visited: set[str] = set()
     while queue:
-        name = queue.pop(0)
+        imp = queue.pop(0)
+        name = imp.module
         if name in visited:
             continue
         visited.add(name)
@@ -95,8 +107,18 @@ def resolve_imports(program: Program, *, disabled_tiers: frozenset[str] = frozen
                 f"disabled by the build profile (e.g. --no-{tier})"
             )
         mod = _load_module(name)
+        # If the module declares wirables, the import must wire all of
+        # them. Substitute the wirables throughout the module before
+        # merging.
+        if mod.wirables:
+            mod = _apply_wires(mod, imp)
+        elif imp.wire:
+            raise ImportError_(
+                f"import {name!r} carries `wire` clauses, but the module "
+                f"declares no wirables: {[w.name for w in imp.wire]}"
+            )
         for nested in mod.imports:
-            if nested not in visited:
+            if nested.module not in visited:
                 queue.append(nested)
         for c in mod.constants:
             if c.name not in seen_const:
@@ -141,6 +163,159 @@ def resolve_imports(program: Program, *, disabled_tiers: frozenset[str] = frozen
         impls=tuple(impls),
         imports=(),
     )
+
+
+def _apply_wires(mod: InputProgram, imp) -> InputProgram:
+    """Bind a module's `wirables` from an `Import.wire` clause and
+    substitute throughout the module's body. Returns a new InputProgram
+    with `wirables=()` and every TypeParamRef-named-by-a-wirable
+    replaced.
+
+    Errors out when:
+      - any of `mod.wirables` is unbound by `imp.wire`
+      - `imp.wire` names a binding for a wirable that doesn't exist
+      - a wire RHS is a `TypeParamRef` (v1 forwarding-through-your-own
+        -wirable is not yet supported; the bound type must be concrete)
+    """
+    from .model import TypeParamRef
+    for w in imp.wire:
+        if isinstance(w.type, TypeParamRef):
+            raise ImportError_(
+                f"import {imp.module!r}: wire {w.name!r} binds to "
+                f"TypeParamRef({w.type.name!r}), but v1 requires concrete "
+                f"types — forwarding a wirable through an intermediate "
+                f"module's own wirable is post-v1"
+            )
+    wire_map = {w.name: w.type for w in imp.wire}
+    wirable_names = {w.name for w in mod.wirables}
+    missing = wirable_names - set(wire_map)
+    extra = set(wire_map) - wirable_names
+    if missing:
+        raise ImportError_(
+            f"import {imp.module!r}: missing `wire` for wirable(s) "
+            f"{sorted(missing)}"
+        )
+    if extra:
+        raise ImportError_(
+            f"import {imp.module!r}: `wire` for unknown wirable(s) "
+            f"{sorted(extra)} (declared wirables: {sorted(wirable_names)})"
+        )
+    return _substitute_wirables(mod, wire_map)
+
+
+def mod_name(mod: InputProgram, imp) -> str:
+    return imp.module
+
+
+def _substitute_wirables(mod: InputProgram, wire_map: dict) -> InputProgram:
+    """Walk every def in `mod`, substituting TypeParamRefs that name a
+    wirable with the bound Type. Generic structs/enums/functions/impls
+    that *shadow* a wirable name with their own type-param keep their
+    own ref intact (no substitution at the inner scope).
+    """
+    from .traversal import substitute_in_stmt
+    from .model import (
+        TypeParamRef, StructType, EnumType, StructField, EnumPayloadField,
+        EnumVariant, Param, Function, StructDef, EnumDef, ImplDef,
+    )
+
+    def sub_type(t, banned: set[str]):
+        if isinstance(t, TypeParamRef) and t.name in wire_map and t.name not in banned:
+            return wire_map[t.name]
+        if isinstance(t, StructType) and t.type_args:
+            return t.model_copy(update={
+                "type_args": tuple(sub_type(a, banned) for a in t.type_args),
+            })
+        if isinstance(t, EnumType) and t.type_args:
+            return t.model_copy(update={
+                "type_args": tuple(sub_type(a, banned) for a in t.type_args),
+            })
+        return t
+
+    def sub_in_def_with_params(type_params, fn_under):
+        # Inner type_params shadow the wirable.
+        own = {tp.name for tp in type_params}
+        return fn_under(own)
+
+    new_structs = []
+    for sd in mod.structs:
+        own = {tp.name for tp in sd.type_params}
+        new_fields = tuple(
+            StructField(name=f.name, type=sub_type(f.type, own))
+            for f in sd.fields
+        )
+        new_structs.append(sd.model_copy(update={"fields": new_fields}))
+
+    new_enums = []
+    for ed in mod.enums:
+        own = {tp.name for tp in ed.type_params}
+        new_variants = tuple(
+            EnumVariant(
+                name=v.name,
+                fields=tuple(
+                    EnumPayloadField(name=f.name, type=sub_type(f.type, own))
+                    for f in v.fields
+                ),
+            )
+            for v in ed.variants
+        )
+        new_enums.append(ed.model_copy(update={"variants": new_variants}))
+
+    new_functions = []
+    for fn in mod.functions:
+        own = {tp.name for tp in fn.type_params}
+        type_fn = lambda t, banned=own: sub_type(t, banned)
+        new_params = tuple(
+            Param(name=p.name, type=type_fn(p.type)) for p in fn.params
+        )
+        new_return = type_fn(fn.return_type)
+        new_body = tuple(substitute_in_stmt(s, type_fn) for s in fn.body)
+        new_functions.append(fn.model_copy(update={
+            "params":      new_params,
+            "return_type": new_return,
+            "body":        new_body,
+        }))
+
+    new_impls = []
+    for impl in mod.impls:
+        own = {tp.name for tp in impl.type_params}
+        type_fn = lambda t, banned=own: sub_type(t, banned)
+        # for_type lives at the impl scope; impl's own type_params shadow.
+        new_for_type = type_fn(impl.for_type)
+        new_methods = []
+        for method in impl.methods:
+            method_own = own | {tp.name for tp in method.type_params}
+            method_fn = lambda t, banned=method_own: sub_type(t, banned)
+            m_params = tuple(
+                Param(name=p.name, type=method_fn(p.type)) for p in method.params
+            )
+            m_return = method_fn(method.return_type)
+            m_body = tuple(substitute_in_stmt(s, method_fn) for s in method.body)
+            new_methods.append(method.model_copy(update={
+                "params":      m_params,
+                "return_type": m_return,
+                "body":        m_body,
+            }))
+        new_impls.append(impl.model_copy(update={
+            "for_type": new_for_type,
+            "methods":  tuple(new_methods),
+        }))
+
+    new_externs = []
+    for ext in mod.externs:
+        new_externs.append(ext.model_copy(update={
+            "param_types": tuple(sub_type(t, set()) for t in ext.param_types),
+            "return_type": sub_type(ext.return_type, set()),
+        }))
+
+    return mod.model_copy(update={
+        "wirables":  (),
+        "structs":   tuple(new_structs),
+        "enums":     tuple(new_enums),
+        "functions": tuple(new_functions),
+        "impls":     tuple(new_impls),
+        "externs":   tuple(new_externs),
+    })
 
 
 def _load_module(name: str) -> InputProgram:

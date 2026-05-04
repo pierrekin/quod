@@ -1,7 +1,18 @@
 {
   "program": {
     "imports": [
-      "alloc.list",
+      {
+        "module": "alloc.list",
+        "wire": [
+          {
+            "name": "A",
+            "type": {
+              "kind": "llvm.struct",
+              "name": "mem.arena.Arena"
+            }
+          }
+        ]
+      },
       "mem.arena"
     ],
     "functions": [
@@ -44,10 +55,6 @@
               "type_args": [
                 {
                   "kind": "llvm.i32"
-                },
-                {
-                  "kind": "llvm.struct",
-                  "name": "mem.arena.Arena"
                 }
               ],
               "args": [
@@ -73,10 +80,6 @@
               "type_args": [
                 {
                   "kind": "llvm.i32"
-                },
-                {
-                  "kind": "llvm.struct",
-                  "name": "mem.arena.Arena"
                 }
               ],
               "args": [
@@ -102,10 +105,6 @@
               "type_args": [
                 {
                   "kind": "llvm.i32"
-                },
-                {
-                  "kind": "llvm.struct",
-                  "name": "mem.arena.Arena"
                 }
               ],
               "args": [

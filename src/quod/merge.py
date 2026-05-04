@@ -44,12 +44,12 @@ def merge_program(existing: Program, new: Program) -> Program:
     structs = _by_name(existing.structs) | _by_name(new.structs)
     enums = _by_name(existing.enums) | _by_name(new.enums)
 
-    seen = set(existing.imports)
+    seen = {imp.module for imp in existing.imports}
     imports = list(existing.imports)
     for imp in new.imports:
-        if imp not in seen:
+        if imp.module not in seen:
             imports.append(imp)
-            seen.add(imp)
+            seen.add(imp.module)
 
     return Program(
         functions=tuple(functions.values()),

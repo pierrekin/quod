@@ -45,10 +45,6 @@
       "type_params": [
         {
           "name": "T"
-        },
-        {
-          "name": "A",
-          "bound": "mem.Allocator"
         }
       ],
       "params": [
@@ -280,10 +276,6 @@
       "type_params": [
         {
           "name": "T"
-        },
-        {
-          "name": "A",
-          "bound": "mem.Allocator"
         }
       ],
       "params": [
@@ -612,10 +604,6 @@
       "type_params": [
         {
           "name": "T"
-        },
-        {
-          "name": "A",
-          "bound": "mem.Allocator"
         }
       ],
       "params": [
@@ -702,10 +690,6 @@
               {
                 "kind": "quod.type_param",
                 "name": "T"
-              },
-              {
-                "kind": "quod.type_param",
-                "name": "A"
               }
             ]
           }
@@ -1045,6 +1029,12 @@
           }
         }
       ]
+    }
+  ],
+  "wirables": [
+    {
+      "name": "A",
+      "bound": "mem.Allocator"
     }
   ]
 }

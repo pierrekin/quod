@@ -654,8 +654,8 @@ def format_program_lines(program: Program) -> Iterator[Line]:
     yield Line(program, 0, (Span("program", "keyword"), Span(" {", "punct")))
     if program.imports:
         yield Line(None, 2, (Span("imports:", "section"),))
-        for name in program.imports:
-            yield Line(None, 4, (Span(name, "const_name"),))
+        for imp in program.imports:
+            yield Line(None, 4, (Span(imp.module, "const_name"),))
     if program.constants:
         yield Line(None, 2, (Span("constants:", "section"),))
         for c in program.constants:

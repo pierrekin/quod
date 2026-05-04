@@ -1185,9 +1185,10 @@ def _desugar_with_arena(program: Program) -> Program:
     if not has_block:
         return program
 
-    if _ARENA_MODULE not in program.imports:
+    from .model import Import
+    if not any(imp.module == _ARENA_MODULE for imp in program.imports):
         program = program.model_copy(update={
-            "imports": program.imports + (_ARENA_MODULE,),
+            "imports": program.imports + (Import(module=_ARENA_MODULE),),
         })
     program = resolve_imports(program)
 

@@ -1317,6 +1317,46 @@ class ImplDef(_Node):
         return self
 
 
+class WireBinding(_Node):
+    """One `wire X=Y` clause inside an `Import`. Binds the wirable named
+    `name` (declared at the imported module's scope) to `type`."""
+    name: str
+    type: Type
+
+
+class Import(_Node):
+    """A structured import. JSON form accepts either a bare string
+    (`"alloc.list"`) or an object (`{"module": "alloc.list", "wire":
+    [{"name": "A", "type": ...}]}`); a `field_validator` coerces
+    strings to `{module: str}` so existing JSONs keep working.
+
+    `wire` binds the imported module's wirables. The resolver
+    substitutes those bindings throughout the module's body before
+    merging it into the consumer.
+    """
+    module: str
+    wire: tuple[WireBinding, ...] = ()
+
+    @field_validator("wire", mode="before")
+    @classmethod
+    def _coerce_wire(cls, raw):
+        # strict-mode Pydantic doesn't auto-coerce list→tuple; do it here
+        # so JSON arrays parse cleanly.
+        if isinstance(raw, list):
+            return tuple(raw)
+        return raw
+
+    @model_serializer(mode="wrap")
+    def _bare_string_when_no_wire(self, handler, info):
+        # Round-trip optimization: if there's no wire, serialize as a
+        # bare string. Existing programs without wirables stay byte-for-byte
+        # identical on save.
+        if not self.wire:
+            return self.module
+        data = handler(self)
+        return data
+
+
 class _ProgramBase(_Node):
     """Shared shape for Program and InputProgram."""
     constants: tuple[StringConstant, ...] = ()
@@ -1326,7 +1366,8 @@ class _ProgramBase(_Node):
     enums: tuple[EnumDef, ...] = ()
     traits: tuple[TraitDef, ...] = ()
     impls: tuple[ImplDef, ...] = ()
-    imports: tuple[str, ...] = ()
+    wirables: tuple[TypeParam, ...] = ()
+    imports: tuple[Import, ...] = ()
 
     @model_serializer(mode="wrap")
     def _drop_empty_collections(self, handler, info):
@@ -1339,19 +1380,38 @@ class _ProgramBase(_Node):
             data.pop("traits", None)
         if not self.impls:
             data.pop("impls", None)
+        if not self.wirables:
+            data.pop("wirables", None)
         if not self.imports:
             data.pop("imports", None)
         return data
 
+    @field_validator("imports", mode="before")
+    @classmethod
+    def _coerce_imports(cls, raw):
+        """Allow `["alloc.list", {"module": "alloc.list", "wire": [...]}]`
+        — bare strings become `{module: <s>}`. Returns a tuple to keep
+        strict-mode validation happy (the field is `tuple[Import, ...]`
+        and `strict=True` doesn't auto-coerce list→tuple).
+        """
+        out = []
+        for item in raw:
+            if isinstance(item, str):
+                out.append({"module": item})
+            else:
+                out.append(item)
+        return tuple(out)
+
     @field_validator("imports")
     @classmethod
-    def _validate_import_names(cls, names: tuple[str, ...]) -> tuple[str, ...]:
-        # Sanitize: only allow [A-Za-z0-9_.] so imports can't path-traverse
-        # to disk locations outside the stdlib directory. Names map to file
-        # paths via `stdlib/<name>.json` — no slashes, no leading/trailing
-        # dots, no empty segments.
+    def _validate_import_names(cls, imports: tuple["Import", ...]) -> tuple["Import", ...]:
+        # Sanitize: only allow [A-Za-z0-9_.] so module names can't
+        # path-traverse to disk locations outside the stdlib directory.
+        # Names map to file paths via `stdlib/<name>.json` — no slashes,
+        # no leading/trailing dots, no empty segments.
         seen: set[str] = set()
-        for n in names:
+        for imp in imports:
+            n = imp.module
             if not n or not all(c.isalnum() or c in "._" for c in n):
                 raise ValueError(
                     f"invalid import name {n!r}: must match [A-Za-z0-9_.] only"
@@ -1363,7 +1423,7 @@ class _ProgramBase(_Node):
             if n in seen:
                 raise ValueError(f"duplicate import {n!r}")
             seen.add(n)
-        return names
+        return imports
 
 
 def _validate_structs(program: "_ProgramBase") -> None:
@@ -1927,8 +1987,8 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
     lines: list[str] = ["program {"]
     if program.imports:
         lines.append("  imports:")
-        for name in program.imports:
-            lines.append(f"    {name}")
+        for imp in program.imports:
+            lines.append(f"    {imp.module}")
     if program.constants:
         lines.append("  constants:")
         for c in program.constants:
