@@ -507,9 +507,12 @@ def _impl_method_name(for_type, method_name: str) -> str:
 def _build_impl_index(impls) -> dict[tuple[str, str], ImplDef]:
     """Index impls by (trait_name, _type_to_name(for_type)). Used by
     trait-call resolution to find the impl that satisfies a given
-    dispatch."""
+    dispatch. Concrete impls only — generic impls are indexed
+    separately and instantiated on demand."""
     index: dict[tuple[str, str], ImplDef] = {}
     for impl in impls:
+        if impl.type_params:
+            continue  # generic; handled by _index_generic_impls
         key = (impl.trait, _type_to_name(impl.for_type))
         if key in index:
             raise ValueError(
@@ -521,15 +524,139 @@ def _build_impl_index(impls) -> dict[tuple[str, str], ImplDef]:
 
 
 def _promote_impls(impls) -> list[Function]:
-    """Each `impl Trait for T { fn f(...) ... }` produces one top-level
-    Function named `<T>::<f>`. The bodies pass through verbatim;
-    `ImplDef`'s validator already substituted Self."""
+    """Each non-generic `impl Trait for T { fn f(...) ... }` produces
+    one top-level Function named `<T>::<f>`. The bodies pass through
+    verbatim; `ImplDef`'s validator already substituted Self.
+
+    Generic impls (with `type_params`) are NOT promoted here — their
+    bodies still contain TypeParamRefs that the lowerer can't handle.
+    The mono pass instantiates them on demand when their target
+    template is monomorphized.
+    """
     out: list[Function] = []
     for impl in impls:
+        if impl.type_params:
+            continue
         for method in impl.methods:
             name = _impl_method_name(impl.for_type, method.name)
             out.append(method.model_copy(update={"name": name}))
     return out
+
+
+def _index_generic_impls(impls) -> dict[str, list[ImplDef]]:
+    """Index generic impls by the template name in their `for_type`.
+    `impl<T> Drop for Box<T>` indexes under "Box". When `Box<i64>` is
+    monomorphized, mono looks up "Box" here, computes the substitution
+    (T → i64), and instantiates the impl.
+
+    v1 restriction: `for_type` must be a `StructType` or `EnumType`,
+    and each position in `for_type.type_args` is either a TypeParamRef
+    (one of the impl's type-params) or a concrete type. No nested
+    patterns like `Box<List<T>>` for v1 — `for_type` is one level deep.
+    """
+    out: dict[str, list[ImplDef]] = {}
+    for impl in impls:
+        if not impl.type_params:
+            continue
+        for_type = impl.for_type
+        if isinstance(for_type, (StructType, EnumType)):
+            out.setdefault(for_type.name, []).append(impl)
+        else:
+            raise ValueError(
+                f"generic impl {impl.trait!r} for {for_type!r}: only "
+                f"StructType/EnumType for_types supported in v1"
+            )
+    return out
+
+
+def _instantiate_generic_impl(g_impl: ImplDef, args: tuple, impl_index, out_fns) -> None:
+    """Concretize a generic impl `impl<...> Trait for Tmpl<...>` for one
+    instantiation `(Tmpl, args)`. Builds the substitution by walking
+    `g_impl.for_type.type_args`: TypeParamRef positions bind to the
+    corresponding `args[i]`; concrete positions in for_type are
+    sanity-checked (must equal args[i] or it's a non-match — caller
+    should've filtered by template name).
+
+    Adds the resulting concrete impl to `impl_index` and promotes its
+    methods to mangled top-level Functions in `out_fns`. Also returns
+    the concrete impl so the caller can discover further
+    instantiations from substituted bodies.
+    """
+    # Build substitution from for_type.type_args ↔ args.
+    impl_type_args = g_impl.for_type.type_args
+    if len(impl_type_args) != len(args):
+        raise ValueError(
+            f"generic impl {g_impl.trait!r} for {g_impl.for_type.name!r}: "
+            f"for_type has {len(impl_type_args)} type_args but instantiation "
+            f"has {len(args)} args"
+        )
+    sub: dict[str, object] = {}
+    for slot, concrete in zip(impl_type_args, args):
+        if isinstance(slot, TypeParamRef):
+            if slot.name in sub and sub[slot.name] != concrete:
+                raise ValueError(
+                    f"generic impl {g_impl.trait!r}: type-param "
+                    f"{slot.name!r} bound twice to different types"
+                )
+            sub[slot.name] = concrete
+        elif slot != concrete:
+            # Concrete slot in for_type doesn't match this instantiation.
+            return None
+    # Concrete for_type for this instantiation.
+    concrete_for_type = _substitute_type(g_impl.for_type, sub)
+    concrete_for_type = _rewrite_type(concrete_for_type)
+    concrete_target = _type_to_name(concrete_for_type)
+
+    # Coherence check.
+    coherence_key = (g_impl.trait, concrete_target)
+    if coherence_key in impl_index:
+        # Already instantiated (or a non-generic impl shadowed it). Skip.
+        return None
+
+    # Substitute + rewrite the methods. Each becomes a top-level Function.
+    type_fn = lambda t: _rewrite_type(_substitute_type(t, sub))
+
+    # Build the substituted+rewritten methods. Two flavors are needed:
+    # (a) the impl_index entry keeps method names UNMANGLED (the trait
+    #     method names) so `_resolve_trait_call` can look them up by
+    #     trait-method-name; (b) the top-level Functions promoted into
+    #     `out_fns` use the mangled name `<for_type>::<method>` so the
+    #     emitted Call resolves to a unique symbol at lower time.
+    impl_methods_for_index: list[Function] = []
+    for method in g_impl.methods:
+        new_params = tuple(
+            Param(name=p.name, type=type_fn(p.type)) for p in method.params
+        )
+        new_return = type_fn(method.return_type)
+        new_body = tuple(_walk_types_in_stmt(s, _rewrite_type)
+                         for s in tuple(_substitute_type_in_method_body(method.body, sub)))
+        method_mangled = f"{concrete_target}::{method.name}"
+        # (a) impl-index entry: original trait-method name on the inner Function.
+        impl_methods_for_index.append(method.model_copy(update={
+            "params":      new_params,
+            "return_type": new_return,
+            "body":        new_body,
+        }))
+        # (b) promoted top-level function with mangled symbol.
+        out_fns[method_mangled] = method.model_copy(update={
+            "name":        method_mangled,
+            "params":      new_params,
+            "return_type": new_return,
+            "body":        new_body,
+        })
+
+    impl_index[coherence_key] = ImplDef.model_construct(
+        trait=g_impl.trait,
+        for_type=concrete_for_type,
+        methods=tuple(impl_methods_for_index),
+    )
+
+
+def _substitute_type_in_method_body(body, sub):
+    """Substitute TypeParamRefs in a method body using the shared
+    traversal walker. Returns the substituted body tuple (with nested
+    type_args still un-mangled — caller mangles in a second pass)."""
+    return tuple(_substitute_in_stmt(s, sub) for s in body)
 
 
 def _resolve_trait_call(expr: TraitCall, impl_index) -> Call:
@@ -708,6 +835,7 @@ def monomorphize(program: Program) -> Program:
     """
     impl_index = _build_impl_index(program.impls)
     promoted_fns = _promote_impls(program.impls)
+    generic_impls_by_template = _index_generic_impls(program.impls)
     if program.impls or promoted_fns:
         program = program.model_copy(update={
             "functions": program.functions + tuple(promoted_fns),
@@ -815,6 +943,10 @@ def monomorphize(program: Program) -> Program:
             out_structs[mangled] = StructDef(
                 name=mangled, type_params=(), fields=tuple(new_fields),
             )
+            # Generic impls targeting this template (e.g. `impl<T> Drop
+            # for Box<T>`) get instantiated alongside.
+            for g_impl in generic_impls_by_template.get(template, ()):
+                _instantiate_generic_impl(g_impl, args, impl_index, out_fns)
         elif template in generic_enums:
             ed = generic_enums[template]
             if len(ed.type_params) != len(args):
@@ -839,6 +971,10 @@ def monomorphize(program: Program) -> Program:
             out_enums[mangled] = EnumDef(
                 name=mangled, type_params=(), variants=tuple(new_variants),
             )
+            # Generic impls targeting this enum's template — same as the
+            # struct path.
+            for g_impl in generic_impls_by_template.get(template, ()):
+                _instantiate_generic_impl(g_impl, args, impl_index, out_fns)
         elif template in generic_fns:
             fn = generic_fns[template]
             if len(fn.type_params) != len(args):

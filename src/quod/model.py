@@ -1265,7 +1265,7 @@ def _substitute_self_in_type(t, for_type):
 
 
 class ImplDef(_Node):
-    """`impl <trait> for <for_type> { <methods> }`.
+    """`impl<...> <trait> for <for_type> { <methods> }`.
 
     Provides concrete bodies for the named trait's methods on the named
     type. Multiple impls of distinct traits for the same type are
@@ -1275,12 +1275,21 @@ class ImplDef(_Node):
     On construction, every `SelfType` inside `methods` is rewritten to
     `for_type` — the lowerer and the mono pass never see Self.
 
+    `type_params`: a generic impl introduces type variables that appear
+    in `for_type` (e.g. `impl<T> Drop for Box<T>`). When the
+    corresponding template (`Box`) is instantiated, the mono pass
+    generates one concrete impl per instantiation by binding the
+    impl's type-params from positions in `for_type.type_args`. v1
+    restriction: each `for_type.type_args[i]` must be either a
+    `TypeParamRef` naming one of the impl's `type_params`, or a
+    concrete type — no nested patterns like `Box<List<T>>`.
+
     Methods are stored as full `Function`s so they can be promoted to
     top-level by the monomorphization pass with mangled names like
-    `<for_type>::<method>` (e.g., `Arena::alloc`). Generic impls
-    (impl-level `type_params`) are out of scope for v1.
+    `<for_type>::<method>` (e.g., `Arena::alloc`, `Box<i64>::drop`).
     """
     trait: str
+    type_params: tuple[TypeParam, ...] = ()
     for_type: Type
     methods: tuple[Function, ...]
 
