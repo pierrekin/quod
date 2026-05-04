@@ -1254,7 +1254,22 @@ def _prepend_drop_before_returns(stmts, drop_stmt) -> tuple:
     """Walk `stmts` and emit `drop_stmt` immediately before each
     `ReturnExpr` / bare `Return`. Recurses into branches and loop bodies;
     nested `WithArena`s have already been desugared (their own drops
-    already in place), so we only need to add ours."""
+    already in place), so we only need to add ours.
+
+    KNOWN BUG (TODO): for `ReturnExpr(value=v)` where `v` reads memory
+    inside the arena, the drop runs BEFORE `v` is evaluated, so the
+    return reads dangling memory. The IR emitted is morally:
+        drop(arena);
+        ret v
+    but should be:
+        let __retval: T = v
+        drop(arena);
+        ret __retval
+    The fix is to thread the function's `return_type` through this pass
+    and hoist the value into a Let with a fresh name. Optimized builds
+    (`profile=2`) hide the bug because the optimizer hoists the load
+    above the drop. Unoptimized builds expose UB.
+    """
     out: list = []
     for s in stmts:
         match s:
