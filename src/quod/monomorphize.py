@@ -344,158 +344,23 @@ def _walk_types_in_stmt(stmt, fn):
     raise AssertionError(f"unhandled stmt in type rewrite: {type(stmt).__name__}")
 
 
-# ---------- Substitute-only walker (for generic-function bodies) ----------
+# ---------- Substitute-only walker ----------
 #
 # Inside a generic function template, every TypeParamRef must be resolved
-# to a concrete Type before the rewrite pass runs. This walker does
-# substitution only — it does NOT mangle StructType/EnumType.type_args
-# nor Init/Call type_args. After it runs, the body has concrete types
-# but still carries non-empty type_args at instantiation sites; the
-# subsequent collect-then-rewrite pass discovers those and mangles them.
+# to a concrete Type before the rewrite pass runs. The walker is in
+# `traversal` (shared with model.py's ImplDef Self substitution); here
+# we just thunk it with a sub-dict-driven `type_fn`.
+
+from .traversal import substitute_in_expr as _substitute_in_expr_walker
+from .traversal import substitute_in_stmt as _substitute_in_stmt_walker
+
 
 def _substitute_in_expr(expr, sub):
-    if isinstance(expr, IntLit):
-        return expr.model_copy(update={"type": _substitute_type(expr.type, sub)})
-    if isinstance(expr, Load):
-        return expr.model_copy(update={
-            "ptr":  _substitute_in_expr(expr.ptr, sub),
-            "type": _substitute_type(expr.type, sub),
-        })
-    if isinstance(expr, SizeOf):
-        return expr.model_copy(update={"type": _substitute_type(expr.type, sub)})
-    if isinstance(expr, Widen):
-        return expr.model_copy(update={
-            "value": _substitute_in_expr(expr.value, sub),
-        })
-    if isinstance(expr, StructInit):
-        new_fields = tuple(
-            FieldInit(name=fi.name, value=_substitute_in_expr(fi.value, sub))
-            for fi in expr.fields
-        )
-        new_type_args = tuple(_substitute_type(a, sub) for a in expr.type_args)
-        return expr.model_copy(update={
-            "type_args": new_type_args,
-            "fields":    new_fields,
-        })
-    if isinstance(expr, EnumInit):
-        new_fields = tuple(
-            FieldInit(name=fi.name, value=_substitute_in_expr(fi.value, sub))
-            for fi in expr.fields
-        )
-        new_type_args = tuple(_substitute_type(a, sub) for a in expr.type_args)
-        return expr.model_copy(update={
-            "type_args": new_type_args,
-            "fields":    new_fields,
-        })
-    if isinstance(expr, BinOp):
-        return expr.model_copy(update={
-            "lhs": _substitute_in_expr(expr.lhs, sub),
-            "rhs": _substitute_in_expr(expr.rhs, sub),
-        })
-    if isinstance(expr, ShortCircuitOr):
-        return expr.model_copy(update={
-            "lhs": _substitute_in_expr(expr.lhs, sub),
-            "rhs": _substitute_in_expr(expr.rhs, sub),
-        })
-    if isinstance(expr, ShortCircuitAnd):
-        return expr.model_copy(update={
-            "lhs": _substitute_in_expr(expr.lhs, sub),
-            "rhs": _substitute_in_expr(expr.rhs, sub),
-        })
-    if isinstance(expr, Call):
-        new_args = tuple(_substitute_in_expr(a, sub) for a in expr.args)
-        new_type_args = tuple(_substitute_type(a, sub) for a in expr.type_args)
-        return expr.model_copy(update={
-            "type_args": new_type_args,
-            "args":      new_args,
-        })
-    if isinstance(expr, FieldRead):
-        return expr.model_copy(update={
-            "value": _substitute_in_expr(expr.value, sub),
-        })
-    if isinstance(expr, LoadField):
-        return expr.model_copy(update={
-            "ptr": _substitute_in_expr(expr.ptr, sub),
-        })
-    if isinstance(expr, PtrOffset):
-        return expr.model_copy(update={
-            "base":   _substitute_in_expr(expr.base, sub),
-            "offset": _substitute_in_expr(expr.offset, sub),
-        })
-    if isinstance(expr, TryExpr):
-        return expr.model_copy(update={
-            "value": _substitute_in_expr(expr.value, sub),
-        })
-    if isinstance(expr, TraitCall):
-        return expr.model_copy(update={
-            "dispatch_type": _substitute_type(expr.dispatch_type, sub),
-            "args":          tuple(_substitute_in_expr(a, sub) for a in expr.args),
-        })
-    if isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit)):
-        return expr
-    raise AssertionError(f"unhandled expr in substitute: {type(expr).__name__}")
+    return _substitute_in_expr_walker(expr, lambda t: _substitute_type(t, sub))
 
 
 def _substitute_in_stmt(stmt, sub):
-    if isinstance(stmt, ReturnExpr):
-        return stmt.model_copy(update={"value": _substitute_in_expr(stmt.value, sub)})
-    if isinstance(stmt, (Return, Unreachable)):
-        return stmt
-    if isinstance(stmt, If):
-        return stmt.model_copy(update={
-            "cond":      _substitute_in_expr(stmt.cond, sub),
-            "then_body": tuple(_substitute_in_stmt(s, sub) for s in stmt.then_body),
-            "else_body": tuple(_substitute_in_stmt(s, sub) for s in stmt.else_body),
-        })
-    if isinstance(stmt, Let):
-        return stmt.model_copy(update={
-            "type": _substitute_type(stmt.type, sub),
-            "init": _substitute_in_expr(stmt.init, sub),
-        })
-    if isinstance(stmt, Assign):
-        return stmt.model_copy(update={"value": _substitute_in_expr(stmt.value, sub)})
-    if isinstance(stmt, While):
-        return stmt.model_copy(update={
-            "cond": _substitute_in_expr(stmt.cond, sub),
-            "body": tuple(_substitute_in_stmt(s, sub) for s in stmt.body),
-        })
-    if isinstance(stmt, For):
-        return stmt.model_copy(update={
-            "lo":   _substitute_in_expr(stmt.lo, sub),
-            "hi":   _substitute_in_expr(stmt.hi, sub),
-            "body": tuple(_substitute_in_stmt(s, sub) for s in stmt.body),
-        })
-    if isinstance(stmt, ExprStmt):
-        return stmt.model_copy(update={"value": _substitute_in_expr(stmt.value, sub)})
-    if isinstance(stmt, FieldSet):
-        return stmt.model_copy(update={"value": _substitute_in_expr(stmt.value, sub)})
-    if isinstance(stmt, Store):
-        return stmt.model_copy(update={
-            "ptr":   _substitute_in_expr(stmt.ptr,   sub),
-            "value": _substitute_in_expr(stmt.value, sub),
-        })
-    if isinstance(stmt, StoreField):
-        return stmt.model_copy(update={
-            "ptr":   _substitute_in_expr(stmt.ptr,   sub),
-            "value": _substitute_in_expr(stmt.value, sub),
-        })
-    if isinstance(stmt, WithArena):
-        return stmt.model_copy(update={
-            "capacity": _substitute_in_expr(stmt.capacity, sub),
-            "body":     tuple(_substitute_in_stmt(s, sub) for s in stmt.body),
-        })
-    if isinstance(stmt, Match):
-        new_arms = tuple(
-            arm.model_copy(update={
-                "body": tuple(_substitute_in_stmt(s, sub) for s in arm.body),
-            })
-            for arm in stmt.arms
-        )
-        return stmt.model_copy(update={
-            "scrutinee": _substitute_in_expr(stmt.scrutinee, sub),
-            "arms":      new_arms,
-        })
-    raise AssertionError(f"unhandled stmt in substitute: {type(stmt).__name__}")
+    return _substitute_in_stmt_walker(stmt, lambda t: _substitute_type(t, sub))
 
 
 # ---------- Discovery: collect all (template, args) instantiations ----------

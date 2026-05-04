@@ -1286,22 +1286,23 @@ class ImplDef(_Node):
 
     @model_validator(mode="after")
     def _resolve_self(self) -> "ImplDef":
-        # Eagerly substitute Self → for_type in every method's params and
-        # return_type. v1 limitation: Self inside method bodies (e.g. as
-        # `Let.type`) is not substituted — bodies are expected to name
-        # the `for_type` directly (e.g. `Arena::new(...)`). If Self does
-        # leak into a body, the lowerer will surface it as an
-        # unhandled-type error rather than silently produce wrong code.
+        # Eagerly substitute Self → for_type in every method's params,
+        # return_type, AND body. After this validator runs, no SelfType
+        # survives in the impl methods; the lowerer and the mono pass
+        # never see Self.
+        from .traversal import substitute_in_stmt
+        type_fn = lambda t: _substitute_self_in_type(t, self.for_type)
         new_methods = []
         for fn in self.methods:
             new_params = tuple(
-                Param(name=p.name, type=_substitute_self_in_type(p.type, self.for_type))
-                for p in fn.params
+                Param(name=p.name, type=type_fn(p.type)) for p in fn.params
             )
-            new_return = _substitute_self_in_type(fn.return_type, self.for_type)
+            new_return = type_fn(fn.return_type)
+            new_body = tuple(substitute_in_stmt(s, type_fn) for s in fn.body)
             new_methods.append(fn.model_copy(update={
                 "params":      new_params,
                 "return_type": new_return,
+                "body":        new_body,
             }))
         object.__setattr__(self, "methods", tuple(new_methods))
         return self

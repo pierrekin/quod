@@ -400,6 +400,48 @@ def test_impldef_substitutes_self_in_signatures():
     assert isinstance(method.return_type, I32Type)
 
 
+def test_impldef_substitutes_self_in_body():
+    """Self appearing in method-body Type positions (e.g. Let.type) gets
+    substituted to for_type by ImplDef's validator. Without this, the
+    lowerer would crash on an unhandled SelfType."""
+    counter = StructDef(name="Counter", fields=(StructField(name="count", type=I32Type()),))
+    add_trait = TraitDef(name="Add", methods=(
+        TraitMethodSig(
+            name="add",
+            params=(Param(name="self", type=SelfType()), Param(name="n", type=I32Type())),
+            return_type=I32Type(),
+        ),
+    ))
+    # Body uses `let s: Self = self` — Self in Let.type, must be substituted.
+    impl = ImplDef(
+        trait="Add",
+        for_type=StructType(name="Counter"),
+        methods=(
+            Function(
+                name="add",
+                params=(Param(name="self", type=SelfType()), Param(name="n", type=I32Type())),
+                return_type=I32Type(),
+                body=(
+                    Let(name="s", type=SelfType(), init=ParamRef(name="self")),
+                    ReturnExpr(value=BinOp(
+                        op="add",
+                        lhs=FieldRead(value=LocalRef(name="s"), name="count"),
+                        rhs=ParamRef(name="n"),
+                    )),
+                ),
+            ),
+        ),
+    )
+    # Walk the body and assert no SelfType remains anywhere.
+    let = impl.methods[0].body[0]
+    assert isinstance(let, Let)
+    assert isinstance(let.type, StructType)
+    assert let.type.name == "Counter"
+
+
+from quod.model import BinOp  # noqa: E402  (used by the body-Self test)
+
+
 def test_monomorphize_promotes_impl_methods_to_top_level_fns():
     counter, add_trait, add_impl = _counter_program()
     main_fn = Function(
