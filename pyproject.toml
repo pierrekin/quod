@@ -16,6 +16,7 @@ quod = "quod.cli:app"
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "pytest-xdist>=3.8.0",
 ]
 
 [build-system]
@@ -27,3 +28,4 @@ packages = ["src/quod"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-n auto"
