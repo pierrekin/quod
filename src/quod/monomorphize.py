@@ -905,6 +905,23 @@ def monomorphize(program: Program) -> Program:
             seen.add(key)
             pending.append(key)
 
+    def _check_bounds(kind: str, template_name: str, type_params, args) -> None:
+        """Reject an instantiation whose concrete type lacks an
+        `impl <bound> for <T>` for any bounded type parameter. The error
+        names the binding site so the user sees `<i64> doesn't implement
+        Allocator` at the call/use site, not later when a TraitCall
+        inside the body tries to dispatch."""
+        for tp, arg in zip(type_params, args):
+            if tp.bound is None:
+                continue
+            arg_name = _type_to_name(arg)
+            if (tp.bound, arg_name) not in impl_index:
+                raise ValueError(
+                    f"in instantiation of {kind} {template_name}<...>: type "
+                    f"parameter {tp.name!r} is bound by {tp.bound!r}, but "
+                    f"no `impl {tp.bound} for {arg_name}` is in scope"
+                )
+
     while pending:
         template, args_keys = pending.pop()
         args = tuple(args_keys)
@@ -919,6 +936,7 @@ def monomorphize(program: Program) -> Program:
                     f"generic struct {template!r} takes {len(sd.type_params)} "
                     f"type args, got {len(args)}: {args}"
                 )
+            _check_bounds("struct", template, sd.type_params, args)
             sub = dict(zip([tp.name for tp in sd.type_params], args))
             new_fields = []
             for f in sd.fields:
@@ -939,6 +957,7 @@ def monomorphize(program: Program) -> Program:
                     f"generic enum {template!r} takes {len(ed.type_params)} "
                     f"type args, got {len(args)}: {args}"
                 )
+            _check_bounds("enum", template, ed.type_params, args)
             sub = dict(zip([tp.name for tp in ed.type_params], args))
             new_variants = []
             for v in ed.variants:
@@ -962,6 +981,7 @@ def monomorphize(program: Program) -> Program:
                     f"generic function {template!r} takes {len(fn.type_params)} "
                     f"type args, got {len(args)}: {args}"
                 )
+            _check_bounds("function", template, fn.type_params, args)
             sub = dict(zip([tp.name for tp in fn.type_params], args))
             # Three-pass on the function body: substitute → collect → rewrite.
             sub_return = _substitute_type(fn.return_type, sub)

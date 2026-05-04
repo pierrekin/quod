@@ -457,6 +457,78 @@ def test_monomorphize_resolves_trait_call_to_impl_method():
     assert len(return_stmt.value.args) == 2
 
 
+def test_monomorphize_bound_violation_at_instantiation_no_trait_call_in_body():
+    """A generic fn with a bound but no trait calls in its body. Without
+    bound checking at the instantiation site, mono would happily produce
+    the concrete fn (the body doesn't dispatch). With bound checking,
+    instantiating with a type that lacks the impl errors clearly."""
+    counter, add_trait, add_impl = _counter_program()
+    # `fn passthrough<T: Add>(x: T) -> i32 { return 0 }` — bound but body
+    # never uses Add::add. The bound is the only constraint that says
+    # T must impl Add.
+    passthrough = Function(
+        name="passthrough",
+        type_params=(TypeParam(name="T", bound="Add"),),
+        params=(Param(name="x", type=TypeParamRef(name="T")),),
+        return_type=I32Type(),
+        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+    )
+    # Instantiate with i64, which has no impl Add for i64.
+    main_fn = Function(
+        name="main",
+        return_type=I32Type(),
+        body=(
+            ReturnExpr(value=Call(
+                function="passthrough",
+                type_args=(I64Type(),),
+                args=(IntLit(type=I64Type(), value=42),),
+            )),
+        ),
+    )
+    prog = Program(
+        structs=(counter,), traits=(add_trait,), impls=(add_impl,),
+        functions=(passthrough, main_fn),
+    )
+    with pytest.raises(ValueError, match="bound by 'Add'"):
+        monomorphize(prog)
+
+
+def test_monomorphize_bound_satisfied_succeeds():
+    """Same shape, but instantiate with a type that DOES impl the trait."""
+    counter, add_trait, add_impl = _counter_program()
+    passthrough = Function(
+        name="passthrough",
+        type_params=(TypeParam(name="T", bound="Add"),),
+        params=(Param(name="x", type=TypeParamRef(name="T")),),
+        return_type=I32Type(),
+        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+    )
+    main_fn = Function(
+        name="main",
+        return_type=I32Type(),
+        body=(
+            Let(
+                name="c", type=StructType(name="Counter"),
+                init=StructInit(type="Counter", fields=(
+                    FieldInit(name="count", value=IntLit(type=I32Type(), value=10)),
+                )),
+            ),
+            ReturnExpr(value=Call(
+                function="passthrough",
+                type_args=(StructType(name="Counter"),),
+                args=(LocalRef(name="c"),),
+            )),
+        ),
+    )
+    prog = Program(
+        structs=(counter,), traits=(add_trait,), impls=(add_impl,),
+        functions=(passthrough, main_fn),
+    )
+    out = monomorphize(prog)
+    fn_names = {fn.name for fn in out.functions}
+    assert "passthrough<Counter>" in fn_names
+
+
 def test_monomorphize_missing_impl_raises_clear_error():
     counter, add_trait, _add_impl = _counter_program()
     # Note: NO impls registered.
