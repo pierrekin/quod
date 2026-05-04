@@ -2223,7 +2223,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.alloc",
+            "function": "mem.arena.alloc",
             "args": [
               {
                 "kind": "quod.field",
@@ -2895,7 +2895,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.alloc",
+            "function": "mem.arena.alloc",
             "args": [
               {
                 "kind": "quod.field",
@@ -3567,7 +3567,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.alloc",
+            "function": "mem.arena.alloc",
             "args": [
               {
                 "kind": "quod.field",
@@ -3600,7 +3600,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.alloc",
+            "function": "mem.arena.alloc",
             "args": [
               {
                 "kind": "quod.field",
@@ -5592,7 +5592,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.alloc",
+            "function": "mem.arena.alloc",
             "args": [
               {
                 "kind": "llvm.param_ref",
@@ -6285,6 +6285,6 @@
     }
   ],
   "imports": [
-    "alloc.arena"
+    "mem.arena"
   ]
 }

@@ -47,7 +47,7 @@
                 },
                 "init": {
                   "kind": "llvm.call",
-                  "function": "alloc.arena.alloc",
+                  "function": "mem.arena.alloc",
                   "args": [
                     {
                       "kind": "quod.local_ref",
@@ -128,7 +128,7 @@
       }
     ],
     "imports": [
-      "alloc.arena"
+      "mem.arena"
     ]
   },
   "expect": {

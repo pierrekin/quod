@@ -515,18 +515,18 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "class": WithArena,
         "summary": (
             "Open a bump-allocated arena for the duration of `body`; "
-            "`alloc.arena.drop` is called automatically on every exit edge "
+            "`mem.arena.drop` is called automatically on every exit edge "
             "(fall-through and every `return` reachable from the body). The arena "
             "handle is bound to a local named `name` of type i8*. `capacity` must "
-            "lower to i64. Auto-injects `imports: [\"alloc.arena\"]` if absent, "
-            "so `alloc.arena.alloc` is visible to body code without a manual import."
+            "lower to i64. Auto-injects `imports: [\"mem.arena\"]` if absent, "
+            "so `mem.arena.alloc` is visible to body code without a manual import."
         ),
         "example": {
             "kind": "quod.with_arena", "name": "a",
             "capacity": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4096},
             "body": [
                 {"kind": "quod.expr_stmt",
-                 "value": {"kind": "llvm.call", "function": "alloc.arena.alloc",
+                 "value": {"kind": "llvm.call", "function": "mem.arena.alloc",
                            "args": [{"kind": "quod.local_ref", "name": "a"},
                                     {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 64}]}},
             ],

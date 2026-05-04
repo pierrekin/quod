@@ -22,12 +22,12 @@ src/quod/
     lower.py           Program → LLVM IR → object/binary
     runtime.py         Optional C runtime: compiles src/quod/runtime/*.c
                        into libquodrt-vN.a if any sources exist (empty by
-                       default — the arena allocator lives in alloc.arena)
+                       default — the arena allocator lives in mem.arena)
     stdlib.py          Import resolution + tier classification
     stdlib/
         core.bytes.json
         core.str.json
-        alloc.arena.json   ← bump allocator (quod-authored)
+        mem.arena.json   ← bump allocator (quod-authored)
         alloc.str.json
         alloc.json.json    ← JSON parser, the keystone module
         std.io.json
@@ -114,7 +114,7 @@ program).
    `src/quod/runtime/*.c` into `libquodrt-<TAG>.a` if any sources exist
    (cached by mtime; returns `None` when the directory is empty —
    the default state since the arena allocator lives in
-   `alloc.arena`). Archive linking is by-reference, so unused runtime
+   `mem.arena`). Archive linking is by-reference, so unused runtime
    code stays stripped.
 9. **`clang -target ... <obj> [<archive>] -o <bin>`** for each bin.
    The archive arg is omitted when `build_runtime_archive` returns None.
@@ -138,7 +138,7 @@ any runtime ABI change so old caches invalidate without a manual
 
 The runtime hook is reserved for primitives that genuinely can't be
 expressed in quod (SIMD intrinsics, panic abort, signal handlers,
-…). Everything that *can* live in quod should — see `alloc.arena.json`
+…). Everything that *can* live in quod should — see `mem.arena.json`
 for an end-to-end example of authoring infrastructure as a stdlib
 module instead of a C file.
 
@@ -243,7 +243,7 @@ recursively merging an import set into a Program before lowering.
 4. If the module needs library symbols, declare them as externs with
    the appropriate linkage: `linkage.libc` for libc / clang's default
    link line (`malloc`, `free`, `read`, `printf`, …), `linkage.runtime`
-   for symbols defined in `src/quod/runtime/*.c`. `alloc.arena.json` is
+   for symbols defined in `src/quod/runtime/*.c`. `mem.arena.json` is
    the worked example: it declares `malloc` / `free` / `memset` as
    libc externs and implements its own bump allocator on top of them.
 5. There's no test runner specific to stdlib modules — write a

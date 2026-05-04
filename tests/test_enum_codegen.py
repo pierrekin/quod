@@ -667,7 +667,7 @@ def test_enum_round_trip_through_i8_ptr():
                 body=(
                     # Allocate a buffer big enough for one Outer
                     Let(name="buf", type=I8PtrType(), init=Call(
-                        function="alloc.arena.alloc",
+                        function="mem.arena.alloc",
                         args=(LocalRef(name="a"), IntLit(type=I64Type(), value=128)),
                     )),
                     # Construct an Outer and store it through the buffer ptr
@@ -701,7 +701,7 @@ def test_enum_round_trip_through_i8_ptr():
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,),
-        imports=("alloc.arena",),
+        imports=("mem.arena",),
         enums=(inner, outer), functions=(main,),
     )
     assert _build_and_run(prog) == "66\n"

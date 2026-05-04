@@ -1161,9 +1161,9 @@ def _lower_function_body(
         builder.ret_void()
 
 
-_ARENA_MODULE = "alloc.arena"
-_ARENA_NEW = "alloc.arena.new"
-_ARENA_DROP = "alloc.arena.drop"
+_ARENA_MODULE = "mem.arena"
+_ARENA_NEW = "mem.arena.new"
+_ARENA_DROP = "mem.arena.drop"
 
 
 def _desugar_with_arena(program: Program) -> Program:
@@ -1171,13 +1171,13 @@ def _desugar_with_arena(program: Program) -> Program:
     sequence, threading `arena_drop` calls before every `return` reachable
     from the body.
 
-    The arena allocator (`alloc.arena.new` / `alloc.arena.alloc` /
-    `alloc.arena.drop` / `alloc.arena.used`) is shipped as the
-    `alloc.arena` stdlib module. When a program uses `WithArena`, we
+    The arena allocator (`mem.arena.new` / `mem.arena.alloc` /
+    `mem.arena.drop` / `mem.arena.used`) is shipped as the
+    `mem.arena` stdlib module. When a program uses `WithArena`, we
     auto-inject the import and re-run `resolve_imports` so the desugared
     Call expressions resolve to real Function nodes by the time lowering
     proper begins. Idempotent: programs with no `WithArena`, or programs
-    that already import `alloc.arena`, pass through unchanged (any inner
+    that already import `mem.arena`, pass through unchanged (any inner
     `resolve_imports` call is itself idempotent — it clears imports after
     the first run).
     """

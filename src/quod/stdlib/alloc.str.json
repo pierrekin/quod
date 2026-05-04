@@ -2,7 +2,7 @@
   "imports": [
     "core.str",
     "core.bytes",
-    "alloc.arena"
+    "mem.arena"
   ],
   "structs": [
     {
@@ -30,7 +30,7 @@
           "type": {"kind": "llvm.i8_ptr"},
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.alloc",
+            "function": "mem.arena.alloc",
             "args": [
               {"kind": "llvm.param_ref", "name": "arena"},
               {
@@ -85,7 +85,7 @@
           "type": {"kind": "llvm.i8_ptr"},
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.alloc",
+            "function": "mem.arena.alloc",
             "args": [
               {"kind": "llvm.param_ref", "name": "arena"},
               {"kind": "quod.sizeof", "type": {"kind": "llvm.struct", "name": "alloc.str.Builder"}}
@@ -98,7 +98,7 @@
           "type": {"kind": "llvm.i8_ptr"},
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.alloc",
+            "function": "mem.arena.alloc",
             "args": [
               {"kind": "llvm.param_ref", "name": "arena"},
               {"kind": "llvm.param_ref", "name": "initial_cap"}
@@ -209,7 +209,7 @@
               "type": {"kind": "llvm.i8_ptr"},
               "init": {
                 "kind": "llvm.call",
-                "function": "alloc.arena.alloc",
+                "function": "mem.arena.alloc",
                 "args": [
                   {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "b"}, "name": "arena"},
                   {"kind": "quod.local_ref", "name": "new_cap"}

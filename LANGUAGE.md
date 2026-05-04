@@ -304,8 +304,8 @@ build time (first-wins by name).
 - `core.str` — `core.str.String { ptr: i8*, len: i64 }`,
   `core.str.eq(a, b)`, `core.str.slice(s, lo, hi)`,
   `core.str.from_cstr(c)`. Slice-by-pointer; no copies.
-- `alloc.arena` — quod-authored bump allocator with chunk-list growth.
-  Defines `alloc.arena.{new,alloc,drop,used}` and the underlying
+- `mem.arena` — quod-authored bump allocator with chunk-list growth.
+  Defines `mem.arena.{new,alloc,drop,used}` and the underlying
   `Chunk` / `Arena` structs. Calls libc `malloc` / `free` / `memset`
   via `linkage.libc` externs. Imported transitively by anything that
   allocates; auto-imported by `quod.with_arena`.
@@ -342,7 +342,7 @@ program is indistinguishable from one written flat. The on-disk
 ## Arenas
 
 quod's allocator-of-record. The model surface is `quod.with_arena`;
-the implementation is the quod-authored `alloc.arena` stdlib module.
+the implementation is the quod-authored `mem.arena` stdlib module.
 
 ```
 fn parse_one(text: i8_ptr, len: i64) -> i64 {
@@ -354,11 +354,11 @@ fn parse_one(text: i8_ptr, len: i64) -> i64 {
 }
 ```
 
-`with_arena` desugars to `alloc.arena.new(capacity)` at block entry and
-`alloc.arena.drop(handle)` on every exit edge. The desugaring
-auto-injects `imports: ["alloc.arena"]` when the program doesn't
+`with_arena` desugars to `mem.arena.new(capacity)` at block entry and
+`mem.arena.drop(handle)` on every exit edge. The desugaring
+auto-injects `imports: ["mem.arena"]` when the program doesn't
 already declare it, so a `with_arena` block is one-stop sugar — call
-`alloc.arena.alloc(handle, n)` directly inside the body for typed
+`mem.arena.alloc(handle, n)` directly inside the body for typed
 buffer allocations.
 
 Arena pointers are valid until the matching drop. The allocator never

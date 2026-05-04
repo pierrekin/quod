@@ -2118,7 +2118,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.alloc",
+            "function": "mem.arena.alloc",
             "args": [
               {
                 "kind": "quod.field",
@@ -3008,7 +3008,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.alloc",
+            "function": "mem.arena.alloc",
             "args": [
               {
                 "kind": "llvm.param_ref",
@@ -3611,7 +3611,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.alloc",
+            "function": "mem.arena.alloc",
             "args": [
               {
                 "kind": "quod.field",
@@ -4266,7 +4266,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.alloc",
+            "function": "mem.arena.alloc",
             "args": [
               {
                 "kind": "quod.field",
@@ -4299,7 +4299,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.alloc",
+            "function": "mem.arena.alloc",
             "args": [
               {
                 "kind": "quod.field",
@@ -4942,13 +4942,13 @@
       "return_type": {"kind": "llvm.i8_ptr"},
       "body": [
         {"kind": "quod.let", "name": "p", "type": {"kind": "llvm.i8_ptr"},
-         "init": {"kind": "llvm.call", "function": "alloc.arena.alloc",
+         "init": {"kind": "llvm.call", "function": "mem.arena.alloc",
                   "args": [{"kind": "llvm.param_ref", "name": "arena"},
                            {"kind": "quod.sizeof", "type": {"kind": "llvm.struct", "name": "alloc.json.ListJsonValue"}}]}},
         {"kind": "quod.let", "name": "stride", "type": {"kind": "llvm.i64"},
          "init": {"kind": "quod.sizeof", "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"}}},
         {"kind": "quod.let", "name": "buf", "type": {"kind": "llvm.i8_ptr"},
-         "init": {"kind": "llvm.call", "function": "alloc.arena.alloc",
+         "init": {"kind": "llvm.call", "function": "mem.arena.alloc",
                   "args": [{"kind": "llvm.param_ref", "name": "arena"},
                            {"kind": "llvm.binop", "op": "mul",
                             "lhs": {"kind": "llvm.param_ref", "name": "initial_cap"},
@@ -5007,7 +5007,7 @@
            {"kind": "quod.let", "name": "stride", "type": {"kind": "llvm.i64"},
             "init": {"kind": "quod.sizeof", "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"}}},
            {"kind": "quod.let", "name": "new_ptr", "type": {"kind": "llvm.i8_ptr"},
-            "init": {"kind": "llvm.call", "function": "alloc.arena.alloc",
+            "init": {"kind": "llvm.call", "function": "mem.arena.alloc",
                      "args": [{"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "l"}, "name": "arena"},
                               {"kind": "llvm.binop", "op": "mul",
                                "lhs": {"kind": "quod.local_ref", "name": "new_cap"},
@@ -5283,7 +5283,7 @@
     }
   ],
   "imports": [
-    "alloc.arena",
+    "mem.arena",
     "core.bytes"
   ]
 }

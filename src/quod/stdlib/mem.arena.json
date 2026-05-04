@@ -2,7 +2,7 @@
   "constants": [],
   "functions": [
     {
-      "name": "alloc.arena.round_up",
+      "name": "mem.arena.round_up",
       "params": [
         {
           "name": "n",
@@ -67,7 +67,7 @@
       "claims": []
     },
     {
-      "name": "alloc.arena._new_chunk",
+      "name": "mem.arena._new_chunk",
       "params": [
         {
           "name": "capacity",
@@ -88,7 +88,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.round_up",
+            "function": "mem.arena.round_up",
             "args": [
               {
                 "kind": "llvm.param_ref",
@@ -149,7 +149,7 @@
               "kind": "quod.sizeof",
               "type": {
                 "kind": "llvm.struct",
-                "name": "alloc.arena.Chunk"
+                "name": "mem.arena.Chunk"
               }
             },
             "rhs": {
@@ -204,7 +204,7 @@
             "kind": "quod.local_ref",
             "name": "c"
           },
-          "struct_type": "alloc.arena.Chunk",
+          "struct_type": "mem.arena.Chunk",
           "name": "prev",
           "value": {
             "kind": "quod.null_ptr"
@@ -216,7 +216,7 @@
             "kind": "quod.local_ref",
             "name": "c"
           },
-          "struct_type": "alloc.arena.Chunk",
+          "struct_type": "mem.arena.Chunk",
           "name": "cap",
           "value": {
             "kind": "quod.local_ref",
@@ -229,7 +229,7 @@
             "kind": "quod.local_ref",
             "name": "c"
           },
-          "struct_type": "alloc.arena.Chunk",
+          "struct_type": "mem.arena.Chunk",
           "name": "cur",
           "value": {
             "kind": "llvm.const_int",
@@ -250,7 +250,7 @@
       "claims": []
     },
     {
-      "name": "alloc.arena.new",
+      "name": "mem.arena.new",
       "params": [
         {
           "name": "initial_capacity",
@@ -277,7 +277,7 @@
                 "kind": "quod.sizeof",
                 "type": {
                   "kind": "llvm.struct",
-                  "name": "alloc.arena.Arena"
+                  "name": "mem.arena.Arena"
                 }
               }
             ]
@@ -357,7 +357,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena._new_chunk",
+            "function": "mem.arena._new_chunk",
             "args": [
               {
                 "kind": "quod.local_ref",
@@ -408,7 +408,7 @@
             "kind": "quod.local_ref",
             "name": "a"
           },
-          "struct_type": "alloc.arena.Arena",
+          "struct_type": "mem.arena.Arena",
           "name": "head",
           "value": {
             "kind": "quod.local_ref",
@@ -421,7 +421,7 @@
             "kind": "quod.local_ref",
             "name": "a"
           },
-          "struct_type": "alloc.arena.Arena",
+          "struct_type": "mem.arena.Arena",
           "name": "default_cap",
           "value": {
             "kind": "quod.local_ref",
@@ -434,7 +434,7 @@
             "kind": "quod.local_ref",
             "name": "a"
           },
-          "struct_type": "alloc.arena.Arena",
+          "struct_type": "mem.arena.Arena",
           "name": "total_used",
           "value": {
             "kind": "llvm.const_int",
@@ -455,7 +455,7 @@
       "claims": []
     },
     {
-      "name": "alloc.arena.alloc",
+      "name": "mem.arena.alloc",
       "params": [
         {
           "name": "arena",
@@ -575,7 +575,7 @@
           },
           "init": {
             "kind": "llvm.call",
-            "function": "alloc.arena.round_up",
+            "function": "mem.arena.round_up",
             "args": [
               {
                 "kind": "quod.local_ref",
@@ -603,7 +603,7 @@
               "kind": "llvm.param_ref",
               "name": "arena"
             },
-            "struct_type": "alloc.arena.Arena",
+            "struct_type": "mem.arena.Arena",
             "name": "head"
           }
         },
@@ -619,7 +619,7 @@
               "kind": "quod.local_ref",
               "name": "c"
             },
-            "struct_type": "alloc.arena.Chunk",
+            "struct_type": "mem.arena.Chunk",
             "name": "cur"
           }
         },
@@ -635,7 +635,7 @@
               "kind": "quod.local_ref",
               "name": "c"
             },
-            "struct_type": "alloc.arena.Chunk",
+            "struct_type": "mem.arena.Chunk",
             "name": "cap"
           }
         },
@@ -674,7 +674,7 @@
                   "kind": "llvm.param_ref",
                   "name": "arena"
                 },
-                "struct_type": "alloc.arena.Arena",
+                "struct_type": "mem.arena.Arena",
                 "name": "default_cap"
               }
             },
@@ -712,7 +712,7 @@
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "alloc.arena._new_chunk",
+                "function": "mem.arena._new_chunk",
                 "args": [
                   {
                     "kind": "quod.local_ref",
@@ -750,7 +750,7 @@
                 "kind": "quod.local_ref",
                 "name": "nc"
               },
-              "struct_type": "alloc.arena.Chunk",
+              "struct_type": "mem.arena.Chunk",
               "name": "prev",
               "value": {
                 "kind": "quod.local_ref",
@@ -763,7 +763,7 @@
                 "kind": "llvm.param_ref",
                 "name": "arena"
               },
-              "struct_type": "alloc.arena.Arena",
+              "struct_type": "mem.arena.Arena",
               "name": "head",
               "value": {
                 "kind": "quod.local_ref",
@@ -812,7 +812,7 @@
                 "kind": "quod.sizeof",
                 "type": {
                   "kind": "llvm.struct",
-                  "name": "alloc.arena.Chunk"
+                  "name": "mem.arena.Chunk"
                 }
               }
             },
@@ -828,7 +828,7 @@
             "kind": "quod.local_ref",
             "name": "c"
           },
-          "struct_type": "alloc.arena.Chunk",
+          "struct_type": "mem.arena.Chunk",
           "name": "cur",
           "value": {
             "kind": "llvm.binop",
@@ -849,7 +849,7 @@
             "kind": "llvm.param_ref",
             "name": "arena"
           },
-          "struct_type": "alloc.arena.Arena",
+          "struct_type": "mem.arena.Arena",
           "name": "total_used",
           "value": {
             "kind": "llvm.binop",
@@ -860,7 +860,7 @@
                 "kind": "llvm.param_ref",
                 "name": "arena"
               },
-              "struct_type": "alloc.arena.Arena",
+              "struct_type": "mem.arena.Arena",
               "name": "total_used"
             },
             "rhs": {
@@ -904,7 +904,7 @@
       "claims": []
     },
     {
-      "name": "alloc.arena.drop",
+      "name": "mem.arena.drop",
       "params": [
         {
           "name": "arena",
@@ -949,7 +949,7 @@
               "kind": "llvm.param_ref",
               "name": "arena"
             },
-            "struct_type": "alloc.arena.Arena",
+            "struct_type": "mem.arena.Arena",
             "name": "head"
           }
         },
@@ -979,7 +979,7 @@
                   "kind": "quod.local_ref",
                   "name": "c"
                 },
-                "struct_type": "alloc.arena.Chunk",
+                "struct_type": "mem.arena.Chunk",
                 "name": "prev"
               }
             },
@@ -1026,7 +1026,7 @@
       "claims": []
     },
     {
-      "name": "alloc.arena.used",
+      "name": "mem.arena.used",
       "params": [
         {
           "name": "arena",
@@ -1074,7 +1074,7 @@
               "kind": "llvm.param_ref",
               "name": "arena"
             },
-            "struct_type": "alloc.arena.Arena",
+            "struct_type": "mem.arena.Arena",
             "name": "total_used"
           }
         }
@@ -1134,7 +1134,7 @@
   ],
   "structs": [
     {
-      "name": "alloc.arena.Chunk",
+      "name": "mem.arena.Chunk",
       "fields": [
         {
           "name": "prev",
@@ -1157,7 +1157,7 @@
       ]
     },
     {
-      "name": "alloc.arena.Arena",
+      "name": "mem.arena.Arena",
       "fields": [
         {
           "name": "head",

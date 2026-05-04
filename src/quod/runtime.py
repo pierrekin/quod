@@ -1,7 +1,7 @@
 """quod's optional C runtime — compiled on demand into a static archive.
 
 Empty by default since the arena allocator was lifted into the
-`alloc.arena` quod stdlib module. The infrastructure remains so a user
+`mem.arena` quod stdlib module. The infrastructure remains so a user
 (or a future stdlib bit that genuinely can't be written in quod, like
 SIMD intrinsics or a panic handler) can drop a .c file into
 `src/quod/runtime/` and declare externs with `linkage.runtime` to call

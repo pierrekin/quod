@@ -71,8 +71,8 @@ build time, first-wins by name:
 - `alloc.*` — needs the arena allocator. Disable with `--no-alloc`.
 - `std.*` — needs hosted OS / libc. Disable with `--no-std`.
 
-`--no-alloc` also refuses `with_arena` (it auto-imports `alloc.arena`).
-Common modules: `core.bytes`, `core.str`, `alloc.arena` (quod-authored
+`--no-alloc` also refuses `with_arena` (it auto-imports `mem.arena`).
+Common modules: `core.bytes`, `core.str`, `mem.arena` (quod-authored
 bump allocator), `alloc.str`, `alloc.json`, `std.io`. See LANGUAGE.md
 for the list and their entry points; `quod -f src/quod/stdlib/<name>.json
 show` opens any module standalone.

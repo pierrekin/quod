@@ -17,7 +17,7 @@
             },
             "init": {
               "kind": "llvm.call",
-              "function": "alloc.arena.new",
+              "function": "mem.arena.new",
               "args": [
                 {
                   "kind": "llvm.const_int",
@@ -37,7 +37,7 @@
             },
             "init": {
               "kind": "llvm.call",
-              "function": "alloc.arena.alloc",
+              "function": "mem.arena.alloc",
               "args": [
                 {
                   "kind": "quod.local_ref",
@@ -61,7 +61,7 @@
             },
             "init": {
               "kind": "llvm.call",
-              "function": "alloc.arena.alloc",
+              "function": "mem.arena.alloc",
               "args": [
                 {
                   "kind": "quod.local_ref",
@@ -85,7 +85,7 @@
             },
             "init": {
               "kind": "llvm.call",
-              "function": "alloc.arena.used",
+              "function": "mem.arena.used",
               "args": [
                 {
                   "kind": "quod.local_ref",
@@ -98,7 +98,7 @@
             "kind": "quod.expr_stmt",
             "value": {
               "kind": "llvm.call",
-              "function": "alloc.arena.drop",
+              "function": "mem.arena.drop",
               "args": [
                 {
                   "kind": "quod.local_ref",
@@ -154,7 +154,7 @@
       }
     ],
     "imports": [
-      "alloc.arena"
+      "mem.arena"
     ]
   },
   "expect": {

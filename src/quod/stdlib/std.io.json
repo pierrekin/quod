@@ -1,7 +1,7 @@
 {
   "imports": [
     "core.str",
-    "alloc.arena"
+    "mem.arena"
   ],
   "enums": [
     {
@@ -399,7 +399,7 @@
                   },
                   "init": {
                     "kind": "llvm.call",
-                    "function": "alloc.arena.alloc",
+                    "function": "mem.arena.alloc",
                     "args": [
                       {
                         "kind": "llvm.param_ref",
