@@ -187,7 +187,11 @@ def _walk_types_in_expr(expr, fn):
             for fi in expr.fields
         )
         if expr.type_args:
-            mangled = _mangle(expr.type, expr.type_args)
+            # Apply fn to each type_arg first — this lets substitution
+            # passes resolve TypeParamRefs in nested type_args before
+            # they get mangled into the enclosing name.
+            args = tuple(fn(a) for a in expr.type_args)
+            mangled = _mangle(expr.type, args)
             return expr.model_copy(update={
                 "type": mangled,
                 "type_args": (),
@@ -200,7 +204,8 @@ def _walk_types_in_expr(expr, fn):
             for fi in expr.fields
         )
         if expr.type_args:
-            mangled = _mangle(expr.enum, expr.type_args)
+            args = tuple(fn(a) for a in expr.type_args)
+            mangled = _mangle(expr.enum, args)
             return expr.model_copy(update={
                 "enum": mangled,
                 "type_args": (),
@@ -223,9 +228,16 @@ def _walk_types_in_expr(expr, fn):
             "rhs": _walk_types_in_expr(expr.rhs, fn),
         })
     if isinstance(expr, Call):
-        return expr.model_copy(update={
-            "args": tuple(_walk_types_in_expr(a, fn) for a in expr.args),
-        })
+        new_args = tuple(_walk_types_in_expr(a, fn) for a in expr.args)
+        if expr.type_args:
+            type_args = tuple(fn(a) for a in expr.type_args)
+            mangled = _mangle(expr.function, type_args)
+            return expr.model_copy(update={
+                "function":  mangled,
+                "type_args": (),
+                "args":      new_args,
+            })
+        return expr.model_copy(update={"args": new_args})
     if isinstance(expr, FieldRead):
         return expr.model_copy(update={
             "value": _walk_types_in_expr(expr.value, fn),
@@ -321,6 +333,155 @@ def _walk_types_in_stmt(stmt, fn):
     raise AssertionError(f"unhandled stmt in type rewrite: {type(stmt).__name__}")
 
 
+# ---------- Substitute-only walker (for generic-function bodies) ----------
+#
+# Inside a generic function template, every TypeParamRef must be resolved
+# to a concrete Type before the rewrite pass runs. This walker does
+# substitution only — it does NOT mangle StructType/EnumType.type_args
+# nor Init/Call type_args. After it runs, the body has concrete types
+# but still carries non-empty type_args at instantiation sites; the
+# subsequent collect-then-rewrite pass discovers those and mangles them.
+
+def _substitute_in_expr(expr, sub):
+    if isinstance(expr, IntLit):
+        return expr.model_copy(update={"type": _substitute_type(expr.type, sub)})
+    if isinstance(expr, Load):
+        return expr.model_copy(update={
+            "ptr":  _substitute_in_expr(expr.ptr, sub),
+            "type": _substitute_type(expr.type, sub),
+        })
+    if isinstance(expr, SizeOf):
+        return expr.model_copy(update={"type": _substitute_type(expr.type, sub)})
+    if isinstance(expr, Widen):
+        return expr.model_copy(update={
+            "value": _substitute_in_expr(expr.value, sub),
+        })
+    if isinstance(expr, StructInit):
+        new_fields = tuple(
+            FieldInit(name=fi.name, value=_substitute_in_expr(fi.value, sub))
+            for fi in expr.fields
+        )
+        new_type_args = tuple(_substitute_type(a, sub) for a in expr.type_args)
+        return expr.model_copy(update={
+            "type_args": new_type_args,
+            "fields":    new_fields,
+        })
+    if isinstance(expr, EnumInit):
+        new_fields = tuple(
+            FieldInit(name=fi.name, value=_substitute_in_expr(fi.value, sub))
+            for fi in expr.fields
+        )
+        new_type_args = tuple(_substitute_type(a, sub) for a in expr.type_args)
+        return expr.model_copy(update={
+            "type_args": new_type_args,
+            "fields":    new_fields,
+        })
+    if isinstance(expr, BinOp):
+        return expr.model_copy(update={
+            "lhs": _substitute_in_expr(expr.lhs, sub),
+            "rhs": _substitute_in_expr(expr.rhs, sub),
+        })
+    if isinstance(expr, ShortCircuitOr):
+        return expr.model_copy(update={
+            "lhs": _substitute_in_expr(expr.lhs, sub),
+            "rhs": _substitute_in_expr(expr.rhs, sub),
+        })
+    if isinstance(expr, ShortCircuitAnd):
+        return expr.model_copy(update={
+            "lhs": _substitute_in_expr(expr.lhs, sub),
+            "rhs": _substitute_in_expr(expr.rhs, sub),
+        })
+    if isinstance(expr, Call):
+        new_args = tuple(_substitute_in_expr(a, sub) for a in expr.args)
+        new_type_args = tuple(_substitute_type(a, sub) for a in expr.type_args)
+        return expr.model_copy(update={
+            "type_args": new_type_args,
+            "args":      new_args,
+        })
+    if isinstance(expr, FieldRead):
+        return expr.model_copy(update={
+            "value": _substitute_in_expr(expr.value, sub),
+        })
+    if isinstance(expr, LoadField):
+        return expr.model_copy(update={
+            "ptr": _substitute_in_expr(expr.ptr, sub),
+        })
+    if isinstance(expr, PtrOffset):
+        return expr.model_copy(update={
+            "base":   _substitute_in_expr(expr.base, sub),
+            "offset": _substitute_in_expr(expr.offset, sub),
+        })
+    if isinstance(expr, TryExpr):
+        return expr.model_copy(update={
+            "value": _substitute_in_expr(expr.value, sub),
+        })
+    if isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit)):
+        return expr
+    raise AssertionError(f"unhandled expr in substitute: {type(expr).__name__}")
+
+
+def _substitute_in_stmt(stmt, sub):
+    if isinstance(stmt, ReturnExpr):
+        return stmt.model_copy(update={"value": _substitute_in_expr(stmt.value, sub)})
+    if isinstance(stmt, (Return, Unreachable)):
+        return stmt
+    if isinstance(stmt, If):
+        return stmt.model_copy(update={
+            "cond":      _substitute_in_expr(stmt.cond, sub),
+            "then_body": tuple(_substitute_in_stmt(s, sub) for s in stmt.then_body),
+            "else_body": tuple(_substitute_in_stmt(s, sub) for s in stmt.else_body),
+        })
+    if isinstance(stmt, Let):
+        return stmt.model_copy(update={
+            "type": _substitute_type(stmt.type, sub),
+            "init": _substitute_in_expr(stmt.init, sub),
+        })
+    if isinstance(stmt, Assign):
+        return stmt.model_copy(update={"value": _substitute_in_expr(stmt.value, sub)})
+    if isinstance(stmt, While):
+        return stmt.model_copy(update={
+            "cond": _substitute_in_expr(stmt.cond, sub),
+            "body": tuple(_substitute_in_stmt(s, sub) for s in stmt.body),
+        })
+    if isinstance(stmt, For):
+        return stmt.model_copy(update={
+            "lo":   _substitute_in_expr(stmt.lo, sub),
+            "hi":   _substitute_in_expr(stmt.hi, sub),
+            "body": tuple(_substitute_in_stmt(s, sub) for s in stmt.body),
+        })
+    if isinstance(stmt, ExprStmt):
+        return stmt.model_copy(update={"value": _substitute_in_expr(stmt.value, sub)})
+    if isinstance(stmt, FieldSet):
+        return stmt.model_copy(update={"value": _substitute_in_expr(stmt.value, sub)})
+    if isinstance(stmt, Store):
+        return stmt.model_copy(update={
+            "ptr":   _substitute_in_expr(stmt.ptr,   sub),
+            "value": _substitute_in_expr(stmt.value, sub),
+        })
+    if isinstance(stmt, StoreField):
+        return stmt.model_copy(update={
+            "ptr":   _substitute_in_expr(stmt.ptr,   sub),
+            "value": _substitute_in_expr(stmt.value, sub),
+        })
+    if isinstance(stmt, WithArena):
+        return stmt.model_copy(update={
+            "capacity": _substitute_in_expr(stmt.capacity, sub),
+            "body":     tuple(_substitute_in_stmt(s, sub) for s in stmt.body),
+        })
+    if isinstance(stmt, Match):
+        new_arms = tuple(
+            arm.model_copy(update={
+                "body": tuple(_substitute_in_stmt(s, sub) for s in arm.body),
+            })
+            for arm in stmt.arms
+        )
+        return stmt.model_copy(update={
+            "scrutinee": _substitute_in_expr(stmt.scrutinee, sub),
+            "arms":      new_arms,
+        })
+    raise AssertionError(f"unhandled stmt in substitute: {type(stmt).__name__}")
+
+
 # ---------- Discovery: collect all (template, args) instantiations ----------
 
 def _collect_instantiations(t, sink: set):
@@ -380,6 +541,10 @@ def _collect_in_expr(expr, sink: set):
         _collect_in_expr(expr.lhs, sink)
         _collect_in_expr(expr.rhs, sink)
     elif isinstance(expr, Call):
+        if expr.type_args:
+            sink.add((expr.function, tuple(_type_key(a) for a in expr.type_args)))
+            for a in expr.type_args:
+                _collect_instantiations(a, sink)
         for a in expr.args:
             _collect_in_expr(a, sink)
     elif isinstance(expr, FieldRead):
@@ -453,14 +618,15 @@ def monomorphize(program: Program) -> Program:
     """Rewrite generic instantiations into fresh nominal defs."""
     generic_structs = {sd.name: sd for sd in program.structs if sd.type_params}
     generic_enums   = {ed.name: ed for ed in program.enums   if ed.type_params}
+    generic_fns     = {fn.name: fn for fn in program.functions if fn.type_params}
 
     # If no generics anywhere, short-circuit.
-    has_generic_uses = any(
-        sd.type_params for sd in program.structs
-    ) or any(
-        ed.type_params for ed in program.enums
+    has_generics = (
+        any(sd.type_params for sd in program.structs)
+        or any(ed.type_params for ed in program.enums)
+        or any(fn.type_params for fn in program.functions)
     )
-    if not has_generic_uses:
+    if not has_generics:
         return program
 
     # Carry non-generic defs forward unchanged; collect generic defs as
@@ -471,12 +637,15 @@ def monomorphize(program: Program) -> Program:
     out_enums: dict[str, EnumDef] = {
         ed.name: ed for ed in program.enums   if not ed.type_params
     }
+    out_fns: dict[str, Function] = {}  # only monomorphized instances; non-generic carry through later
 
-    # Seed the worklist by walking every type ref in the input program.
+    # Seed the worklist by walking every type ref in the input program,
+    # excluding generic templates' own bodies (TypeParamRefs there
+    # aren't valid instantiations until substituted).
     seeds: set[tuple[str, tuple]] = set()
     for sd in program.structs:
         if sd.type_params:
-            continue  # generic templates — don't seed from their bodies
+            continue
         for f in sd.fields:
             _collect_instantiations(f.type, seeds)
     for ed in program.enums:
@@ -486,6 +655,8 @@ def monomorphize(program: Program) -> Program:
             for f in v.fields:
                 _collect_instantiations(f.type, seeds)
     for fn in program.functions:
+        if fn.type_params:
+            continue
         _collect_instantiations(fn.return_type, seeds)
         for p in fn.params:
             _collect_instantiations(p.type, seeds)
@@ -496,20 +667,19 @@ def monomorphize(program: Program) -> Program:
         for t in ext.param_types:
             _collect_instantiations(t, seeds)
 
-    # Worklist: process; substituting may discover new instantiations,
-    # which get pushed onto the queue.
     pending: list[tuple[str, tuple]] = list(seeds)
     seen: set[tuple[str, tuple]] = set(seeds)
 
-    def queue_key(template: str, args: tuple) -> tuple[str, tuple]:
-        return (template, tuple(_type_key(a) for a in args))
+    def push(key):
+        if key not in seen:
+            seen.add(key)
+            pending.append(key)
 
     while pending:
         template, args_keys = pending.pop()
-        # `args_keys` here are the original Type instances stashed as keys.
-        args = tuple(args_keys)  # already Type instances by _type_key
+        args = tuple(args_keys)
         mangled = _mangle(template, args)
-        if mangled in out_structs or mangled in out_enums:
+        if mangled in out_structs or mangled in out_enums or mangled in out_fns:
             continue
 
         if template in generic_structs:
@@ -520,18 +690,13 @@ def monomorphize(program: Program) -> Program:
                     f"type args, got {len(args)}: {args}"
                 )
             sub = dict(zip(sd.type_params, args))
-            # Substitute, which may produce new StructType/EnumType refs
-            # with their own type_args — those need their full mangling.
             new_fields = []
             for f in sd.fields:
                 substituted = _substitute_type(f.type, sub)
-                # Discover further instantiations and seed them.
                 fresh: set[tuple[str, tuple]] = set()
                 _collect_instantiations(substituted, fresh)
-                for k in fresh - seen:
-                    seen.add(k)
-                    pending.append(k)
-                # Rewrite to mangled form.
+                for k in fresh:
+                    push(k)
                 rewritten = _rewrite_type(substituted)
                 new_fields.append(StructField(name=f.name, type=rewritten))
             out_structs[mangled] = StructDef(
@@ -552,24 +717,64 @@ def monomorphize(program: Program) -> Program:
                     substituted = _substitute_type(f.type, sub)
                     fresh: set[tuple[str, tuple]] = set()
                     _collect_instantiations(substituted, fresh)
-                    for k in fresh - seen:
-                        seen.add(k)
-                        pending.append(k)
+                    for k in fresh:
+                        push(k)
                     rewritten = _rewrite_type(substituted)
                     new_v_fields.append(EnumPayloadField(name=f.name, type=rewritten))
                 new_variants.append(EnumVariant(name=v.name, fields=tuple(new_v_fields)))
             out_enums[mangled] = EnumDef(
                 name=mangled, type_params=(), variants=tuple(new_variants),
             )
+        elif template in generic_fns:
+            fn = generic_fns[template]
+            if len(fn.type_params) != len(args):
+                raise ValueError(
+                    f"generic function {template!r} takes {len(fn.type_params)} "
+                    f"type args, got {len(args)}: {args}"
+                )
+            sub = dict(zip(fn.type_params, args))
+            # Three-pass on the function body: substitute → collect → rewrite.
+            sub_return = _substitute_type(fn.return_type, sub)
+            sub_params = tuple(
+                Param(name=p.name, type=_substitute_type(p.type, sub)) for p in fn.params
+            )
+            sub_body = tuple(_substitute_in_stmt(s, sub) for s in fn.body)
+            # Discover instantiations from substituted (still has type_args).
+            fresh: set[tuple[str, tuple]] = set()
+            _collect_instantiations(sub_return, fresh)
+            for p in sub_params:
+                _collect_instantiations(p.type, fresh)
+            for stmt in sub_body:
+                _collect_in_stmt(stmt, fresh)
+            for k in fresh:
+                push(k)
+            # Rewrite to mangled names.
+            rewritten_body = tuple(_walk_types_in_stmt(s, _rewrite_type) for s in sub_body)
+            rewritten_params = tuple(
+                Param(name=p.name, type=_rewrite_type(p.type)) for p in sub_params
+            )
+            rewritten_return = _rewrite_type(sub_return)
+            out_fns[mangled] = fn.model_copy(update={
+                "name":        mangled,
+                "type_params": (),
+                "params":      rewritten_params,
+                "return_type": rewritten_return,
+                "body":        rewritten_body,
+                # Claims propagate as-is — they reference parameter names,
+                # which are unchanged. If a claim references a type-param-typed
+                # parameter, the claim's semantics travel with the
+                # monomorphized instance untouched. (Lattice analysis runs
+                # AFTER mono so it sees the concrete types.)
+            })
         else:
             raise ValueError(
                 f"reference to unknown generic template {template!r} "
                 f"with type_args {args}"
             )
 
-    # Now rewrite every reference in the rest of the program (functions,
-    # externs, struct/enum fields of NON-generic defs that nonetheless
-    # used `Box<i64>`).
+    # Final program-wide rewrite: every concrete reference (non-generic
+    # functions, externs, the struct/enum bodies we just generated) gets
+    # any leftover `(name, type_args)` references mangled to their final form.
     rewritten_structs: dict[str, StructDef] = {}
     for name, sd in out_structs.items():
         new_fields = tuple(
@@ -592,7 +797,8 @@ def monomorphize(program: Program) -> Program:
         )
         rewritten_enums[name] = ed.model_copy(update={"variants": new_variants})
 
-    new_functions = tuple(
+    # Non-generic functions get the rewrite pass; generic templates are dropped.
+    nongeneric_rewritten = tuple(
         fn.model_copy(update={
             "return_type": _rewrite_type(fn.return_type),
             "params": tuple(
@@ -601,7 +807,9 @@ def monomorphize(program: Program) -> Program:
             "body": tuple(_walk_types_in_stmt(s, _rewrite_type) for s in fn.body),
         })
         for fn in program.functions
+        if not fn.type_params
     )
+    new_functions = nongeneric_rewritten + tuple(out_fns.values())
 
     new_externs = tuple(
         ext.model_copy(update={

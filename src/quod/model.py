@@ -95,10 +95,22 @@ class Call(_Node):
     declared `param_types` / `return_type` — pass `StringRef` for i8*-typed
     args, IntLit/ParamRef/etc. for i32 args. For varargs externs (printf etc.),
     pass any number of args beyond the fixed prefix.
+
+    For a generic function, `type_args` provides the concrete instantiation.
+    Post-monomorphization, `function` carries the mangled name and
+    `type_args` is empty.
     """
     kind: Literal["llvm.call"] = "llvm.call"
     function: str
+    type_args: tuple["Type", ...] = ()
     args: tuple["Expr", ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_type_args(self, handler, info):
+        data = handler(self)
+        if not self.type_args:
+            data.pop("type_args", None)
+        return data
 
 
 class StringRef(_Node):
@@ -1033,6 +1045,7 @@ class Param(_Node):
 
 class Function(_Node):
     name: str
+    type_params: tuple[str, ...] = ()
     params: tuple[Param, ...] = ()
     return_type: ReturnType
     body: tuple[Statement, ...]
@@ -1040,10 +1053,12 @@ class Function(_Node):
     notes: tuple[str, ...] = ()       # free-form developer/agent intent
 
     @model_serializer(mode="wrap")
-    def _drop_empty_notes(self, handler, info):
+    def _drop_defaults(self, handler, info):
         data = handler(self)
         if not self.notes:
             data.pop("notes", None)
+        if not self.type_params:
+            data.pop("type_params", None)
         return data
 
     def param(self, name: str) -> Param | None:

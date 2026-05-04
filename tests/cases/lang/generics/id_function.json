@@ -1,0 +1,39 @@
+{
+  "program": {
+    "functions": [
+      {
+        "name": "id",
+        "type_params": ["T"],
+        "params": [
+          {"name": "x", "type": {"kind": "quod.type_param", "name": "T"}}
+        ],
+        "return_type": {"kind": "quod.type_param", "name": "T"},
+        "body": [
+          {
+            "kind": "quod.return_expr",
+            "value": {"kind": "llvm.param_ref", "name": "x"}
+          }
+        ]
+      },
+      {
+        "name": "main",
+        "params": [],
+        "return_type": {"kind": "llvm.i32"},
+        "body": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.call",
+              "function": "id",
+              "type_args": [{"kind": "llvm.i32"}],
+              "args": [{"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42}]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "exit": 42
+  }
+}

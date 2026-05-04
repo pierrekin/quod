@@ -220,3 +220,132 @@ def test_monomorphize_noop_for_program_with_no_generics():
     assert out.functions[0].name == "trivial"
     assert out.structs == ()
     assert out.enums == ()
+
+
+# ---------- Generic functions ----------
+
+from quod.model import Call, ParamRef
+
+
+def test_monomorphize_generic_function_drops_template_emits_concrete():
+    """`fn id<T>(x: T) -> T { return x }` plus a `Call(id, type_args=[i64])`."""
+    id_fn = Function(
+        name="id",
+        type_params=("T",),
+        params=(Param(name="x", type=TypeParamRef(name="T")),),
+        return_type=TypeParamRef(name="T"),
+        body=(ReturnExpr(value=ParamRef(name="x")),),
+    )
+    main_fn = Function(
+        name="main",
+        return_type=I64Type(),
+        body=(
+            ReturnExpr(value=Call(
+                function="id",
+                type_args=(I64Type(),),
+                args=(IntLit(type=I64Type(), value=42),),
+            )),
+        ),
+    )
+    prog = Program(functions=(id_fn, main_fn))
+    out = monomorphize(prog)
+
+    fn_names = {fn.name for fn in out.functions}
+    assert "id" not in fn_names, f"generic template id should be dropped; got {fn_names}"
+    assert "id<i64>" in fn_names, f"expected id<i64>; got {fn_names}"
+
+    # The concrete instance has T → i64 throughout.
+    id_i64 = next(fn for fn in out.functions if fn.name == "id<i64>")
+    assert id_i64.type_params == ()
+    assert isinstance(id_i64.return_type, I64Type)
+    assert isinstance(id_i64.params[0].type, I64Type)
+
+    # main's Call gets rewritten to mangled name with empty type_args.
+    main_after = next(fn for fn in out.functions if fn.name == "main")
+    body0 = main_after.body[0]
+    assert isinstance(body0, ReturnExpr)
+    assert isinstance(body0.value, Call)
+    assert body0.value.function == "id<i64>"
+    assert body0.value.type_args == ()
+
+
+def test_monomorphize_generic_function_two_instantiations():
+    id_fn = Function(
+        name="id",
+        type_params=("T",),
+        params=(Param(name="x", type=TypeParamRef(name="T")),),
+        return_type=TypeParamRef(name="T"),
+        body=(ReturnExpr(value=ParamRef(name="x")),),
+    )
+    main_fn = Function(
+        name="main",
+        return_type=I64Type(),
+        body=(
+            Let(
+                name="a", type=I64Type(),
+                init=Call(function="id", type_args=(I64Type(),),
+                          args=(IntLit(type=I64Type(), value=1),)),
+            ),
+            Let(
+                name="b", type=I32Type(),
+                init=Call(function="id", type_args=(I32Type(),),
+                          args=(IntLit(type=I32Type(), value=2),)),
+            ),
+            ReturnExpr(value=IntLit(type=I64Type(), value=0)),
+        ),
+    )
+    prog = Program(functions=(id_fn, main_fn))
+    out = monomorphize(prog)
+    fn_names = {fn.name for fn in out.functions}
+    assert {"id<i64>", "id<i32>"} <= fn_names
+    assert "id" not in fn_names
+
+
+def test_monomorphize_generic_function_referencing_generic_struct():
+    """`struct Box<T> { value: T }` + `fn make<T>(v: T) -> Box<T> { ... }`.
+    Calling make<i64>(...) should produce both `make<i64>` AND `Box<i64>`."""
+    box_def = StructDef(
+        name="Box",
+        type_params=("T",),
+        fields=(StructField(name="value", type=TypeParamRef(name="T")),),
+    )
+    make_fn = Function(
+        name="make",
+        type_params=("T",),
+        params=(Param(name="v", type=TypeParamRef(name="T")),),
+        return_type=StructType(name="Box", type_args=(TypeParamRef(name="T"),)),
+        body=(ReturnExpr(value=StructInit(
+            type="Box",
+            type_args=(TypeParamRef(name="T"),),
+            fields=(FieldInit(name="value", value=ParamRef(name="v")),),
+        )),),
+    )
+    main_fn = Function(
+        name="main",
+        return_type=I64Type(),
+        body=(
+            ReturnExpr(value=Call(
+                function="make",
+                type_args=(I64Type(),),
+                args=(IntLit(type=I64Type(), value=42),),
+            )),
+        ),
+    )
+    prog = Program(structs=(box_def,), functions=(make_fn, main_fn))
+    out = monomorphize(prog)
+
+    struct_names = {sd.name for sd in out.structs}
+    fn_names = {fn.name for fn in out.functions}
+    # Generic templates dropped, concretes present.
+    assert "Box" not in struct_names
+    assert "Box<i64>" in struct_names
+    assert "make" not in fn_names
+    assert "make<i64>" in fn_names
+
+    # The make<i64> body's StructInit should be rewritten to "Box<i64>".
+    make_i64 = next(fn for fn in out.functions if fn.name == "make<i64>")
+    body = make_i64.body[0]
+    assert isinstance(body, ReturnExpr)
+    assert isinstance(body.value, StructInit)
+    assert body.value.type == "Box<i64>"
+    assert body.value.type_args == ()

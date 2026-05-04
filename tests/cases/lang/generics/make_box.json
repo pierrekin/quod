@@ -1,0 +1,73 @@
+{
+  "program": {
+    "structs": [
+      {
+        "name": "Box",
+        "type_params": ["T"],
+        "fields": [
+          {"name": "value", "type": {"kind": "quod.type_param", "name": "T"}}
+        ]
+      }
+    ],
+    "functions": [
+      {
+        "name": "make_box",
+        "type_params": ["T"],
+        "params": [
+          {"name": "v", "type": {"kind": "quod.type_param", "name": "T"}}
+        ],
+        "return_type": {
+          "kind": "llvm.struct",
+          "name": "Box",
+          "type_args": [{"kind": "quod.type_param", "name": "T"}]
+        },
+        "body": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.struct_init",
+              "type": "Box",
+              "type_args": [{"kind": "quod.type_param", "name": "T"}],
+              "fields": [
+                {"name": "value", "value": {"kind": "llvm.param_ref", "name": "v"}}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "main",
+        "params": [],
+        "return_type": {"kind": "llvm.i32"},
+        "body": [
+          {
+            "kind": "quod.let",
+            "name": "b",
+            "type": {
+              "kind": "llvm.struct",
+              "name": "Box",
+              "type_args": [{"kind": "llvm.i32"}]
+            },
+            "init": {
+              "kind": "llvm.call",
+              "function": "make_box",
+              "type_args": [{"kind": "llvm.i32"}],
+              "args": [{"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42}]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.field",
+              "value": {"kind": "quod.local_ref", "name": "b"},
+              "name": "value"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "exit": 42
+  }
+}
