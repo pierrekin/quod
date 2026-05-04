@@ -624,15 +624,15 @@ def body_always_terminates(stmts) -> bool:
 
 
 class Z3Justification(_Node):
-    # TODO(soundness): missing a body-derived hash. `artifact_hash` only
-    # pins this justification to the .smt2 file's bytes — nothing pins
-    # the .smt2 file to the function body it was generated from, so a
-    # body edit that changes the SMT meaning leaves verify silently
-    # passing on a stale proof. Add `body_smt_hash` set at prove time
-    # and re-checked at verify time. See cli.py:_verify_justification.
+    # `artifact_hash` pins the .smt2 file's bytes ("did the file get
+    # tampered with"). `body_smt_hash` pins the SMT text the current
+    # body+claim *would* produce ("did the body drift"). Both are
+    # sha256 of the same bytes at prove time; they answer different
+    # questions at verify time. See cli.py:_verify_justification.
     kind: Literal["z3"] = "z3"
     artifact_path: str
     artifact_hash: str
+    body_smt_hash: str
     note: str | None = None
 
 

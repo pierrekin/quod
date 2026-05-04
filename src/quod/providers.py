@@ -177,6 +177,7 @@ def _z3_qf_lia_prove(
         "justification": Z3Justification(
             artifact_path=str(artifact_path),
             artifact_hash=artifact_hash,
+            body_smt_hash=artifact_hash,
         ),
     })
     return ProviderResult(

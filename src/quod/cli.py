@@ -65,8 +65,10 @@ from quod.model import (
     CLAIM_KINDS,
     PARAM_CLAIM_KINDS,
     RETURN_CLAIM_KINDS,
+    Claim,
     DerivedJustification,
     ExternFunction,
+    Function,
     I1Type,
     I8PtrType,
     I8Type,
@@ -98,7 +100,7 @@ from quod.model import (
     replace_function,
     save_program,
 )
-from quod.proof import Z3NotInstalled, run_z3_on_file
+from quod.proof import Z3NotInstalled, goal_smt_lib, run_z3_on_file
 from quod.providers import (
     ClaimRequest,
     all_providers,
@@ -1385,7 +1387,7 @@ def claim_verify(
             if c.justification is None:
                 continue
             checked += 1
-            ok, msg = _verify_justification(c.justification, resolve_root)
+            ok, msg = _verify_justification(c.justification, resolve_root, fn, c, program)
             status_span = Span("ok  ", "ok") if ok else Span("FAIL", "warn")
             typer.echo(paint((
                 status_span, Span(" ", "ws"),
@@ -1401,20 +1403,30 @@ def claim_verify(
         raise typer.Exit(1)
 
 
-def _verify_justification(j: Justification, root: Path) -> tuple[bool, str]:
-    # TODO(soundness): the Z3 arm checks (a) the .smt2 file's hash matches
-    # what's pinned and (b) z3 still says unsat — but it does NOT re-derive
-    # the SMT from the current function body and confirm the on-disk file
-    # is what the body *would* produce now. So an edit to the body that
-    # changes its SMT meaning (e.g. flipping a comparison) leaves the
-    # .smt2 file untouched, the file-hash matches, z3 still says unsat,
-    # and verify "passes" on a stale proof. CLAUDE.md says proofs are
-    # pinned to body hashes; the code only pins to the SMT file. Fix:
-    # add `body_smt_hash` (or similar) to Z3Justification, set it at
-    # prove time to sha256(goal_smt_lib(fn, claim, ...)), and recompute +
-    # compare here before the file-hash + z3 checks.
+def _verify_justification(
+    j: Justification, root: Path, fn: Function, claim: Claim, program: Program,
+) -> tuple[bool, str]:
     match j:
-        case Z3Justification(artifact_path=p, artifact_hash=stored):
+        case Z3Justification(artifact_path=p, artifact_hash=stored, body_smt_hash=body_stored):
+            # Body-drift check (runs first — short-circuits before file I/O).
+            # Re-derive SMT from the current body+claim. The goal claim must
+            # have justification=None (the prove-time shape; otherwise the
+            # `; goal: ...` repr in the SMT comment differs). Hypotheses are
+            # the other claims on this fn — exclude the claim being verified
+            # (at prove time it wasn't yet in fn.claims).
+            goal = claim.model_copy(update={"justification": None})
+            hypotheses = tuple(c for c in fn.claims if c is not claim)
+            try:
+                current_smt = goal_smt_lib(fn, goal, hypotheses=hypotheses, program=program)
+            except NotImplementedError as e:
+                return False, f"could not re-derive SMT for body-hash check: {e}"
+            current_hash = hashlib.sha256(current_smt.encode("utf-8")).hexdigest()
+            if current_hash != body_stored:
+                return False, (
+                    f"body changed since proof — re-run `claim prove` "
+                    f"(stored body_smt_hash={body_stored[:12]}, current={current_hash[:12]})"
+                )
+
             full = root / p
             if not full.exists():
                 return False, f"artifact not found: {full}"

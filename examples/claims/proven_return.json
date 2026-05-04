@@ -11,6 +11,9 @@
           }
         }
       ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
       "body": [
         {
           "kind": "quod.if",
@@ -23,10 +26,10 @@
             },
             "rhs": {
               "kind": "llvm.const_int",
-              "value": 0,
               "type": {
                 "kind": "llvm.i32"
-              }
+              },
+              "value": 0
             }
           },
           "then_body": [
@@ -34,10 +37,10 @@
               "kind": "quod.return_expr",
               "value": {
                 "kind": "llvm.const_int",
-                "value": -1,
                 "type": {
                   "kind": "llvm.i32"
-                }
+                },
+                "value": -1
               }
             }
           ],
@@ -53,10 +56,10 @@
                 },
                 "rhs": {
                   "kind": "llvm.const_int",
-                  "value": 1,
                   "type": {
                     "kind": "llvm.i32"
-                  }
+                  },
+                  "value": 1
                 }
               }
             }
@@ -68,18 +71,17 @@
           "regime": "witness",
           "justification": {
             "kind": "z3",
-            "artifact_path": "proofs/proven_return/f_return_in_range_return_3f709cfcb113.smt2",
-            "artifact_hash": "3f709cfcb11368288f7a1b7fdbdc85e98bff53348cc534a9bab49ad1d18e442a",
+            "artifact_path": "proofs/proven_return/f_return_in_range_return_e7b5f9f88a3d.smt2",
+            "artifact_hash": "e7b5f9f88a3d8fc7ef50359ff602fedeea1dae1101dae4a779fe2061698282e3",
+            "body_smt_hash": "e7b5f9f88a3d8fc7ef50359ff602fedeea1dae1101dae4a779fe2061698282e3",
             "note": null
           },
           "kind": "return_in_range",
           "min": -1,
           "max": null
         }
-      ],
-      "return_type": {
-        "kind": "llvm.i32"
-      }
+      ]
     }
-  ]
+  ],
+  "externs": []
 }
