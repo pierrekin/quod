@@ -67,11 +67,19 @@ def resolve_imports(program: Program, *, disabled_tiers: frozenset[str] = frozen
     enums = list(program.enums)
     externs = list(program.externs)
     functions = list(program.functions)
+    traits = list(program.traits)
+    impls = list(program.impls)
     seen_const = {c.name for c in constants}
     seen_struct = {s.name for s in structs}
     seen_enum = {e.name for e in enums}
     seen_extern = {e.name for e in externs}
     seen_fn = {f.name for f in functions}
+    seen_trait = {t.name for t in traits}
+    # Impls are deduped by (trait, for_type-shape) — same trait + same
+    # concrete type from two different stdlib modules would be a
+    # coherence violation, but most commonly the same library transit-
+    # ively imported twice is fine.
+    seen_impl: set[tuple[str, str]] = {(i.trait, repr(i.for_type)) for i in impls}
 
     queue: list[str] = list(program.imports)
     visited: set[str] = set()
@@ -110,6 +118,15 @@ def resolve_imports(program: Program, *, disabled_tiers: frozenset[str] = frozen
             if f.name not in seen_fn:
                 functions.append(f)
                 seen_fn.add(f.name)
+        for t in mod.traits:
+            if t.name not in seen_trait:
+                traits.append(t)
+                seen_trait.add(t.name)
+        for i in mod.impls:
+            key = (i.trait, repr(i.for_type))
+            if key not in seen_impl:
+                impls.append(i)
+                seen_impl.add(key)
 
     # Construct rather than model_copy so the Program validator runs on the
     # merged result — catches dangling struct refs that were deferred while
@@ -120,6 +137,8 @@ def resolve_imports(program: Program, *, disabled_tiers: frozenset[str] = frozen
         enums=tuple(enums),
         externs=tuple(externs),
         functions=tuple(functions),
+        traits=tuple(traits),
+        impls=tuple(impls),
         imports=(),
     )
 

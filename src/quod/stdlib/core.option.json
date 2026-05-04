@@ -2,15 +2,27 @@
   "enums": [
     {
       "name": "core.option.Option",
-      "type_params": ["T"],
+      "type_params": [
+        {
+          "name": "T"
+        }
+      ],
       "variants": [
         {
           "name": "Some",
           "fields": [
-            {"name": "value", "type": {"kind": "quod.type_param", "name": "T"}}
+            {
+              "name": "value",
+              "type": {
+                "kind": "quod.type_param",
+                "name": "T"
+              }
+            }
           ]
         },
-        {"name": "None"}
+        {
+          "name": "None"
+        }
       ]
     }
   ]

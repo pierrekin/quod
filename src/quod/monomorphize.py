@@ -45,6 +45,7 @@ from .model import (
     I32Type,
     I64Type,
     If,
+    ImplDef,
     IntLit,
     Let,
     Load,
@@ -69,6 +70,8 @@ from .model import (
     StructField,
     StructInit,
     StructType,
+    TraitCall,
+    TraitDef,
     TryExpr,
     TypeParamRef,
     Unreachable,
@@ -255,6 +258,14 @@ def _walk_types_in_expr(expr, fn):
         return expr.model_copy(update={
             "value": _walk_types_in_expr(expr.value, fn),
         })
+    if isinstance(expr, TraitCall):
+        # The trait-call resolution pass runs separately, after all type
+        # rewriting is done; here we just walk the dispatch_type and the
+        # args so they get substituted/mangled along with everything else.
+        return expr.model_copy(update={
+            "dispatch_type": fn(expr.dispatch_type),
+            "args": tuple(_walk_types_in_expr(a, fn) for a in expr.args),
+        })
     # Leaf expressions with no nested Type or Expr.
     if isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit)):
         return expr
@@ -415,6 +426,11 @@ def _substitute_in_expr(expr, sub):
         return expr.model_copy(update={
             "value": _substitute_in_expr(expr.value, sub),
         })
+    if isinstance(expr, TraitCall):
+        return expr.model_copy(update={
+            "dispatch_type": _substitute_type(expr.dispatch_type, sub),
+            "args":          tuple(_substitute_in_expr(a, sub) for a in expr.args),
+        })
     if isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit)):
         return expr
     raise AssertionError(f"unhandled expr in substitute: {type(expr).__name__}")
@@ -558,6 +574,10 @@ def _collect_in_expr(expr, sink: set):
         _collect_in_expr(expr.value, sink)
     elif isinstance(expr, Widen):
         _collect_in_expr(expr.value, sink)
+    elif isinstance(expr, TraitCall):
+        _collect_instantiations(expr.dispatch_type, sink)
+        for a in expr.args:
+            _collect_in_expr(a, sink)
     elif isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit)):
         return
     else:
@@ -612,22 +632,232 @@ def _collect_in_stmt(stmt, sink: set):
         raise AssertionError(f"unhandled stmt in collect: {type(stmt).__name__}")
 
 
+# ---------- Impl promotion + trait-call resolution ----------
+
+def _impl_method_name(for_type, method_name: str) -> str:
+    """The mangled symbol for an impl method: e.g. `Arena::alloc`."""
+    return f"{_type_to_name(for_type)}::{method_name}"
+
+
+def _build_impl_index(impls) -> dict[tuple[str, str], ImplDef]:
+    """Index impls by (trait_name, _type_to_name(for_type)). Used by
+    trait-call resolution to find the impl that satisfies a given
+    dispatch."""
+    index: dict[tuple[str, str], ImplDef] = {}
+    for impl in impls:
+        key = (impl.trait, _type_to_name(impl.for_type))
+        if key in index:
+            raise ValueError(
+                f"duplicate impl for trait {impl.trait!r} on type "
+                f"{key[1]!r}: only one allowed (coherence)"
+            )
+        index[key] = impl
+    return index
+
+
+def _promote_impls(impls) -> list[Function]:
+    """Each `impl Trait for T { fn f(...) ... }` produces one top-level
+    Function named `<T>::<f>`. The bodies pass through verbatim;
+    `ImplDef`'s validator already substituted Self."""
+    out: list[Function] = []
+    for impl in impls:
+        for method in impl.methods:
+            name = _impl_method_name(impl.for_type, method.name)
+            out.append(method.model_copy(update={"name": name}))
+    return out
+
+
+def _resolve_trait_call(expr: TraitCall, impl_index) -> Call:
+    """Rewrite `TraitCall` → `Call` after all type substitution and
+    mangling are done. dispatch_type must be concrete by this point;
+    `impl_index` resolves it to the impl whose method symbol we call."""
+    target = _type_to_name(expr.dispatch_type)
+    key = (expr.trait, target)
+    if key not in impl_index:
+        raise ValueError(
+            f"no impl of trait {expr.trait!r} for type {target!r} "
+            f"(known impls: {sorted(impl_index)})"
+        )
+    impl = impl_index[key]
+    # Sanity: the trait method must exist on the impl.
+    method_names = {m.name for m in impl.methods}
+    if expr.method not in method_names:
+        raise ValueError(
+            f"impl {impl.trait!r} for {target!r} has no method "
+            f"{expr.method!r} (has: {sorted(method_names)})"
+        )
+    return Call(
+        function=_impl_method_name(impl.for_type, expr.method),
+        args=expr.args,
+    )
+
+
+def _resolve_trait_calls_in_expr(expr, impl_index):
+    if isinstance(expr, TraitCall):
+        # First resolve any nested TraitCalls in the args, then rewrite this one.
+        resolved_args = tuple(_resolve_trait_calls_in_expr(a, impl_index) for a in expr.args)
+        return _resolve_trait_call(expr.model_copy(update={"args": resolved_args}), impl_index)
+    if isinstance(expr, IntLit):
+        return expr
+    if isinstance(expr, Load):
+        return expr.model_copy(update={"ptr": _resolve_trait_calls_in_expr(expr.ptr, impl_index)})
+    if isinstance(expr, SizeOf):
+        return expr
+    if isinstance(expr, Widen):
+        return expr.model_copy(update={"value": _resolve_trait_calls_in_expr(expr.value, impl_index)})
+    if isinstance(expr, StructInit):
+        return expr.model_copy(update={
+            "fields": tuple(
+                FieldInit(name=fi.name, value=_resolve_trait_calls_in_expr(fi.value, impl_index))
+                for fi in expr.fields
+            ),
+        })
+    if isinstance(expr, EnumInit):
+        return expr.model_copy(update={
+            "fields": tuple(
+                FieldInit(name=fi.name, value=_resolve_trait_calls_in_expr(fi.value, impl_index))
+                for fi in expr.fields
+            ),
+        })
+    if isinstance(expr, BinOp):
+        return expr.model_copy(update={
+            "lhs": _resolve_trait_calls_in_expr(expr.lhs, impl_index),
+            "rhs": _resolve_trait_calls_in_expr(expr.rhs, impl_index),
+        })
+    if isinstance(expr, ShortCircuitOr):
+        return expr.model_copy(update={
+            "lhs": _resolve_trait_calls_in_expr(expr.lhs, impl_index),
+            "rhs": _resolve_trait_calls_in_expr(expr.rhs, impl_index),
+        })
+    if isinstance(expr, ShortCircuitAnd):
+        return expr.model_copy(update={
+            "lhs": _resolve_trait_calls_in_expr(expr.lhs, impl_index),
+            "rhs": _resolve_trait_calls_in_expr(expr.rhs, impl_index),
+        })
+    if isinstance(expr, Call):
+        return expr.model_copy(update={
+            "args": tuple(_resolve_trait_calls_in_expr(a, impl_index) for a in expr.args),
+        })
+    if isinstance(expr, FieldRead):
+        return expr.model_copy(update={
+            "value": _resolve_trait_calls_in_expr(expr.value, impl_index),
+        })
+    if isinstance(expr, LoadField):
+        return expr.model_copy(update={
+            "ptr": _resolve_trait_calls_in_expr(expr.ptr, impl_index),
+        })
+    if isinstance(expr, PtrOffset):
+        return expr.model_copy(update={
+            "base":   _resolve_trait_calls_in_expr(expr.base,   impl_index),
+            "offset": _resolve_trait_calls_in_expr(expr.offset, impl_index),
+        })
+    if isinstance(expr, TryExpr):
+        return expr.model_copy(update={
+            "value": _resolve_trait_calls_in_expr(expr.value, impl_index),
+        })
+    if isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit)):
+        return expr
+    raise AssertionError(f"unhandled expr in trait-call resolve: {type(expr).__name__}")
+
+
+def _resolve_trait_calls_in_stmt(stmt, impl_index):
+    if isinstance(stmt, ReturnExpr):
+        return stmt.model_copy(update={
+            "value": _resolve_trait_calls_in_expr(stmt.value, impl_index),
+        })
+    if isinstance(stmt, (Return, Unreachable)):
+        return stmt
+    if isinstance(stmt, If):
+        return stmt.model_copy(update={
+            "cond":      _resolve_trait_calls_in_expr(stmt.cond, impl_index),
+            "then_body": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.then_body),
+            "else_body": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.else_body),
+        })
+    if isinstance(stmt, Let):
+        return stmt.model_copy(update={
+            "init": _resolve_trait_calls_in_expr(stmt.init, impl_index),
+        })
+    if isinstance(stmt, Assign):
+        return stmt.model_copy(update={
+            "value": _resolve_trait_calls_in_expr(stmt.value, impl_index),
+        })
+    if isinstance(stmt, While):
+        return stmt.model_copy(update={
+            "cond": _resolve_trait_calls_in_expr(stmt.cond, impl_index),
+            "body": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.body),
+        })
+    if isinstance(stmt, For):
+        return stmt.model_copy(update={
+            "lo":   _resolve_trait_calls_in_expr(stmt.lo, impl_index),
+            "hi":   _resolve_trait_calls_in_expr(stmt.hi, impl_index),
+            "body": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.body),
+        })
+    if isinstance(stmt, ExprStmt):
+        return stmt.model_copy(update={
+            "value": _resolve_trait_calls_in_expr(stmt.value, impl_index),
+        })
+    if isinstance(stmt, FieldSet):
+        return stmt.model_copy(update={
+            "value": _resolve_trait_calls_in_expr(stmt.value, impl_index),
+        })
+    if isinstance(stmt, Store):
+        return stmt.model_copy(update={
+            "ptr":   _resolve_trait_calls_in_expr(stmt.ptr,   impl_index),
+            "value": _resolve_trait_calls_in_expr(stmt.value, impl_index),
+        })
+    if isinstance(stmt, StoreField):
+        return stmt.model_copy(update={
+            "ptr":   _resolve_trait_calls_in_expr(stmt.ptr,   impl_index),
+            "value": _resolve_trait_calls_in_expr(stmt.value, impl_index),
+        })
+    if isinstance(stmt, WithArena):
+        return stmt.model_copy(update={
+            "capacity": _resolve_trait_calls_in_expr(stmt.capacity, impl_index),
+            "body":     tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.body),
+        })
+    if isinstance(stmt, Match):
+        return stmt.model_copy(update={
+            "scrutinee": _resolve_trait_calls_in_expr(stmt.scrutinee, impl_index),
+            "arms": tuple(
+                arm.model_copy(update={
+                    "body": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in arm.body),
+                })
+                for arm in stmt.arms
+            ),
+        })
+    raise AssertionError(f"unhandled stmt in trait-call resolve: {type(stmt).__name__}")
+
+
 # ---------- Main pass ----------
 
 def monomorphize(program: Program) -> Program:
-    """Rewrite generic instantiations into fresh nominal defs."""
+    """Rewrite generic instantiations into fresh nominal defs.
+
+    Pre-pass: each `ImplDef`'s methods become top-level Functions with
+    mangled names like `Arena::alloc`. The impl_index built from the
+    same impls is later used to resolve TraitCalls.
+
+    Post-pass: any remaining `TraitCall` (which by this point has a
+    concrete `dispatch_type`) is rewritten to a direct `Call` to the
+    matching impl method.
+    """
+    impl_index = _build_impl_index(program.impls)
+    promoted_fns = _promote_impls(program.impls)
+    if program.impls or promoted_fns:
+        program = program.model_copy(update={
+            "functions": program.functions + tuple(promoted_fns),
+            "impls":     (),
+        })
+
     generic_structs = {sd.name: sd for sd in program.structs if sd.type_params}
     generic_enums   = {ed.name: ed for ed in program.enums   if ed.type_params}
     generic_fns     = {fn.name: fn for fn in program.functions if fn.type_params}
 
-    # If no generics anywhere, short-circuit.
-    has_generics = (
-        any(sd.type_params for sd in program.structs)
-        or any(ed.type_params for ed in program.enums)
-        or any(fn.type_params for fn in program.functions)
-    )
-    if not has_generics:
-        return program
+    # No fast-path return: even programs with no generics may still have
+    # trait calls to resolve (and a malformed TraitCall without a
+    # matching impl needs to surface a clear error, not silently pass).
+    # The cost of running the full pass on a non-generic, non-trait
+    # program is microseconds.
 
     # Carry non-generic defs forward unchanged; collect generic defs as
     # templates to instantiate from.
@@ -689,7 +919,7 @@ def monomorphize(program: Program) -> Program:
                     f"generic struct {template!r} takes {len(sd.type_params)} "
                     f"type args, got {len(args)}: {args}"
                 )
-            sub = dict(zip(sd.type_params, args))
+            sub = dict(zip([tp.name for tp in sd.type_params], args))
             new_fields = []
             for f in sd.fields:
                 substituted = _substitute_type(f.type, sub)
@@ -709,7 +939,7 @@ def monomorphize(program: Program) -> Program:
                     f"generic enum {template!r} takes {len(ed.type_params)} "
                     f"type args, got {len(args)}: {args}"
                 )
-            sub = dict(zip(ed.type_params, args))
+            sub = dict(zip([tp.name for tp in ed.type_params], args))
             new_variants = []
             for v in ed.variants:
                 new_v_fields = []
@@ -732,7 +962,7 @@ def monomorphize(program: Program) -> Program:
                     f"generic function {template!r} takes {len(fn.type_params)} "
                     f"type args, got {len(args)}: {args}"
                 )
-            sub = dict(zip(fn.type_params, args))
+            sub = dict(zip([tp.name for tp in fn.type_params], args))
             # Three-pass on the function body: substitute → collect → rewrite.
             sub_return = _substitute_type(fn.return_type, sub)
             sub_params = tuple(
@@ -817,6 +1047,18 @@ def monomorphize(program: Program) -> Program:
             "param_types": tuple(_rewrite_type(t) for t in ext.param_types),
         })
         for ext in program.externs
+    )
+
+    # After all type-rewriting, resolve every remaining TraitCall to a
+    # direct Call on the impl method's mangled symbol. Always run, even
+    # if impl_index is empty — that way a TraitCall without a matching
+    # impl surfaces the clear `no impl of trait <X> for <Y>` error
+    # rather than silently passing through to the lowerer.
+    new_functions = tuple(
+        fn.model_copy(update={
+            "body": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in fn.body),
+        })
+        for fn in new_functions
     )
 
     return program.model_copy(update={

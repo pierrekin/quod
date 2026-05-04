@@ -1,0 +1,118 @@
+{
+  "program": {
+    "structs": [
+      {
+        "name": "Counter",
+        "fields": [
+          {"name": "count", "type": {"kind": "llvm.i32"}}
+        ]
+      }
+    ],
+    "traits": [
+      {
+        "name": "Add",
+        "methods": [
+          {
+            "name": "add",
+            "params": [
+              {"name": "self", "type": {"kind": "quod.self_type"}},
+              {"name": "n",    "type": {"kind": "llvm.i32"}}
+            ],
+            "return_type": {"kind": "llvm.i32"}
+          }
+        ]
+      }
+    ],
+    "impls": [
+      {
+        "trait": "Add",
+        "for_type": {"kind": "llvm.struct", "name": "Counter"},
+        "methods": [
+          {
+            "name": "add",
+            "params": [
+              {"name": "self", "type": {"kind": "quod.self_type"}},
+              {"name": "n",    "type": {"kind": "llvm.i32"}}
+            ],
+            "return_type": {"kind": "llvm.i32"},
+            "body": [
+              {
+                "kind": "quod.return_expr",
+                "value": {
+                  "kind": "llvm.binop",
+                  "op": "add",
+                  "lhs": {
+                    "kind": "quod.field",
+                    "value": {"kind": "llvm.param_ref", "name": "self"},
+                    "name": "count"
+                  },
+                  "rhs": {"kind": "llvm.param_ref", "name": "n"}
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "functions": [
+      {
+        "name": "add_n",
+        "type_params": [{"name": "T", "bound": "Add"}],
+        "params": [
+          {"name": "c", "type": {"kind": "quod.type_param", "name": "T"}},
+          {"name": "n", "type": {"kind": "llvm.i32"}}
+        ],
+        "return_type": {"kind": "llvm.i32"},
+        "body": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.trait_call",
+              "trait": "Add",
+              "method": "add",
+              "dispatch_type": {"kind": "quod.type_param", "name": "T"},
+              "args": [
+                {"kind": "llvm.param_ref", "name": "c"},
+                {"kind": "llvm.param_ref", "name": "n"}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "main",
+        "params": [],
+        "return_type": {"kind": "llvm.i32"},
+        "body": [
+          {
+            "kind": "quod.let",
+            "name": "c",
+            "type": {"kind": "llvm.struct", "name": "Counter"},
+            "init": {
+              "kind": "quod.struct_init",
+              "type": "Counter",
+              "fields": [
+                {"name": "count", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 10}}
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.call",
+              "function": "add_n",
+              "type_args": [{"kind": "llvm.struct", "name": "Counter"}],
+              "args": [
+                {"kind": "quod.local_ref", "name": "c"},
+                {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 32}
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "exit": 42
+  }
+}

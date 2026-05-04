@@ -27,6 +27,7 @@ from quod.model import (
     StructField,
     StructInit,
     StructType,
+    TypeParam,
     TypeParamRef,
 )
 from quod.monomorphize import monomorphize
@@ -36,7 +37,7 @@ def _box_program() -> Program:
     """`struct Box<T> { value: T }` plus a function that uses Box<i64>."""
     box_def = StructDef(
         name="Box",
-        type_params=("T",),
+        type_params=(TypeParam(name="T"),),
         fields=(StructField(name="value", type=TypeParamRef(name="T")),),
     )
     fn = Function(
@@ -107,7 +108,7 @@ def test_monomorphize_rewrites_struct_init_and_type_refs():
 def test_monomorphize_two_distinct_instantiations_yield_two_structs():
     box_def = StructDef(
         name="Box",
-        type_params=("T",),
+        type_params=(TypeParam(name="T"),),
         fields=(StructField(name="value", type=TypeParamRef(name="T")),),
     )
     fn = Function(
@@ -147,7 +148,7 @@ def test_monomorphize_generic_enum_and_payload_substitution():
     """`enum Option<T> { Some(value: T), None }` with one Option<i64> use."""
     opt_def = EnumDef(
         name="Option",
-        type_params=("T",),
+        type_params=(TypeParam(name="T"),),
         variants=(
             EnumVariant(name="Some", fields=(EnumPayloadField(name="value", type=TypeParamRef(name="T")),)),
             EnumVariant(name="None"),
@@ -183,7 +184,7 @@ def test_monomorphize_nested_generics():
     """`struct Pair<A, B> { fst: A, snd: B }` + use of Pair<i64, Pair<i32, i64>>."""
     pair_def = StructDef(
         name="Pair",
-        type_params=("A", "B"),
+        type_params=(TypeParam(name="A"), TypeParam(name="B"),),
         fields=(
             StructField(name="fst", type=TypeParamRef(name="A")),
             StructField(name="snd", type=TypeParamRef(name="B")),
@@ -224,14 +225,23 @@ def test_monomorphize_noop_for_program_with_no_generics():
 
 # ---------- Generic functions ----------
 
-from quod.model import Call, ParamRef
+from quod.model import (
+    Call,
+    FieldRead,
+    ImplDef,
+    ParamRef,
+    SelfType,
+    TraitCall,
+    TraitDef,
+    TraitMethodSig,
+)
 
 
 def test_monomorphize_generic_function_drops_template_emits_concrete():
     """`fn id<T>(x: T) -> T { return x }` plus a `Call(id, type_args=[i64])`."""
     id_fn = Function(
         name="id",
-        type_params=("T",),
+        type_params=(TypeParam(name="T"),),
         params=(Param(name="x", type=TypeParamRef(name="T")),),
         return_type=TypeParamRef(name="T"),
         body=(ReturnExpr(value=ParamRef(name="x")),),
@@ -272,7 +282,7 @@ def test_monomorphize_generic_function_drops_template_emits_concrete():
 def test_monomorphize_generic_function_two_instantiations():
     id_fn = Function(
         name="id",
-        type_params=("T",),
+        type_params=(TypeParam(name="T"),),
         params=(Param(name="x", type=TypeParamRef(name="T")),),
         return_type=TypeParamRef(name="T"),
         body=(ReturnExpr(value=ParamRef(name="x")),),
@@ -306,12 +316,12 @@ def test_monomorphize_generic_function_referencing_generic_struct():
     Calling make<i64>(...) should produce both `make<i64>` AND `Box<i64>`."""
     box_def = StructDef(
         name="Box",
-        type_params=("T",),
+        type_params=(TypeParam(name="T"),),
         fields=(StructField(name="value", type=TypeParamRef(name="T")),),
     )
     make_fn = Function(
         name="make",
-        type_params=("T",),
+        type_params=(TypeParam(name="T"),),
         params=(Param(name="v", type=TypeParamRef(name="T")),),
         return_type=StructType(name="Box", type_args=(TypeParamRef(name="T"),)),
         body=(ReturnExpr(value=StructInit(
@@ -349,3 +359,128 @@ def test_monomorphize_generic_function_referencing_generic_struct():
     assert isinstance(body.value, StructInit)
     assert body.value.type == "Box<i64>"
     assert body.value.type_args == ()
+
+
+# ---------- Traits + impls ----------
+
+def _counter_program():
+    counter = StructDef(name="Counter", fields=(StructField(name="count", type=I32Type()),))
+    add_trait = TraitDef(name="Add", methods=(
+        TraitMethodSig(
+            name="add",
+            params=(Param(name="self", type=SelfType()), Param(name="n", type=I32Type())),
+            return_type=I32Type(),
+        ),
+    ))
+    add_impl = ImplDef(
+        trait="Add",
+        for_type=StructType(name="Counter"),
+        methods=(
+            Function(
+                name="add",
+                params=(Param(name="self", type=SelfType()), Param(name="n", type=I32Type())),
+                return_type=I32Type(),
+                body=(ReturnExpr(value=ParamRef(name="n")),),  # body doesn't matter for these checks
+            ),
+        ),
+    )
+    return counter, add_trait, add_impl
+
+
+def test_impldef_substitutes_self_in_signatures():
+    """ImplDef's validator must substitute Self → for_type in params and return_type."""
+    counter, add_trait, add_impl = _counter_program()
+    method = add_impl.methods[0]
+    # self's type is no longer SelfType — it's been rewritten to the for_type.
+    assert isinstance(method.params[0].type, StructType)
+    assert method.params[0].type.name == "Counter"
+    # n stays i32.
+    assert isinstance(method.params[1].type, I32Type)
+    # return_type is i32 (no Self there to substitute).
+    assert isinstance(method.return_type, I32Type)
+
+
+def test_monomorphize_promotes_impl_methods_to_top_level_fns():
+    counter, add_trait, add_impl = _counter_program()
+    main_fn = Function(
+        name="main",
+        return_type=I32Type(),
+        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+    )
+    prog = Program(
+        structs=(counter,), traits=(add_trait,), impls=(add_impl,),
+        functions=(main_fn,),
+    )
+    out = monomorphize(prog)
+
+    fn_names = {fn.name for fn in out.functions}
+    # The impl's method gets promoted with a mangled symbol.
+    assert "Counter::add" in fn_names, f"expected Counter::add; got {fn_names}"
+    # impls is consumed.
+    assert out.impls == ()
+
+
+def test_monomorphize_resolves_trait_call_to_impl_method():
+    counter, add_trait, add_impl = _counter_program()
+    main_fn = Function(
+        name="main",
+        return_type=I32Type(),
+        body=(
+            Let(
+                name="c", type=StructType(name="Counter"),
+                init=StructInit(type="Counter", fields=(
+                    FieldInit(name="count", value=IntLit(type=I32Type(), value=10)),
+                )),
+            ),
+            ReturnExpr(value=TraitCall(
+                trait="Add",
+                method="add",
+                dispatch_type=StructType(name="Counter"),
+                args=(LocalRef(name="c"), IntLit(type=I32Type(), value=32)),
+            )),
+        ),
+    )
+    prog = Program(
+        structs=(counter,), traits=(add_trait,), impls=(add_impl,),
+        functions=(main_fn,),
+    )
+    out = monomorphize(prog)
+
+    new_main = next(fn for fn in out.functions if fn.name == "main")
+    return_stmt = new_main.body[1]
+    assert isinstance(return_stmt, ReturnExpr)
+    # TraitCall is gone; replaced by a regular Call to the mangled impl method.
+    assert isinstance(return_stmt.value, Call)
+    assert return_stmt.value.function == "Counter::add"
+    assert return_stmt.value.type_args == ()
+    # Args pass through unchanged.
+    assert len(return_stmt.value.args) == 2
+
+
+def test_monomorphize_missing_impl_raises_clear_error():
+    counter, add_trait, _add_impl = _counter_program()
+    # Note: NO impls registered.
+    main_fn = Function(
+        name="main",
+        return_type=I32Type(),
+        body=(
+            Let(
+                name="c", type=StructType(name="Counter"),
+                init=StructInit(type="Counter", fields=(
+                    FieldInit(name="count", value=IntLit(type=I32Type(), value=10)),
+                )),
+            ),
+            ReturnExpr(value=TraitCall(
+                trait="Add",
+                method="add",
+                dispatch_type=StructType(name="Counter"),
+                args=(LocalRef(name="c"), IntLit(type=I32Type(), value=32)),
+            )),
+        ),
+    )
+    prog = Program(structs=(counter,), traits=(add_trait,), functions=(main_fn,))
+    with pytest.raises(ValueError, match="no impl of trait"):
+        monomorphize(prog)
+
+
+from quod.model import LocalRef  # noqa: E402  (imported here for the trait tests above)

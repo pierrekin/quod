@@ -80,6 +80,12 @@ from quod.model import (
     StructType,
     Store,
     StoreField,
+    SelfType,
+    TraitCall,
+    TraitDef,
+    TraitMethodSig,
+    ImplDef,
+    TypeParam,
     TypeParamRef,
     VoidType,
     While,
@@ -603,6 +609,30 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "example": {"kind": "quod.type_param", "name": "T"},
         "see_also": ["StructDef", "EnumDef"],
     },
+    "quod.self_type": {
+        "class": SelfType,
+        "summary": (
+            "Reference to the receiver type inside a TraitDef method signature "
+            "or an ImplDef method. ImplDef's validator eagerly substitutes "
+            "Self → for_type at construction, so the lowerer never sees Self."
+        ),
+        "example": {"kind": "quod.self_type"},
+        "see_also": ["TraitDef", "ImplDef"],
+    },
+    "quod.trait_call": {
+        "class": TraitCall,
+        "summary": (
+            "Call a trait method, dispatched on dispatch_type. After mono, "
+            "rewritten to a direct Call to the resolved impl's mangled method "
+            "(e.g. Counter::add). dispatch_type may be a TypeParamRef pre-mono."
+        ),
+        "example": {
+            "kind": "quod.trait_call", "trait": "Add", "method": "add",
+            "dispatch_type": {"kind": "llvm.struct", "name": "Counter"},
+            "args": [],
+        },
+        "see_also": ["TraitDef", "ImplDef"],
+    },
 
     # ---------- claim ----------
     "non_negative": {
@@ -783,6 +813,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "quod.struct_init", "quod.field", "quod.load_field",
         "quod.ptr_offset", "quod.widen", "quod.load", "quod.null_ptr",
         "quod.char_lit", "quod.enum_init", "quod.sizeof", "quod.try",
+        "quod.trait_call",
     ],
     "statement": [
         "quod.return_expr", "quod.return", "quod.unreachable", "quod.if",
@@ -793,7 +824,7 @@ _CATEGORIES: dict[str, list[str]] = {
     "type": [
         "llvm.i1", "llvm.i8", "llvm.i16", "llvm.i32", "llvm.i64",
         "llvm.i8_ptr", "llvm.struct", "llvm.enum", "llvm.void",
-        "quod.type_param",
+        "quod.type_param", "quod.self_type",
     ],
     "claim": ["non_negative", "int_range", "return_in_range"],
     "justification": ["z3", "manual", "derived"],

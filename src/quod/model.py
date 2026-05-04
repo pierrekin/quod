@@ -310,6 +310,28 @@ class EnumInit(_Node):
         return data
 
 
+class TraitCall(_Node):
+    """Call a method declared in a `TraitDef`, dispatched on
+    `dispatch_type`. Pre-mono, `dispatch_type` may be a `TypeParamRef`
+    (the dispatch resolves once the type-param is bound). At mono time,
+    `dispatch_type` is substituted to a concrete type, the impl
+    `impl <trait> for <concrete>` is looked up, and this node is
+    rewritten to a regular `Call` to that impl's mangled method name.
+
+    Post-monomorphization, no `TraitCall` remains.
+
+    `args[0]` is the receiver value (the impl's first parameter, by
+    convention `self`); subsequent args follow the method signature.
+    Keeping the receiver in `args` rather than a separate field matches
+    how the lowered Call ends up: a flat positional argument list.
+    """
+    kind: Literal["quod.trait_call"] = "quod.trait_call"
+    trait: str
+    method: str
+    dispatch_type: "Type"
+    args: tuple["Expr", ...] = ()
+
+
 class CharLit(_Node):
     """A byte literal written as a single-character string. Lowers to
     `const_int i8 ord(value)`.
@@ -342,7 +364,7 @@ Expr = Annotated[
     Union[
         IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
         Call, StringRef, FieldRead, LoadField, StructInit, PtrOffset, Widen,
-        Load, NullPtr, CharLit, EnumInit, SizeOf, TryExpr,
+        Load, NullPtr, CharLit, EnumInit, SizeOf, TryExpr, TraitCall,
     ],
     Field(discriminator="kind"),
 ]
@@ -443,6 +465,16 @@ class TypeParamRef(_Node):
     name: str
 
 
+class SelfType(_Node):
+    """Reference to the receiver type inside a `TraitDef` method
+    signature or an `ImplDef` method. `ImplDef`'s post-construction
+    validator eagerly rewrites every `SelfType` inside its methods to
+    the impl's `for_type`, so by the time the lowerer runs no `SelfType`
+    survives — a `SelfType` reaching mono is a bug in TraitDef plumbing.
+    """
+    kind: Literal["quod.self_type"] = "quod.self_type"
+
+
 class VoidType(_Node):
     """The LLVM `void` type. Only valid as a function return type.
 
@@ -463,17 +495,20 @@ IntType = Annotated[
 # Let bindings, struct fields, and other value-bearing contexts. Void is
 # deliberately excluded; see ReturnType for return positions.
 # TypeParamRef is included for pre-monomorphization use; the mono pass
-# substitutes them before lowering.
+# substitutes them before lowering. SelfType is for trait/impl
+# declarations; an ImplDef validator eagerly rewrites Self → for_type at
+# construction time, so SelfType only appears in TraitDef method
+# signatures (and the rewriter never sees it).
 Type = Annotated[
     Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType,
-          StructType, EnumType, TypeParamRef],
+          StructType, EnumType, TypeParamRef, SelfType],
     Field(discriminator="kind"),
 ]
 
 # Type that can appear at a function return position, including void.
 ReturnType = Annotated[
     Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType,
-          StructType, EnumType, TypeParamRef, VoidType],
+          StructType, EnumType, TypeParamRef, SelfType, VoidType],
     Field(discriminator="kind"),
 ]
 
@@ -913,6 +948,26 @@ class StructField(_Node):
     type: Type
 
 
+class TypeParam(_Node):
+    """One type parameter on a generic StructDef / EnumDef / Function.
+
+    `name` is what TypeParamRef binds against (`T`, `A`, `K`, …).
+    `bound`, when set, names a TraitDef; the monomorphizer rejects an
+    instantiation whose concrete type lacks an `impl <bound> for <type>`.
+    Bounds are only meaningful once trait dispatch lands; until then,
+    `bound=None` is the only valid form.
+    """
+    name: str
+    bound: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_none_bound(self, handler, info):
+        data = handler(self)
+        if self.bound is None:
+            data.pop("bound", None)
+        return data
+
+
 class StructDef(_Node):
     """A named record type. Fields are ordered and uniquely named.
 
@@ -921,15 +976,14 @@ class StructDef(_Node):
     structs are out of v1 scope — opaque `i8*` if you need to hand one
     to an extern.
 
-    `type_params` lists the names of the type parameters for a generic
-    struct, e.g. `("T",)` for `struct Box<T> { value: T }`. Field types
-    may then reference these via `TypeParamRef`. A struct with non-empty
-    `type_params` is generic and is *not* directly lowered — it gets
-    monomorphized into one fresh nominal struct per concrete `type_args`
-    tuple before lowering.
+    `type_params` lists this struct's type parameters, e.g.
+    `(TypeParam(name="T"),)` for `struct Box<T> { value: T }`. Field
+    types may reference these via `TypeParamRef`. A struct with
+    non-empty `type_params` is generic and gets monomorphized into one
+    fresh nominal struct per concrete `type_args` tuple before lowering.
     """
     name: str
-    type_params: tuple[str, ...] = ()
+    type_params: tuple[TypeParam, ...] = ()
     fields: tuple[StructField, ...]
 
     @model_serializer(mode="wrap")
@@ -993,7 +1047,7 @@ class EnumDef(_Node):
     Generic enums are monomorphized away before lowering.
     """
     name: str
-    type_params: tuple[str, ...] = ()
+    type_params: tuple[TypeParam, ...] = ()
     variants: tuple[EnumVariant, ...]
 
     @model_serializer(mode="wrap")
@@ -1045,7 +1099,7 @@ class Param(_Node):
 
 class Function(_Node):
     name: str
-    type_params: tuple[str, ...] = ()
+    type_params: tuple[TypeParam, ...] = ()
     params: tuple[Param, ...] = ()
     return_type: ReturnType
     body: tuple[Statement, ...]
@@ -1167,6 +1221,92 @@ class ExternFunction(_Node):
         return tuple(I32Type() for _ in range(self.arity))
 
 
+# ---------- Traits + impls ----------
+
+class TraitMethodSig(_Node):
+    """One method signature in a `TraitDef`. No body; impls supply the
+    body. Param/return types may reference `SelfType` (the implementing
+    type) and any `TypeParamRef`s declared by the trait itself
+    (currently always empty — generic traits are post-v1)."""
+    name: str
+    params: tuple[Param, ...] = ()
+    return_type: ReturnType
+
+
+class TraitDef(_Node):
+    """A trait: a name plus a set of method signatures any conforming
+    `ImplDef` must provide. Pure declaration; no runtime cost.
+
+    A `<T: TraitName>` bound on a generic type parameter constrains
+    instantiations to types that have an `impl TraitName for ...`
+    visible at mono time. The mono pass rewrites `TraitCall` nodes to
+    direct `Call`s of the impl's mangled method symbols.
+    """
+    name: str
+    methods: tuple[TraitMethodSig, ...]
+
+
+def _substitute_self_in_type(t, for_type):
+    """Eagerly substitute `SelfType` → `for_type` inside a Type tree.
+    Used by `ImplDef`'s post-construction validator so impls store
+    Self-free methods.
+    """
+    if isinstance(t, SelfType):
+        return for_type
+    if isinstance(t, StructType) and t.type_args:
+        return t.model_copy(update={
+            "type_args": tuple(_substitute_self_in_type(a, for_type) for a in t.type_args),
+        })
+    if isinstance(t, EnumType) and t.type_args:
+        return t.model_copy(update={
+            "type_args": tuple(_substitute_self_in_type(a, for_type) for a in t.type_args),
+        })
+    return t
+
+
+class ImplDef(_Node):
+    """`impl <trait> for <for_type> { <methods> }`.
+
+    Provides concrete bodies for the named trait's methods on the named
+    type. Multiple impls of distinct traits for the same type are
+    allowed; two impls of the same trait for the same type are not
+    (coherence — checked at Program-level validation).
+
+    On construction, every `SelfType` inside `methods` is rewritten to
+    `for_type` — the lowerer and the mono pass never see Self.
+
+    Methods are stored as full `Function`s so they can be promoted to
+    top-level by the monomorphization pass with mangled names like
+    `<for_type>::<method>` (e.g., `Arena::alloc`). Generic impls
+    (impl-level `type_params`) are out of scope for v1.
+    """
+    trait: str
+    for_type: Type
+    methods: tuple[Function, ...]
+
+    @model_validator(mode="after")
+    def _resolve_self(self) -> "ImplDef":
+        # Eagerly substitute Self → for_type in every method's params and
+        # return_type. v1 limitation: Self inside method bodies (e.g. as
+        # `Let.type`) is not substituted — bodies are expected to name
+        # the `for_type` directly (e.g. `Arena::new(...)`). If Self does
+        # leak into a body, the lowerer will surface it as an
+        # unhandled-type error rather than silently produce wrong code.
+        new_methods = []
+        for fn in self.methods:
+            new_params = tuple(
+                Param(name=p.name, type=_substitute_self_in_type(p.type, self.for_type))
+                for p in fn.params
+            )
+            new_return = _substitute_self_in_type(fn.return_type, self.for_type)
+            new_methods.append(fn.model_copy(update={
+                "params":      new_params,
+                "return_type": new_return,
+            }))
+        object.__setattr__(self, "methods", tuple(new_methods))
+        return self
+
+
 class _ProgramBase(_Node):
     """Shared shape for Program and InputProgram."""
     constants: tuple[StringConstant, ...] = ()
@@ -1174,6 +1314,8 @@ class _ProgramBase(_Node):
     externs: tuple[ExternFunction, ...] = ()
     structs: tuple[StructDef, ...] = ()
     enums: tuple[EnumDef, ...] = ()
+    traits: tuple[TraitDef, ...] = ()
+    impls: tuple[ImplDef, ...] = ()
     imports: tuple[str, ...] = ()
 
     @model_serializer(mode="wrap")
@@ -1183,6 +1325,10 @@ class _ProgramBase(_Node):
             data.pop("structs", None)
         if not self.enums:
             data.pop("enums", None)
+        if not self.traits:
+            data.pop("traits", None)
+        if not self.impls:
+            data.pop("impls", None)
         if not self.imports:
             data.pop("imports", None)
         return data
