@@ -1,0 +1,7 @@
+{
+  "program_file": "../../../../examples/builder_smoke/program.json",
+  "expect": {
+    "stdout": "hello, world!\n",
+    "exit": 0
+  }
+}
