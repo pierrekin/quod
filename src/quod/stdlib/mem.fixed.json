@@ -1,0 +1,599 @@
+{
+  "imports": [
+    "mem"
+  ],
+  "structs": [
+    {
+      "name": "mem.fixed.FixedBuffer",
+      "fields": [
+        {
+          "name": "base",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "cap",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "cursor",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ]
+    }
+  ],
+  "externs": [
+    {
+      "name": "malloc",
+      "param_types": [
+        {
+          "kind": "llvm.i64"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
+      "linkage": {
+        "kind": "linkage.libc"
+      }
+    },
+    {
+      "name": "free",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.void"
+      },
+      "linkage": {
+        "kind": "linkage.libc"
+      }
+    }
+  ],
+  "functions": [
+    {
+      "name": "mem.fixed.new",
+      "params": [
+        {
+          "name": "cap",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "cap"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i64"
+              },
+              "value": 0
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.null_ptr"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "h",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "init": {
+            "kind": "llvm.call",
+            "function": "malloc",
+            "args": [
+              {
+                "kind": "quod.sizeof",
+                "type": {
+                  "kind": "llvm.struct",
+                  "name": "mem.fixed.FixedBuffer"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "h"
+            },
+            "rhs": {
+              "kind": "quod.null_ptr"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.null_ptr"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "buf",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "init": {
+            "kind": "llvm.call",
+            "function": "malloc",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "cap"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "buf"
+            },
+            "rhs": {
+              "kind": "quod.null_ptr"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "free",
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "h"
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.null_ptr"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.store_field",
+          "ptr": {
+            "kind": "quod.local_ref",
+            "name": "h"
+          },
+          "struct_type": "mem.fixed.FixedBuffer",
+          "name": "base",
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "buf"
+          }
+        },
+        {
+          "kind": "quod.store_field",
+          "ptr": {
+            "kind": "quod.local_ref",
+            "name": "h"
+          },
+          "struct_type": "mem.fixed.FixedBuffer",
+          "name": "cap",
+          "value": {
+            "kind": "llvm.param_ref",
+            "name": "cap"
+          }
+        },
+        {
+          "kind": "quod.store_field",
+          "ptr": {
+            "kind": "quod.local_ref",
+            "name": "h"
+          },
+          "struct_type": "mem.fixed.FixedBuffer",
+          "name": "cursor",
+          "value": {
+            "kind": "llvm.const_int",
+            "type": {
+              "kind": "llvm.i64"
+            },
+            "value": 0
+          }
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "h"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mem.fixed.alloc",
+      "params": [
+        {
+          "name": "handle",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "handle"
+            },
+            "rhs": {
+              "kind": "quod.null_ptr"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.null_ptr"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "n"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i64"
+              },
+              "value": 0
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.null_ptr"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "cursor",
+          "type": {
+            "kind": "llvm.i64"
+          },
+          "init": {
+            "kind": "quod.load_field",
+            "ptr": {
+              "kind": "llvm.param_ref",
+              "name": "handle"
+            },
+            "struct_type": "mem.fixed.FixedBuffer",
+            "name": "cursor"
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "cap",
+          "type": {
+            "kind": "llvm.i64"
+          },
+          "init": {
+            "kind": "quod.load_field",
+            "ptr": {
+              "kind": "llvm.param_ref",
+              "name": "handle"
+            },
+            "struct_type": "mem.fixed.FixedBuffer",
+            "name": "cap"
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "end",
+          "type": {
+            "kind": "llvm.i64"
+          },
+          "init": {
+            "kind": "llvm.binop",
+            "op": "add",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "cursor"
+            },
+            "rhs": {
+              "kind": "llvm.param_ref",
+              "name": "n"
+            }
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "sgt",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "end"
+            },
+            "rhs": {
+              "kind": "quod.local_ref",
+              "name": "cap"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.null_ptr"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "base",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "init": {
+            "kind": "quod.load_field",
+            "ptr": {
+              "kind": "llvm.param_ref",
+              "name": "handle"
+            },
+            "struct_type": "mem.fixed.FixedBuffer",
+            "name": "base"
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "result",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "init": {
+            "kind": "quod.ptr_offset",
+            "base": {
+              "kind": "quod.local_ref",
+              "name": "base"
+            },
+            "offset": {
+              "kind": "quod.local_ref",
+              "name": "cursor"
+            }
+          }
+        },
+        {
+          "kind": "quod.store_field",
+          "ptr": {
+            "kind": "llvm.param_ref",
+            "name": "handle"
+          },
+          "struct_type": "mem.fixed.FixedBuffer",
+          "name": "cursor",
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "end"
+          }
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.local_ref",
+            "name": "result"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mem.fixed.drop",
+      "params": [
+        {
+          "name": "handle",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.void"
+      },
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "handle"
+            },
+            "rhs": {
+              "kind": "quod.null_ptr"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return"
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "base",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "init": {
+            "kind": "quod.load_field",
+            "ptr": {
+              "kind": "llvm.param_ref",
+              "name": "handle"
+            },
+            "struct_type": "mem.fixed.FixedBuffer",
+            "name": "base"
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "base"
+            },
+            "rhs": {
+              "kind": "quod.null_ptr"
+            }
+          },
+          "then_body": [],
+          "else_body": [
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "free",
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "base"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "free",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "handle"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.return"
+        }
+      ]
+    }
+  ],
+  "impls": [
+    {
+      "trait": "mem.Allocator",
+      "for_type": {
+        "kind": "llvm.struct",
+        "name": "mem.fixed.FixedBuffer"
+      },
+      "methods": [
+        {
+          "name": "alloc",
+          "params": [
+            {
+              "name": "handle",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              }
+            },
+            {
+              "name": "n",
+              "type": {
+                "kind": "llvm.i64"
+              }
+            }
+          ],
+          "return_type": {
+            "kind": "llvm.i8_ptr"
+          },
+          "body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.call",
+                "function": "mem.fixed.alloc",
+                "args": [
+                  {
+                    "kind": "llvm.param_ref",
+                    "name": "handle"
+                  },
+                  {
+                    "kind": "llvm.param_ref",
+                    "name": "n"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
