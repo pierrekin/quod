@@ -1,0 +1,7 @@
+{
+  "program_file": "../../../../examples/json_writer_smoke/program.json",
+  "expect": {
+    "stdout": "{\"a\":1,\"b\":[true,null,\"hi\\nthere\"],\"c\":-42}\n",
+    "exit": 0
+  }
+}
