@@ -1,0 +1,1491 @@
+{
+  "imports": [
+    "mem",
+    "core.bytes",
+    "core.io",
+    "core.option",
+    "core.result",
+    "alloc.json"
+  ],
+  "wirables": [
+    {"name": "A", "bound": "mem.Allocator"}
+  ],
+  "constants": [
+    {"name": ".json.io.null_str", "value": "null"},
+    {"name": ".json.io.true_str", "value": "true"},
+    {"name": ".json.io.false_str", "value": "false"}
+  ],
+  "structs": [
+    {
+      "name": "alloc.json.io.WriteCtx",
+      "type_params": [{"name": "W"}],
+      "fields": [
+        {"name": "writer_ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "scratch", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "err", "type": {
+          "kind": "llvm.enum",
+          "name": "core.option.Option",
+          "type_args": [{"kind": "llvm.enum", "name": "core.io.IoError"}]
+        }}
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "name": "alloc.json.io.write_chunk",
+      "type_params": [{"name": "W"}],
+      "params": [
+        {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "n", "type": {"kind": "llvm.i64"}}
+      ],
+      "return_type": {"kind": "llvm.void"},
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "cur_err",
+          "type": {
+            "kind": "llvm.enum",
+            "name": "core.option.Option",
+            "type_args": [{"kind": "llvm.enum", "name": "core.io.IoError"}]
+          },
+          "init": {
+            "kind": "quod.load_field",
+            "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+            "struct_type": "alloc.json.io.WriteCtx",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "name": "err"
+          }
+        },
+        {
+          "kind": "quod.match",
+          "scrutinee": {"kind": "quod.local_ref", "name": "cur_err"},
+          "arms": [
+            {"variant": "Some", "bindings": ["_e"], "body": [{"kind": "quod.return"}]},
+            {"variant": "None", "bindings": [], "body": []}
+          ]
+        },
+        {
+          "kind": "quod.let",
+          "name": "writer_ptr",
+          "type": {"kind": "llvm.i8_ptr"},
+          "init": {
+            "kind": "quod.load_field",
+            "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+            "struct_type": "alloc.json.io.WriteCtx",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "name": "writer_ptr"
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "remaining",
+          "type": {"kind": "llvm.usize"},
+          "init": {
+            "kind": "quod.widen",
+            "value": {"kind": "llvm.param_ref", "name": "n"},
+            "target": {"kind": "llvm.usize"},
+            "signed": false
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "cursor",
+          "type": {"kind": "llvm.i8_ptr"},
+          "init": {"kind": "llvm.param_ref", "name": "ptr"}
+        },
+        {
+          "kind": "quod.while",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "ugt",
+            "lhs": {"kind": "quod.local_ref", "name": "remaining"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
+          },
+          "body": [
+            {
+              "kind": "quod.let",
+              "name": "rc",
+              "type": {
+                "kind": "llvm.enum",
+                "name": "core.result.Result",
+                "type_args": [
+                  {"kind": "llvm.usize"},
+                  {"kind": "llvm.enum", "name": "core.io.IoError"}
+                ]
+              },
+              "init": {
+                "kind": "quod.trait_call",
+                "trait": "core.io.Writer",
+                "method": "write",
+                "dispatch_type": {"kind": "quod.type_param", "name": "W"},
+                "args": [
+                  {"kind": "quod.local_ref", "name": "writer_ptr"},
+                  {"kind": "quod.local_ref", "name": "cursor"},
+                  {"kind": "quod.local_ref", "name": "remaining"}
+                ]
+              }
+            },
+            {
+              "kind": "quod.match",
+              "scrutinee": {"kind": "quod.local_ref", "name": "rc"},
+              "arms": [
+                {
+                  "variant": "Err",
+                  "bindings": ["e"],
+                  "body": [
+                    {
+                      "kind": "quod.store_field",
+                      "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                      "struct_type": "alloc.json.io.WriteCtx",
+                      "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                      "name": "err",
+                      "value": {
+                        "kind": "quod.enum_init",
+                        "enum": "core.option.Option",
+                        "type_args": [{"kind": "llvm.enum", "name": "core.io.IoError"}],
+                        "variant": "Some",
+                        "fields": [
+                          {"name": "value", "value": {"kind": "quod.local_ref", "name": "e"}}
+                        ]
+                      }
+                    },
+                    {"kind": "quod.return"}
+                  ]
+                },
+                {
+                  "variant": "Ok",
+                  "bindings": ["written"],
+                  "body": [
+                    {
+                      "kind": "quod.if",
+                      "cond": {
+                        "kind": "llvm.binop",
+                        "op": "eq",
+                        "lhs": {"kind": "quod.local_ref", "name": "written"},
+                        "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
+                      },
+                      "then_body": [
+                        {
+                          "kind": "quod.store_field",
+                          "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                          "struct_type": "alloc.json.io.WriteCtx",
+                          "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                          "name": "err",
+                          "value": {
+                            "kind": "quod.enum_init",
+                            "enum": "core.option.Option",
+                            "type_args": [{"kind": "llvm.enum", "name": "core.io.IoError"}],
+                            "variant": "Some",
+                            "fields": [
+                              {
+                                "name": "value",
+                                "value": {
+                                  "kind": "quod.enum_init",
+                                  "enum": "core.io.IoError",
+                                  "variant": "Other",
+                                  "fields": [
+                                    {"name": "errno", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}}
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {"kind": "quod.return"}
+                      ],
+                      "else_body": []
+                    },
+                    {
+                      "kind": "quod.assign",
+                      "name": "cursor",
+                      "value": {
+                        "kind": "quod.ptr_offset",
+                        "base": {"kind": "quod.local_ref", "name": "cursor"},
+                        "offset": {
+                          "kind": "quod.widen",
+                          "value": {"kind": "quod.local_ref", "name": "written"},
+                          "target": {"kind": "llvm.i64"},
+                          "signed": false
+                        }
+                      }
+                    },
+                    {
+                      "kind": "quod.assign",
+                      "name": "remaining",
+                      "value": {
+                        "kind": "llvm.binop",
+                        "op": "sub",
+                        "lhs": {"kind": "quod.local_ref", "name": "remaining"},
+                        "rhs": {"kind": "quod.local_ref", "name": "written"}
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "alloc.json.io.emit_byte",
+      "type_params": [{"name": "W"}],
+      "params": [
+        {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "byte", "type": {"kind": "llvm.i8"}}
+      ],
+      "return_type": {"kind": "llvm.void"},
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "scratch",
+          "type": {"kind": "llvm.i8_ptr"},
+          "init": {
+            "kind": "quod.load_field",
+            "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+            "struct_type": "alloc.json.io.WriteCtx",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "name": "scratch"
+          }
+        },
+        {
+          "kind": "quod.store",
+          "ptr": {"kind": "quod.local_ref", "name": "scratch"},
+          "value": {"kind": "llvm.param_ref", "name": "byte"}
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.json.io.write_chunk",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "args": [
+              {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+              {"kind": "quod.local_ref", "name": "scratch"},
+              {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "alloc.json.io.hex_char",
+      "params": [
+        {"name": "n", "type": {"kind": "llvm.i8"}}
+      ],
+      "return_type": {"kind": "llvm.i8"},
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {"kind": "llvm.param_ref", "name": "n"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 10}
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {"kind": "llvm.param_ref", "name": "n"},
+                "rhs": {"kind": "quod.char_lit", "value": "0"}
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "add",
+            "lhs": {
+              "kind": "llvm.binop",
+              "op": "sub",
+              "lhs": {"kind": "llvm.param_ref", "name": "n"},
+              "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 10}
+            },
+            "rhs": {"kind": "quod.char_lit", "value": "a"}
+          }
+        }
+      ]
+    },
+    {
+      "name": "alloc.json.io.escape_byte",
+      "type_params": [{"name": "W"}],
+      "params": [
+        {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "ch", "type": {"kind": "llvm.i8"}}
+      ],
+      "return_type": {"kind": "llvm.i1"},
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "\""}},
+          "then_body": [
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\""}]}},
+            {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "\\"}},
+          "then_body": [
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
+            {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "\n"}},
+          "then_body": [
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "n"}]}},
+            {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "\t"}},
+          "then_body": [
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "t"}]}},
+            {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "\r"}},
+          "then_body": [
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "r"}]}},
+            {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {"kind": "llvm.param_ref", "name": "ch"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 32}
+          },
+          "then_body": [
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "u"}]}},
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "0"}]}},
+            {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "0"}]}},
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_byte",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                  {
+                    "kind": "llvm.call",
+                    "function": "alloc.json.io.hex_char",
+                    "args": [
+                      {
+                        "kind": "llvm.binop",
+                        "op": "udiv",
+                        "lhs": {"kind": "llvm.param_ref", "name": "ch"},
+                        "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 16}
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_byte",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                  {
+                    "kind": "llvm.call",
+                    "function": "alloc.json.io.hex_char",
+                    "args": [
+                      {
+                        "kind": "llvm.binop",
+                        "op": "urem",
+                        "lhs": {"kind": "llvm.param_ref", "name": "ch"},
+                        "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 16}
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
+          ],
+          "else_body": []
+        },
+        {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 0}}
+      ]
+    },
+    {
+      "name": "alloc.json.io.emit_string_chars",
+      "type_params": [{"name": "W"}],
+      "params": [
+        {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "len", "type": {"kind": "llvm.i64"}}
+      ],
+      "return_type": {"kind": "llvm.void"},
+      "body": [
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.json.io.emit_byte",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\""}]
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "i",
+          "type": {"kind": "llvm.i64"},
+          "init": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
+        },
+        {
+          "kind": "quod.while",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {"kind": "quod.local_ref", "name": "i"},
+            "rhs": {"kind": "llvm.param_ref", "name": "len"}
+          },
+          "body": [
+            {
+              "kind": "quod.let",
+              "name": "ch",
+              "type": {"kind": "llvm.i8"},
+              "init": {
+                "kind": "quod.load",
+                "ptr": {
+                  "kind": "llvm.binop",
+                  "op": "add",
+                  "lhs": {"kind": "llvm.param_ref", "name": "ptr"},
+                  "rhs": {"kind": "quod.local_ref", "name": "i"}
+                },
+                "type": {"kind": "llvm.i8"}
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "handled",
+              "type": {"kind": "llvm.i1"},
+              "init": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.escape_byte",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                  {"kind": "quod.local_ref", "name": "ch"}
+                ]
+              }
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "eq",
+                "lhs": {"kind": "quod.local_ref", "name": "handled"},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 0}
+              },
+              "then_body": [
+                {
+                  "kind": "quod.expr_stmt",
+                  "value": {
+                    "kind": "llvm.call",
+                    "function": "alloc.json.io.emit_byte",
+                    "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                    "args": [
+                      {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                      {"kind": "quod.local_ref", "name": "ch"}
+                    ]
+                  }
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.assign",
+              "name": "i",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {"kind": "quod.local_ref", "name": "i"},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
+              }
+            }
+          ]
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.json.io.emit_byte",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\""}]
+          }
+        }
+      ]
+    },
+    {
+      "name": "alloc.json.io.emit_digits",
+      "type_params": [{"name": "W"}],
+      "params": [
+        {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "n", "type": {"kind": "llvm.i64"}}
+      ],
+      "return_type": {"kind": "llvm.void"},
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "sge",
+            "lhs": {"kind": "llvm.param_ref", "name": "n"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 10}
+          },
+          "then_body": [
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_digits",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                  {
+                    "kind": "llvm.binop",
+                    "op": "sdiv",
+                    "lhs": {"kind": "llvm.param_ref", "name": "n"},
+                    "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 10}
+                  }
+                ]
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "d",
+          "type": {"kind": "llvm.i64"},
+          "init": {
+            "kind": "llvm.binop",
+            "op": "srem",
+            "lhs": {"kind": "llvm.param_ref", "name": "n"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 10}
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "ch",
+          "type": {"kind": "llvm.i8"},
+          "init": {
+            "kind": "llvm.binop",
+            "op": "add",
+            "lhs": {
+              "kind": "quod.widen",
+              "value": {"kind": "quod.local_ref", "name": "d"},
+              "target": {"kind": "llvm.i8"}
+            },
+            "rhs": {"kind": "quod.char_lit", "value": "0"}
+          }
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.json.io.emit_byte",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "args": [
+              {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+              {"kind": "quod.local_ref", "name": "ch"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "alloc.json.io.emit_number",
+      "type_params": [{"name": "W"}],
+      "params": [
+        {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "n", "type": {"kind": "llvm.i64"}}
+      ],
+      "return_type": {"kind": "llvm.void"},
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {"kind": "llvm.param_ref", "name": "n"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
+          },
+          "then_body": [
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_byte",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "0"}]
+              }
+            },
+            {"kind": "quod.return"}
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "abs",
+          "type": {"kind": "llvm.i64"},
+          "init": {"kind": "llvm.param_ref", "name": "n"}
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {"kind": "llvm.param_ref", "name": "n"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
+          },
+          "then_body": [
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_byte",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "-"}]
+              }
+            },
+            {
+              "kind": "quod.assign",
+              "name": "abs",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "sub",
+                "lhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0},
+                "rhs": {"kind": "llvm.param_ref", "name": "n"}
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.json.io.emit_digits",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "args": [
+              {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+              {"kind": "quod.local_ref", "name": "abs"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "alloc.json.io.emit_indent",
+      "type_params": [{"name": "W"}],
+      "params": [
+        {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "depth", "type": {"kind": "llvm.i64"}}
+      ],
+      "return_type": {"kind": "llvm.void"},
+      "body": [
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.json.io.emit_byte",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\n"}]
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "i",
+          "type": {"kind": "llvm.i64"},
+          "init": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
+        },
+        {
+          "kind": "quod.while",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {"kind": "quod.local_ref", "name": "i"},
+            "rhs": {"kind": "llvm.param_ref", "name": "depth"}
+          },
+          "body": [
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_byte",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": " "}]
+              }
+            },
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_byte",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": " "}]
+              }
+            },
+            {
+              "kind": "quod.assign",
+              "name": "i",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {"kind": "quod.local_ref", "name": "i"},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "alloc.json.io.emit_value",
+      "type_params": [{"name": "W"}],
+      "params": [
+        {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "v", "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"}},
+        {"name": "pretty", "type": {"kind": "llvm.i1"}},
+        {"name": "depth", "type": {"kind": "llvm.i64"}}
+      ],
+      "return_type": {"kind": "llvm.void"},
+      "body": [
+        {
+          "kind": "quod.match",
+          "scrutinee": {"kind": "llvm.param_ref", "name": "v"},
+          "arms": [
+            {
+              "variant": "Null",
+              "bindings": [],
+              "body": [
+                {
+                  "kind": "quod.expr_stmt",
+                  "value": {
+                    "kind": "llvm.call",
+                    "function": "alloc.json.io.write_chunk",
+                    "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                    "args": [
+                      {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                      {"kind": "quod.string_ref", "name": ".json.io.null_str"},
+                      {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4}
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "variant": "Bool",
+              "bindings": ["bx"],
+              "body": [
+                {
+                  "kind": "quod.if",
+                  "cond": {"kind": "quod.local_ref", "name": "bx"},
+                  "then_body": [
+                    {
+                      "kind": "quod.expr_stmt",
+                      "value": {
+                        "kind": "llvm.call",
+                        "function": "alloc.json.io.write_chunk",
+                        "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                        "args": [
+                          {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                          {"kind": "quod.string_ref", "name": ".json.io.true_str"},
+                          {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4}
+                        ]
+                      }
+                    }
+                  ],
+                  "else_body": [
+                    {
+                      "kind": "quod.expr_stmt",
+                      "value": {
+                        "kind": "llvm.call",
+                        "function": "alloc.json.io.write_chunk",
+                        "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                        "args": [
+                          {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                          {"kind": "quod.string_ref", "name": ".json.io.false_str"},
+                          {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 5}
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "variant": "Number",
+              "bindings": ["nx"],
+              "body": [
+                {
+                  "kind": "quod.expr_stmt",
+                  "value": {
+                    "kind": "llvm.call",
+                    "function": "alloc.json.io.emit_number",
+                    "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                    "args": [
+                      {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                      {"kind": "quod.local_ref", "name": "nx"}
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "variant": "String",
+              "bindings": ["sp", "sl"],
+              "body": [
+                {
+                  "kind": "quod.expr_stmt",
+                  "value": {
+                    "kind": "llvm.call",
+                    "function": "alloc.json.io.emit_string_chars",
+                    "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                    "args": [
+                      {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                      {"kind": "quod.local_ref", "name": "sp"},
+                      {"kind": "quod.local_ref", "name": "sl"}
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "variant": "Array",
+              "bindings": ["items"],
+              "body": [
+                {
+                  "kind": "quod.expr_stmt",
+                  "value": {
+                    "kind": "llvm.call",
+                    "function": "alloc.json.io.emit_array",
+                    "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                    "args": [
+                      {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                      {"kind": "quod.local_ref", "name": "items"},
+                      {"kind": "llvm.param_ref", "name": "pretty"},
+                      {
+                        "kind": "llvm.binop",
+                        "op": "add",
+                        "lhs": {"kind": "llvm.param_ref", "name": "depth"},
+                        "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "variant": "Object",
+              "bindings": ["keys", "vals"],
+              "body": [
+                {
+                  "kind": "quod.expr_stmt",
+                  "value": {
+                    "kind": "llvm.call",
+                    "function": "alloc.json.io.emit_object",
+                    "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                    "args": [
+                      {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                      {"kind": "quod.local_ref", "name": "keys"},
+                      {"kind": "quod.local_ref", "name": "vals"},
+                      {"kind": "llvm.param_ref", "name": "pretty"},
+                      {
+                        "kind": "llvm.binop",
+                        "op": "add",
+                        "lhs": {"kind": "llvm.param_ref", "name": "depth"},
+                        "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "alloc.json.io.emit_array",
+      "type_params": [{"name": "W"}],
+      "params": [
+        {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {
+          "name": "items",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "alloc.list.List",
+            "type_args": [{"kind": "llvm.enum", "name": "alloc.json.JsonValue"}]
+          }
+        },
+        {"name": "pretty", "type": {"kind": "llvm.i1"}},
+        {"name": "depth", "type": {"kind": "llvm.i64"}}
+      ],
+      "return_type": {"kind": "llvm.void"},
+      "body": [
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.json.io.emit_byte",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "["}]
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "n",
+          "type": {"kind": "llvm.i64"},
+          "init": {
+            "kind": "llvm.call",
+            "function": "alloc.list.list_len",
+            "type_args": [{"kind": "llvm.enum", "name": "alloc.json.JsonValue"}],
+            "args": [{"kind": "llvm.param_ref", "name": "items"}]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {"kind": "quod.local_ref", "name": "n"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
+          },
+          "then_body": [
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_byte",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "]"}]
+              }
+            },
+            {"kind": "quod.return"}
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "i",
+          "type": {"kind": "llvm.i64"},
+          "init": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
+        },
+        {
+          "kind": "quod.while",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {"kind": "quod.local_ref", "name": "i"},
+            "rhs": {"kind": "quod.local_ref", "name": "n"}
+          },
+          "body": [
+            {
+              "kind": "quod.if",
+              "cond": {"kind": "llvm.param_ref", "name": "pretty"},
+              "then_body": [
+                {
+                  "kind": "quod.expr_stmt",
+                  "value": {
+                    "kind": "llvm.call",
+                    "function": "alloc.json.io.emit_indent",
+                    "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                    "args": [
+                      {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                      {"kind": "llvm.param_ref", "name": "depth"}
+                    ]
+                  }
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.let",
+              "name": "elem",
+              "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"},
+              "init": {
+                "kind": "llvm.call",
+                "function": "alloc.list.list_get",
+                "type_args": [{"kind": "llvm.enum", "name": "alloc.json.JsonValue"}],
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "items"},
+                  {"kind": "quod.local_ref", "name": "i"}
+                ]
+              }
+            },
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_value",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                  {"kind": "quod.local_ref", "name": "elem"},
+                  {"kind": "llvm.param_ref", "name": "pretty"},
+                  {"kind": "llvm.param_ref", "name": "depth"}
+                ]
+              }
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "slt",
+                "lhs": {"kind": "quod.local_ref", "name": "i"},
+                "rhs": {
+                  "kind": "llvm.binop",
+                  "op": "sub",
+                  "lhs": {"kind": "quod.local_ref", "name": "n"},
+                  "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
+                }
+              },
+              "then_body": [
+                {
+                  "kind": "quod.expr_stmt",
+                  "value": {
+                    "kind": "llvm.call",
+                    "function": "alloc.json.io.emit_byte",
+                    "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                    "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": ","}]
+                  }
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.assign",
+              "name": "i",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {"kind": "quod.local_ref", "name": "i"},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
+              }
+            }
+          ]
+        },
+        {
+          "kind": "quod.if",
+          "cond": {"kind": "llvm.param_ref", "name": "pretty"},
+          "then_body": [
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_indent",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                  {
+                    "kind": "llvm.binop",
+                    "op": "sub",
+                    "lhs": {"kind": "llvm.param_ref", "name": "depth"},
+                    "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
+                  }
+                ]
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.json.io.emit_byte",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "]"}]
+          }
+        }
+      ]
+    },
+    {
+      "name": "alloc.json.io.emit_object",
+      "type_params": [{"name": "W"}],
+      "params": [
+        {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {
+          "name": "keys",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "alloc.list.List",
+            "type_args": [{"kind": "llvm.enum", "name": "alloc.json.JsonValue"}]
+          }
+        },
+        {
+          "name": "vals",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "alloc.list.List",
+            "type_args": [{"kind": "llvm.enum", "name": "alloc.json.JsonValue"}]
+          }
+        },
+        {"name": "pretty", "type": {"kind": "llvm.i1"}},
+        {"name": "depth", "type": {"kind": "llvm.i64"}}
+      ],
+      "return_type": {"kind": "llvm.void"},
+      "body": [
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.json.io.emit_byte",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "{"}]
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "n",
+          "type": {"kind": "llvm.i64"},
+          "init": {
+            "kind": "llvm.call",
+            "function": "alloc.list.list_len",
+            "type_args": [{"kind": "llvm.enum", "name": "alloc.json.JsonValue"}],
+            "args": [{"kind": "llvm.param_ref", "name": "keys"}]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {"kind": "quod.local_ref", "name": "n"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
+          },
+          "then_body": [
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_byte",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "}"}]
+              }
+            },
+            {"kind": "quod.return"}
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "i",
+          "type": {"kind": "llvm.i64"},
+          "init": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
+        },
+        {
+          "kind": "quod.while",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {"kind": "quod.local_ref", "name": "i"},
+            "rhs": {"kind": "quod.local_ref", "name": "n"}
+          },
+          "body": [
+            {
+              "kind": "quod.if",
+              "cond": {"kind": "llvm.param_ref", "name": "pretty"},
+              "then_body": [
+                {
+                  "kind": "quod.expr_stmt",
+                  "value": {
+                    "kind": "llvm.call",
+                    "function": "alloc.json.io.emit_indent",
+                    "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                    "args": [
+                      {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                      {"kind": "llvm.param_ref", "name": "depth"}
+                    ]
+                  }
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.let",
+              "name": "k",
+              "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"},
+              "init": {
+                "kind": "llvm.call",
+                "function": "alloc.list.list_get",
+                "type_args": [{"kind": "llvm.enum", "name": "alloc.json.JsonValue"}],
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "keys"},
+                  {"kind": "quod.local_ref", "name": "i"}
+                ]
+              }
+            },
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_value",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                  {"kind": "quod.local_ref", "name": "k"},
+                  {"kind": "llvm.param_ref", "name": "pretty"},
+                  {"kind": "llvm.param_ref", "name": "depth"}
+                ]
+              }
+            },
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_byte",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": ":"}]
+              }
+            },
+            {
+              "kind": "quod.if",
+              "cond": {"kind": "llvm.param_ref", "name": "pretty"},
+              "then_body": [
+                {
+                  "kind": "quod.expr_stmt",
+                  "value": {
+                    "kind": "llvm.call",
+                    "function": "alloc.json.io.emit_byte",
+                    "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                    "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": " "}]
+                  }
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.let",
+              "name": "vv",
+              "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"},
+              "init": {
+                "kind": "llvm.call",
+                "function": "alloc.list.list_get",
+                "type_args": [{"kind": "llvm.enum", "name": "alloc.json.JsonValue"}],
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "vals"},
+                  {"kind": "quod.local_ref", "name": "i"}
+                ]
+              }
+            },
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_value",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                  {"kind": "quod.local_ref", "name": "vv"},
+                  {"kind": "llvm.param_ref", "name": "pretty"},
+                  {"kind": "llvm.param_ref", "name": "depth"}
+                ]
+              }
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "slt",
+                "lhs": {"kind": "quod.local_ref", "name": "i"},
+                "rhs": {
+                  "kind": "llvm.binop",
+                  "op": "sub",
+                  "lhs": {"kind": "quod.local_ref", "name": "n"},
+                  "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
+                }
+              },
+              "then_body": [
+                {
+                  "kind": "quod.expr_stmt",
+                  "value": {
+                    "kind": "llvm.call",
+                    "function": "alloc.json.io.emit_byte",
+                    "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                    "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": ","}]
+                  }
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.assign",
+              "name": "i",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {"kind": "quod.local_ref", "name": "i"},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
+              }
+            }
+          ]
+        },
+        {
+          "kind": "quod.if",
+          "cond": {"kind": "llvm.param_ref", "name": "pretty"},
+          "then_body": [
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "alloc.json.io.emit_indent",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "ctx_ptr"},
+                  {
+                    "kind": "llvm.binop",
+                    "op": "sub",
+                    "lhs": {"kind": "llvm.param_ref", "name": "depth"},
+                    "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
+                  }
+                ]
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.json.io.emit_byte",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "}"}]
+          }
+        }
+      ]
+    },
+    {
+      "name": "alloc.json.io.write_value_to",
+      "type_params": [{"name": "W"}],
+      "params": [
+        {"name": "writer_ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "alloc_handle", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "v", "type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"}},
+        {"name": "pretty", "type": {"kind": "llvm.i1"}}
+      ],
+      "return_type": {
+        "kind": "llvm.enum",
+        "name": "core.option.Option",
+        "type_args": [{"kind": "llvm.enum", "name": "core.io.IoError"}]
+      },
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "ctx_ptr",
+          "type": {"kind": "llvm.i8_ptr"},
+          "init": {
+            "kind": "quod.trait_call",
+            "trait": "mem.Allocator",
+            "method": "alloc",
+            "dispatch_type": {"kind": "quod.type_param", "name": "A"},
+            "args": [
+              {"kind": "llvm.param_ref", "name": "alloc_handle"},
+              {
+                "kind": "quod.sizeof",
+                "type": {
+                  "kind": "llvm.struct",
+                  "name": "alloc.json.io.WriteCtx",
+                  "type_args": [{"kind": "quod.type_param", "name": "W"}]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.let",
+          "name": "scratch",
+          "type": {"kind": "llvm.i8_ptr"},
+          "init": {
+            "kind": "quod.trait_call",
+            "trait": "mem.Allocator",
+            "method": "alloc",
+            "dispatch_type": {"kind": "quod.type_param", "name": "A"},
+            "args": [
+              {"kind": "llvm.param_ref", "name": "alloc_handle"},
+              {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 32}
+            ]
+          }
+        },
+        {
+          "kind": "quod.store",
+          "ptr": {"kind": "quod.local_ref", "name": "ctx_ptr"},
+          "value": {
+            "kind": "quod.struct_init",
+            "type": "alloc.json.io.WriteCtx",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "fields": [
+              {"name": "writer_ptr", "value": {"kind": "llvm.param_ref", "name": "writer_ptr"}},
+              {"name": "scratch", "value": {"kind": "quod.local_ref", "name": "scratch"}},
+              {"name": "err", "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.option.Option",
+                "type_args": [{"kind": "llvm.enum", "name": "core.io.IoError"}],
+                "variant": "None"
+              }}
+            ]
+          }
+        },
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.json.io.emit_value",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "args": [
+              {"kind": "quod.local_ref", "name": "ctx_ptr"},
+              {"kind": "llvm.param_ref", "name": "v"},
+              {"kind": "llvm.param_ref", "name": "pretty"},
+              {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
+            ]
+          }
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.load_field",
+            "ptr": {"kind": "quod.local_ref", "name": "ctx_ptr"},
+            "struct_type": "alloc.json.io.WriteCtx",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "name": "err"
+          }
+        }
+      ]
+    }
+  ]
+}
