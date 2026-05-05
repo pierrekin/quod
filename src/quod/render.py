@@ -45,6 +45,8 @@ from quod.model import (
     U16Type,
     U32Type,
     U64Type,
+    IsizeType,
+    UsizeType,
     I8PtrType,
     If,
     IntLit,
@@ -200,6 +202,7 @@ _TYPE_NAMES: dict[type, str] = {
     I1Type: "i1", I8Type: "i8", I16Type: "i16",
     I32Type: "i32", I64Type: "i64",
     U8Type: "u8", U16Type: "u16", U32Type: "u32", U64Type: "u64",
+    IsizeType: "isize", UsizeType: "usize",
     I8PtrType: "i8*",
     VoidType: "void",
 }

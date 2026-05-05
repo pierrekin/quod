@@ -46,6 +46,8 @@ from quod.model import (
     U16Type,
     U32Type,
     U64Type,
+    IsizeType,
+    UsizeType,
     If,
     IntLit,
     IntRangeClaim,
@@ -113,7 +115,7 @@ def _type_to_llvm(
             return I16
         case I32Type() | U32Type():
             return I32
-        case I64Type() | U64Type():
+        case I64Type() | U64Type() | IsizeType() | UsizeType():
             return I64
         case I8PtrType():
             return I8.as_pointer()

@@ -17,6 +17,7 @@ The grammar:
 
     type       := 'i1' | 'i8' '*'? | 'i16' | 'i32' | 'i64'
                 | 'u8' | 'u16' | 'u32' | 'u64'
+                | 'isize' | 'usize'
                 | 'void' | IDENT
 
     stmt       := let_stmt | if_stmt | while_stmt | for_stmt | return_stmt
@@ -98,6 +99,8 @@ from quod.model import (
     U16Type,
     U32Type,
     U64Type,
+    IsizeType,
+    UsizeType,
     If,
     IntLit,
     Let,
@@ -141,6 +144,7 @@ _KEYWORDS = frozenset({
     # type keywords
     "i1", "i8", "i16", "i32", "i64",
     "u8", "u16", "u32", "u64",
+    "isize", "usize",
     "void",
 })
 
@@ -256,7 +260,8 @@ def tokenize(src: str) -> list[Token]:
             # Longest first so 'i16' beats 'i1'. The suffix only counts when
             # the next character isn't an identifier char — '42i8x' stays a
             # single literal that will fail to parse cleanly downstream.
-            for suf in ("i64", "i32", "i16", "i8", "i1",
+            for suf in ("isize", "usize",
+                        "i64", "i32", "i16", "i8", "i1",
                         "u64", "u32", "u16", "u8"):
                 end = j + len(suf)
                 if (src[j:end] == suf
@@ -301,12 +306,15 @@ def tokenize(src: str) -> list[Token]:
 _INT_TYPE_BY_SUFFIX = {
     "i1": I1Type, "i8": I8Type, "i16": I16Type, "i32": I32Type, "i64": I64Type,
     "u8": U8Type, "u16": U16Type, "u32": U32Type, "u64": U64Type,
+    "isize": IsizeType, "usize": UsizeType,
 }
 
 
 def _split_int_suffix(text: str) -> tuple[str, str | None]:
-    """Split '42i8' into ('42', 'i8'); '42' into ('42', None)."""
-    for suf in ("i64", "i32", "i16", "i8", "i1",
+    """Split '42i8' into ('42', 'i8'); '42' into ('42', None).
+    isize/usize matched first so they win over the i/u prefix."""
+    for suf in ("isize", "usize",
+                "i64", "i32", "i16", "i8", "i1",
                 "u64", "u32", "u16", "u8"):
         if text.endswith(suf):
             return text[:-len(suf)], suf
@@ -433,6 +441,7 @@ class Parser:
         "i1": I1Type, "i8": I8Type, "i16": I16Type,
         "i32": I32Type, "i64": I64Type,
         "u8": U8Type, "u16": U16Type, "u32": U32Type, "u64": U64Type,
+        "isize": IsizeType, "usize": UsizeType,
     }
 
     def _type(self, *, allow_void: bool):
@@ -548,7 +557,8 @@ class Parser:
         self.expect("OP", ":")
         ty = self._type(allow_void=False)
         if not isinstance(ty, (I1Type, I8Type, I16Type, I32Type, I64Type,
-                                U8Type, U16Type, U32Type, U64Type)):
+                                U8Type, U16Type, U32Type, U64Type,
+                                IsizeType, UsizeType)):
             t = self.peek(-1)
             raise ScriptError("for-loop variable must be an integer type", t.line, t.col)
         self.expect("KW", "in")
@@ -588,7 +598,8 @@ class Parser:
             and self.peek(1).kind == "OP" and self.peek(1).value in ("}", ";")
             and isinstance(self._return_type,
                            (I1Type, I8Type, I16Type, I32Type, I64Type,
-                            U8Type, U16Type, U32Type, U64Type))
+                            U8Type, U16Type, U32Type, U64Type,
+                            IsizeType, UsizeType))
         ):
             tok = self.eat()
             digits, _ = _split_int_suffix(tok.value)

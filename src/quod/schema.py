@@ -53,6 +53,8 @@ from quod.model import (
     U16Type,
     U32Type,
     U64Type,
+    IsizeType,
+    UsizeType,
     If,
     IntLit,
     IntRangeClaim,
@@ -590,6 +592,16 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "class": U64Type,
         "summary": "64-bit unsigned integer. Holds values beyond i64's positive range up to 2^64-1.",
         "example": {"kind": "llvm.u64"},
+    },
+    "llvm.isize": {
+        "class": IsizeType,
+        "summary": "Pointer-sized signed integer. Lowers to i64 on 64-bit targets; nominal alias for size/offset values.",
+        "example": {"kind": "llvm.isize"},
+    },
+    "llvm.usize": {
+        "class": UsizeType,
+        "summary": "Pointer-sized unsigned integer. Lowers to i64 width on 64-bit targets; the conventional type for sizes, lengths, and indices.",
+        "example": {"kind": "llvm.usize"},
     },
     "llvm.i8_ptr": {
         "class": I8PtrType,

@@ -45,6 +45,8 @@ from quod.model import (
     U16Type,
     U32Type,
     U64Type,
+    IsizeType,
+    UsizeType,
     If,
     IntLit,
     IntRangeClaim,
@@ -92,6 +94,10 @@ def _type_universe(t: IntType) -> tuple[int, int]:
         case U32Type():
             return (0, 2**32 - 1)
         case U64Type():
+            return (0, 2**64 - 1)
+        case IsizeType():
+            return (-(2**63), 2**63 - 1)
+        case UsizeType():
             return (0, 2**64 - 1)
     raise ValueError(f"not an int type: {t!r}")
 

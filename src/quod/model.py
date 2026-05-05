@@ -413,6 +413,19 @@ class U64Type(_Node):
     kind: Literal["llvm.u64"] = "llvm.u64"
 
 
+class IsizeType(_Node):
+    """Pointer-sized signed integer. Lowers to i64 on the only target
+    (64-bit Linux). Distinct from i64 at the type level so APIs that
+    talk about "a count or offset that fits a pointer" can say so."""
+    kind: Literal["llvm.isize"] = "llvm.isize"
+
+
+class UsizeType(_Node):
+    """Pointer-sized unsigned integer. Lowers to i64 width on the only
+    target (64-bit Linux). Used for sizes, lengths, and indices."""
+    kind: Literal["llvm.usize"] = "llvm.usize"
+
+
 class I8PtrType(_Node):
     kind: Literal["llvm.i8_ptr"] = "llvm.i8_ptr"
 
@@ -507,7 +520,8 @@ class VoidType(_Node):
 # carry their own signedness (sdiv vs udiv, slt vs ult).
 IntType = Annotated[
     Union[I1Type, I8Type, I16Type, I32Type, I64Type,
-          U8Type, U16Type, U32Type, U64Type],
+          U8Type, U16Type, U32Type, U64Type,
+          IsizeType, UsizeType],
     Field(discriminator="kind"),
 ]
 
@@ -521,7 +535,8 @@ IntType = Annotated[
 # signatures (and the rewriter never sees it).
 Type = Annotated[
     Union[I1Type, I8Type, I16Type, I32Type, I64Type,
-          U8Type, U16Type, U32Type, U64Type, I8PtrType,
+          U8Type, U16Type, U32Type, U64Type,
+          IsizeType, UsizeType, I8PtrType,
           StructType, EnumType, TypeParamRef, SelfType],
     Field(discriminator="kind"),
 ]
@@ -529,7 +544,8 @@ Type = Annotated[
 # Type that can appear at a function return position, including void.
 ReturnType = Annotated[
     Union[I1Type, I8Type, I16Type, I32Type, I64Type,
-          U8Type, U16Type, U32Type, U64Type, I8PtrType,
+          U8Type, U16Type, U32Type, U64Type,
+          IsizeType, UsizeType, I8PtrType,
           StructType, EnumType, TypeParamRef, SelfType, VoidType],
     Field(discriminator="kind"),
 ]
@@ -537,7 +553,8 @@ ReturnType = Annotated[
 
 
 def int_type_width(t: "IntType") -> int:
-    """Bit width of an int type."""
+    """Bit width of an int type. isize/usize are pointer-sized = 64 on
+    the only target."""
     match t:
         case I1Type():
             return 1
@@ -547,7 +564,7 @@ def int_type_width(t: "IntType") -> int:
             return 16
         case I32Type() | U32Type():
             return 32
-        case I64Type() | U64Type():
+        case I64Type() | U64Type() | IsizeType() | UsizeType():
             return 64
     raise ValueError(f"not an int type: {t!r}")
 
@@ -555,9 +572,9 @@ def int_type_width(t: "IntType") -> int:
 def int_type_signed(t: "IntType") -> bool:
     """Whether an int type is signed. i1 is treated as unsigned (boolean)."""
     match t:
-        case I8Type() | I16Type() | I32Type() | I64Type():
+        case I8Type() | I16Type() | I32Type() | I64Type() | IsizeType():
             return True
-        case I1Type() | U8Type() | U16Type() | U32Type() | U64Type():
+        case I1Type() | U8Type() | U16Type() | U32Type() | U64Type() | UsizeType():
             return False
     raise ValueError(f"not an int type: {t!r}")
 
@@ -1213,7 +1230,8 @@ class ExternFunction(_Node):
         ret_is_int = isinstance(
             self.return_type,
             (I1Type, I8Type, I16Type, I32Type, I64Type,
-             U8Type, U16Type, U32Type, U64Type),
+             U8Type, U16Type, U32Type, U64Type,
+             IsizeType, UsizeType),
         )
         for c in self.claims:
             if claim_param(c) is not None:
@@ -1875,6 +1893,10 @@ def _format_type(t) -> str:
             return "u32"
         case U64Type():
             return "u64"
+        case IsizeType():
+            return "isize"
+        case UsizeType():
+            return "usize"
         case I8PtrType():
             return "i8*"
         case StructType(name=n, type_args=ta) if ta:

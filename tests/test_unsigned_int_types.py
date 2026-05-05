@@ -41,6 +41,8 @@ from quod.model import (
     U16Type,
     U32Type,
     U64Type,
+    IsizeType,
+    UsizeType,
     Widen,
 )
 from quod.script import parse_function
@@ -291,6 +293,98 @@ def test_script_for_loop_with_u64_var():
         "return acc }"
     )
     assert isinstance(fn.return_type, U64Type)
+
+
+# ---------- isize / usize ----------
+
+def test_isize_usize_lower_to_64bit():
+    """isize values are signed 64-bit; usize values are unsigned 64-bit.
+    Both round-trip through printf, demonstrating they share i64 width
+    but differ in signed vs unsigned interpretation when paired with the
+    matching format specifier."""
+    main = Function(
+        name="main",
+        return_type=I32Type(),
+        body=(
+            # An isize value: a small positive number, %lld.
+            _print_lld(IntLit(type=IsizeType(), value=12345)),
+            # A usize value larger than i64::MAX: %llu.
+            _print_llu(IntLit(type=UsizeType(), value=(1 << 63) + 7)),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    prog = Program(
+        constants=(_FMT_LLD, _FMT_LLU), externs=(_PRINTF,), functions=(main,),
+    )
+    assert _build_and_run(prog) == f"12345\n{(1 << 63) + 7}\n"
+
+
+def test_isize_arith_signed_semantics():
+    """isize arithmetic uses signed ops; sdiv on a negative isize value
+    truncates toward zero like i64."""
+    main = Function(
+        name="main",
+        return_type=I32Type(),
+        body=(
+            _print_lld(BinOp(
+                op="sdiv",
+                lhs=IntLit(type=IsizeType(), value=-7),
+                rhs=IntLit(type=IsizeType(), value=2),
+            )),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    prog = Program(
+        constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,),
+    )
+    assert _build_and_run(prog) == "-3\n"
+
+
+def test_usize_arith_unsigned_semantics():
+    """usize / usize uses udiv; on a value that's "negative as i64" the
+    result differs from the signed interpretation."""
+    main = Function(
+        name="main",
+        return_type=I32Type(),
+        body=(
+            _print_llu(BinOp(
+                op="udiv",
+                lhs=IntLit(type=UsizeType(), value=(1 << 63) + (1 << 62)),  # 0xC000_0000_0000_0000
+                rhs=IntLit(type=UsizeType(), value=2),
+            )),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    prog = Program(
+        constants=(_FMT_LLU,), externs=(_PRINTF,), functions=(main,),
+    )
+    expected = ((1 << 63) + (1 << 62)) // 2  # 0x6000_0000_0000_0000
+    assert _build_and_run(prog) == f"{expected}\n"
+
+
+def test_script_parses_usize_function_signature():
+    """fn alloc_size(n: usize) -> usize { return n + 1usize } parses, and
+    the param/return types come back as UsizeType."""
+    fn = parse_function(
+        "fn alloc_size(n: usize) -> usize { return n + 1usize }"
+    )
+    assert fn.name == "alloc_size"
+    assert isinstance(fn.return_type, UsizeType)
+    assert isinstance(fn.params[0].type, UsizeType)
+
+
+def test_script_isize_suffix():
+    """`-42isize` parses as a negative isize literal, surviving the suffix
+    matcher (which prefers `isize` over `i8`/`i16`/etc.)."""
+    fn = parse_function(
+        "fn f() -> isize { return -42isize }"
+    )
+    body = fn.body
+    assert len(body) == 1
+    lit = body[0].value
+    assert isinstance(lit, IntLit)
+    assert isinstance(lit.type, IsizeType)
+    assert lit.value == -42
 
 
 def test_script_end_to_end_u32_compute_and_print():
