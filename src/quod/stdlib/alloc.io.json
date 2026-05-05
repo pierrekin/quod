@@ -1,0 +1,1064 @@
+{
+  "imports": [
+    "mem",
+    "core.bytes",
+    "core.option",
+    "core.result",
+    "core.io"
+  ],
+  "wirables": [
+    {"name": "A", "bound": "mem.Allocator"}
+  ],
+  "structs": [
+    {
+      "name": "alloc.io.BufReader",
+      "type_params": [{"name": "R"}],
+      "fields": [
+        {"name": "inner", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "alloc", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "buf", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "cap", "type": {"kind": "llvm.usize"}},
+        {"name": "pos", "type": {"kind": "llvm.usize"}},
+        {"name": "filled", "type": {"kind": "llvm.usize"}}
+      ]
+    },
+    {
+      "name": "alloc.io.BufWriter",
+      "type_params": [{"name": "W"}],
+      "fields": [
+        {"name": "inner", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "alloc", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "buf", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "cap", "type": {"kind": "llvm.usize"}},
+        {"name": "pos", "type": {"kind": "llvm.usize"}}
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "name": "alloc.io.buf_reader_with_capacity",
+      "type_params": [{"name": "R"}],
+      "params": [
+        {"name": "alloc_handle", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "inner", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "cap", "type": {"kind": "llvm.usize"}}
+      ],
+      "return_type": {"kind": "llvm.i8_ptr"},
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "br_ptr",
+          "type": {"kind": "llvm.i8_ptr"},
+          "init": {
+            "kind": "quod.trait_call",
+            "trait": "mem.Allocator",
+            "method": "alloc",
+            "dispatch_type": {"kind": "quod.type_param", "name": "A"},
+            "args": [
+              {"kind": "llvm.param_ref", "name": "alloc_handle"},
+              {
+                "kind": "quod.sizeof",
+                "type": {
+                  "kind": "llvm.struct",
+                  "name": "alloc.io.BufReader",
+                  "type_args": [{"kind": "quod.type_param", "name": "R"}]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {"kind": "quod.local_ref", "name": "br_ptr"},
+            "rhs": {"kind": "quod.null_ptr"}
+          },
+          "then_body": [
+            {"kind": "quod.return_expr", "value": {"kind": "quod.null_ptr"}}
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "buf",
+          "type": {"kind": "llvm.i8_ptr"},
+          "init": {
+            "kind": "quod.trait_call",
+            "trait": "mem.Allocator",
+            "method": "alloc",
+            "dispatch_type": {"kind": "quod.type_param", "name": "A"},
+            "args": [
+              {"kind": "llvm.param_ref", "name": "alloc_handle"},
+              {
+                "kind": "quod.widen",
+                "value": {"kind": "llvm.param_ref", "name": "cap"},
+                "target": {"kind": "llvm.i64"},
+                "signed": false
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {"kind": "quod.local_ref", "name": "buf"},
+            "rhs": {"kind": "quod.null_ptr"}
+          },
+          "then_body": [
+            {"kind": "quod.return_expr", "value": {"kind": "quod.null_ptr"}}
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "br",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "alloc.io.BufReader",
+            "type_args": [{"kind": "quod.type_param", "name": "R"}]
+          },
+          "init": {
+            "kind": "quod.struct_init",
+            "type": "alloc.io.BufReader",
+            "type_args": [{"kind": "quod.type_param", "name": "R"}],
+            "fields": [
+              {"name": "inner", "value": {"kind": "llvm.param_ref", "name": "inner"}},
+              {"name": "alloc", "value": {"kind": "llvm.param_ref", "name": "alloc_handle"}},
+              {"name": "buf", "value": {"kind": "quod.local_ref", "name": "buf"}},
+              {"name": "cap", "value": {"kind": "llvm.param_ref", "name": "cap"}},
+              {"name": "pos", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}},
+              {"name": "filled", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}}
+            ]
+          }
+        },
+        {
+          "kind": "quod.store",
+          "ptr": {"kind": "quod.local_ref", "name": "br_ptr"},
+          "value": {"kind": "quod.local_ref", "name": "br"}
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {"kind": "quod.local_ref", "name": "br_ptr"}
+        }
+      ]
+    },
+    {
+      "name": "alloc.io.buf_reader_new",
+      "type_params": [{"name": "R"}],
+      "params": [
+        {"name": "alloc_handle", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "inner", "type": {"kind": "llvm.i8_ptr"}}
+      ],
+      "return_type": {"kind": "llvm.i8_ptr"},
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.io.buf_reader_with_capacity",
+            "type_args": [{"kind": "quod.type_param", "name": "R"}],
+            "args": [
+              {"kind": "llvm.param_ref", "name": "alloc_handle"},
+              {"kind": "llvm.param_ref", "name": "inner"},
+              {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 4096}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "alloc.io.buf_writer_with_capacity",
+      "type_params": [{"name": "W"}],
+      "params": [
+        {"name": "alloc_handle", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "inner", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "cap", "type": {"kind": "llvm.usize"}}
+      ],
+      "return_type": {"kind": "llvm.i8_ptr"},
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "bw_ptr",
+          "type": {"kind": "llvm.i8_ptr"},
+          "init": {
+            "kind": "quod.trait_call",
+            "trait": "mem.Allocator",
+            "method": "alloc",
+            "dispatch_type": {"kind": "quod.type_param", "name": "A"},
+            "args": [
+              {"kind": "llvm.param_ref", "name": "alloc_handle"},
+              {
+                "kind": "quod.sizeof",
+                "type": {
+                  "kind": "llvm.struct",
+                  "name": "alloc.io.BufWriter",
+                  "type_args": [{"kind": "quod.type_param", "name": "W"}]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {"kind": "quod.local_ref", "name": "bw_ptr"},
+            "rhs": {"kind": "quod.null_ptr"}
+          },
+          "then_body": [
+            {"kind": "quod.return_expr", "value": {"kind": "quod.null_ptr"}}
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "buf",
+          "type": {"kind": "llvm.i8_ptr"},
+          "init": {
+            "kind": "quod.trait_call",
+            "trait": "mem.Allocator",
+            "method": "alloc",
+            "dispatch_type": {"kind": "quod.type_param", "name": "A"},
+            "args": [
+              {"kind": "llvm.param_ref", "name": "alloc_handle"},
+              {
+                "kind": "quod.widen",
+                "value": {"kind": "llvm.param_ref", "name": "cap"},
+                "target": {"kind": "llvm.i64"},
+                "signed": false
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {"kind": "quod.local_ref", "name": "buf"},
+            "rhs": {"kind": "quod.null_ptr"}
+          },
+          "then_body": [
+            {"kind": "quod.return_expr", "value": {"kind": "quod.null_ptr"}}
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "bw",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "alloc.io.BufWriter",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}]
+          },
+          "init": {
+            "kind": "quod.struct_init",
+            "type": "alloc.io.BufWriter",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "fields": [
+              {"name": "inner", "value": {"kind": "llvm.param_ref", "name": "inner"}},
+              {"name": "alloc", "value": {"kind": "llvm.param_ref", "name": "alloc_handle"}},
+              {"name": "buf", "value": {"kind": "quod.local_ref", "name": "buf"}},
+              {"name": "cap", "value": {"kind": "llvm.param_ref", "name": "cap"}},
+              {"name": "pos", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}}
+            ]
+          }
+        },
+        {
+          "kind": "quod.store",
+          "ptr": {"kind": "quod.local_ref", "name": "bw_ptr"},
+          "value": {"kind": "quod.local_ref", "name": "bw"}
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {"kind": "quod.local_ref", "name": "bw_ptr"}
+        }
+      ]
+    },
+    {
+      "name": "alloc.io.buf_writer_new",
+      "type_params": [{"name": "W"}],
+      "params": [
+        {"name": "alloc_handle", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "inner", "type": {"kind": "llvm.i8_ptr"}}
+      ],
+      "return_type": {"kind": "llvm.i8_ptr"},
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "alloc.io.buf_writer_with_capacity",
+            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+            "args": [
+              {"kind": "llvm.param_ref", "name": "alloc_handle"},
+              {"kind": "llvm.param_ref", "name": "inner"},
+              {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 4096}
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "impls": [
+    {
+      "trait": "core.io.Reader",
+      "type_params": [{"name": "R", "bound": "core.io.Reader"}],
+      "for_type": {
+        "kind": "llvm.struct",
+        "name": "alloc.io.BufReader",
+        "type_args": [{"kind": "quod.type_param", "name": "R"}]
+      },
+      "methods": [
+        {
+          "name": "read",
+          "params": [
+            {"name": "handle", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "dst", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "n", "type": {"kind": "llvm.usize"}}
+          ],
+          "return_type": {
+            "kind": "llvm.enum",
+            "name": "core.result.Result",
+            "type_args": [
+              {"kind": "llvm.usize"},
+              {"kind": "llvm.enum", "name": "core.io.IoError"}
+            ]
+          },
+          "body": [
+            {
+              "kind": "quod.let",
+              "name": "br0",
+              "type": {
+                "kind": "llvm.struct",
+                "name": "alloc.io.BufReader",
+                "type_args": [{"kind": "quod.type_param", "name": "R"}]
+              },
+              "init": {
+                "kind": "quod.load",
+                "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                "type": {
+                  "kind": "llvm.struct",
+                  "name": "alloc.io.BufReader",
+                  "type_args": [{"kind": "quod.type_param", "name": "R"}]
+                }
+              }
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "uge",
+                "lhs": {
+                  "kind": "quod.field",
+                  "value": {"kind": "quod.local_ref", "name": "br0"},
+                  "name": "pos"
+                },
+                "rhs": {
+                  "kind": "quod.field",
+                  "value": {"kind": "quod.local_ref", "name": "br0"},
+                  "name": "filled"
+                }
+              },
+              "then_body": [
+                {
+                  "kind": "quod.let",
+                  "name": "rc",
+                  "type": {
+                    "kind": "llvm.enum",
+                    "name": "core.result.Result",
+                    "type_args": [
+                      {"kind": "llvm.usize"},
+                      {"kind": "llvm.enum", "name": "core.io.IoError"}
+                    ]
+                  },
+                  "init": {
+                    "kind": "quod.trait_call",
+                    "trait": "core.io.Reader",
+                    "method": "read",
+                    "dispatch_type": {"kind": "quod.type_param", "name": "R"},
+                    "args": [
+                      {
+                        "kind": "quod.field",
+                        "value": {"kind": "quod.local_ref", "name": "br0"},
+                        "name": "inner"
+                      },
+                      {
+                        "kind": "quod.field",
+                        "value": {"kind": "quod.local_ref", "name": "br0"},
+                        "name": "buf"
+                      },
+                      {
+                        "kind": "quod.field",
+                        "value": {"kind": "quod.local_ref", "name": "br0"},
+                        "name": "cap"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "quod.match",
+                  "scrutinee": {"kind": "quod.local_ref", "name": "rc"},
+                  "arms": [
+                    {
+                      "variant": "Err",
+                      "bindings": ["e"],
+                      "body": [
+                        {
+                          "kind": "quod.return_expr",
+                          "value": {
+                            "kind": "quod.enum_init",
+                            "enum": "core.result.Result",
+                            "type_args": [
+                              {"kind": "llvm.usize"},
+                              {"kind": "llvm.enum", "name": "core.io.IoError"}
+                            ],
+                            "variant": "Err",
+                            "fields": [
+                              {"name": "err", "value": {"kind": "quod.local_ref", "name": "e"}}
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "variant": "Ok",
+                      "bindings": ["n_read"],
+                      "body": [
+                        {
+                          "kind": "quod.if",
+                          "cond": {
+                            "kind": "llvm.binop",
+                            "op": "eq",
+                            "lhs": {"kind": "quod.local_ref", "name": "n_read"},
+                            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
+                          },
+                          "then_body": [
+                            {
+                              "kind": "quod.return_expr",
+                              "value": {
+                                "kind": "quod.enum_init",
+                                "enum": "core.result.Result",
+                                "type_args": [
+                                  {"kind": "llvm.usize"},
+                                  {"kind": "llvm.enum", "name": "core.io.IoError"}
+                                ],
+                                "variant": "Ok",
+                                "fields": [
+                                  {"name": "value", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}}
+                                ]
+                              }
+                            }
+                          ],
+                          "else_body": []
+                        },
+                        {
+                          "kind": "quod.let",
+                          "name": "br_refilled",
+                          "type": {
+                            "kind": "llvm.struct",
+                            "name": "alloc.io.BufReader",
+                            "type_args": [{"kind": "quod.type_param", "name": "R"}]
+                          },
+                          "init": {
+                            "kind": "quod.struct_init",
+                            "type": "alloc.io.BufReader",
+                            "type_args": [{"kind": "quod.type_param", "name": "R"}],
+                            "fields": [
+                              {"name": "inner", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "br0"}, "name": "inner"}},
+                              {"name": "alloc", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "br0"}, "name": "alloc"}},
+                              {"name": "buf", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "br0"}, "name": "buf"}},
+                              {"name": "cap", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "br0"}, "name": "cap"}},
+                              {"name": "pos", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}},
+                              {"name": "filled", "value": {"kind": "quod.local_ref", "name": "n_read"}}
+                            ]
+                          }
+                        },
+                        {
+                          "kind": "quod.store",
+                          "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                          "value": {"kind": "quod.local_ref", "name": "br_refilled"}
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.let",
+              "name": "br",
+              "type": {
+                "kind": "llvm.struct",
+                "name": "alloc.io.BufReader",
+                "type_args": [{"kind": "quod.type_param", "name": "R"}]
+              },
+              "init": {
+                "kind": "quod.load",
+                "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                "type": {
+                  "kind": "llvm.struct",
+                  "name": "alloc.io.BufReader",
+                  "type_args": [{"kind": "quod.type_param", "name": "R"}]
+                }
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "available",
+              "type": {"kind": "llvm.usize"},
+              "init": {
+                "kind": "llvm.binop",
+                "op": "sub",
+                "lhs": {
+                  "kind": "quod.field",
+                  "value": {"kind": "quod.local_ref", "name": "br"},
+                  "name": "filled"
+                },
+                "rhs": {
+                  "kind": "quod.field",
+                  "value": {"kind": "quod.local_ref", "name": "br"},
+                  "name": "pos"
+                }
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "take",
+              "type": {"kind": "llvm.usize"},
+              "init": {"kind": "quod.local_ref", "name": "available"}
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "ult",
+                "lhs": {"kind": "llvm.param_ref", "name": "n"},
+                "rhs": {"kind": "quod.local_ref", "name": "available"}
+              },
+              "then_body": [
+                {
+                  "kind": "quod.assign",
+                  "name": "take",
+                  "value": {"kind": "llvm.param_ref", "name": "n"}
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "core.bytes.copy",
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "dst"},
+                  {
+                    "kind": "quod.ptr_offset",
+                    "base": {
+                      "kind": "quod.field",
+                      "value": {"kind": "quod.local_ref", "name": "br"},
+                      "name": "buf"
+                    },
+                    "offset": {
+                      "kind": "quod.widen",
+                      "value": {
+                        "kind": "quod.field",
+                        "value": {"kind": "quod.local_ref", "name": "br"},
+                        "name": "pos"
+                      },
+                      "target": {"kind": "llvm.i64"},
+                      "signed": false
+                    }
+                  },
+                  {
+                    "kind": "quod.widen",
+                    "value": {"kind": "quod.local_ref", "name": "take"},
+                    "target": {"kind": "llvm.i64"},
+                    "signed": false
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "br_after",
+              "type": {
+                "kind": "llvm.struct",
+                "name": "alloc.io.BufReader",
+                "type_args": [{"kind": "quod.type_param", "name": "R"}]
+              },
+              "init": {
+                "kind": "quod.struct_init",
+                "type": "alloc.io.BufReader",
+                "type_args": [{"kind": "quod.type_param", "name": "R"}],
+                "fields": [
+                  {"name": "inner", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "br"}, "name": "inner"}},
+                  {"name": "alloc", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "br"}, "name": "alloc"}},
+                  {"name": "buf", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "br"}, "name": "buf"}},
+                  {"name": "cap", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "br"}, "name": "cap"}},
+                  {"name": "pos", "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "br"}, "name": "pos"},
+                    "rhs": {"kind": "quod.local_ref", "name": "take"}
+                  }},
+                  {"name": "filled", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "br"}, "name": "filled"}}
+                ]
+              }
+            },
+            {
+              "kind": "quod.store",
+              "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+              "value": {"kind": "quod.local_ref", "name": "br_after"}
+            },
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.result.Result",
+                "type_args": [
+                  {"kind": "llvm.usize"},
+                  {"kind": "llvm.enum", "name": "core.io.IoError"}
+                ],
+                "variant": "Ok",
+                "fields": [
+                  {"name": "value", "value": {"kind": "quod.local_ref", "name": "take"}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "trait": "core.io.Writer",
+      "type_params": [{"name": "W", "bound": "core.io.Writer"}],
+      "for_type": {
+        "kind": "llvm.struct",
+        "name": "alloc.io.BufWriter",
+        "type_args": [{"kind": "quod.type_param", "name": "W"}]
+      },
+      "methods": [
+        {
+          "name": "write",
+          "params": [
+            {"name": "handle", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "src", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "n", "type": {"kind": "llvm.usize"}}
+          ],
+          "return_type": {
+            "kind": "llvm.enum",
+            "name": "core.result.Result",
+            "type_args": [
+              {"kind": "llvm.usize"},
+              {"kind": "llvm.enum", "name": "core.io.IoError"}
+            ]
+          },
+          "body": [
+            {
+              "kind": "quod.let",
+              "name": "bw0",
+              "type": {
+                "kind": "llvm.struct",
+                "name": "alloc.io.BufWriter",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}]
+              },
+              "init": {
+                "kind": "quod.load",
+                "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                "type": {
+                  "kind": "llvm.struct",
+                  "name": "alloc.io.BufWriter",
+                  "type_args": [{"kind": "quod.type_param", "name": "W"}]
+                }
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "space",
+              "type": {"kind": "llvm.usize"},
+              "init": {
+                "kind": "llvm.binop",
+                "op": "sub",
+                "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw0"}, "name": "cap"},
+                "rhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw0"}, "name": "pos"}
+              }
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "eq",
+                "lhs": {"kind": "quod.local_ref", "name": "space"},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
+              },
+              "then_body": [
+                {
+                  "kind": "quod.let",
+                  "name": "rc_flush",
+                  "type": {
+                    "kind": "llvm.enum",
+                    "name": "core.result.Result",
+                    "type_args": [
+                      {"kind": "llvm.usize"},
+                      {"kind": "llvm.enum", "name": "core.io.IoError"}
+                    ]
+                  },
+                  "init": {
+                    "kind": "quod.trait_call",
+                    "trait": "core.io.Writer",
+                    "method": "write",
+                    "dispatch_type": {"kind": "quod.type_param", "name": "W"},
+                    "args": [
+                      {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw0"}, "name": "inner"},
+                      {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw0"}, "name": "buf"},
+                      {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw0"}, "name": "pos"}
+                    ]
+                  }
+                },
+                {
+                  "kind": "quod.match",
+                  "scrutinee": {"kind": "quod.local_ref", "name": "rc_flush"},
+                  "arms": [
+                    {
+                      "variant": "Err",
+                      "bindings": ["e"],
+                      "body": [
+                        {
+                          "kind": "quod.return_expr",
+                          "value": {
+                            "kind": "quod.enum_init",
+                            "enum": "core.result.Result",
+                            "type_args": [
+                              {"kind": "llvm.usize"},
+                              {"kind": "llvm.enum", "name": "core.io.IoError"}
+                            ],
+                            "variant": "Err",
+                            "fields": [
+                              {"name": "err", "value": {"kind": "quod.local_ref", "name": "e"}}
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "variant": "Ok",
+                      "bindings": ["_n_written"],
+                      "body": [
+                        {
+                          "kind": "quod.let",
+                          "name": "bw_flushed",
+                          "type": {
+                            "kind": "llvm.struct",
+                            "name": "alloc.io.BufWriter",
+                            "type_args": [{"kind": "quod.type_param", "name": "W"}]
+                          },
+                          "init": {
+                            "kind": "quod.struct_init",
+                            "type": "alloc.io.BufWriter",
+                            "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                            "fields": [
+                              {"name": "inner", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw0"}, "name": "inner"}},
+                              {"name": "alloc", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw0"}, "name": "alloc"}},
+                              {"name": "buf", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw0"}, "name": "buf"}},
+                              {"name": "cap", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw0"}, "name": "cap"}},
+                              {"name": "pos", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}}
+                            ]
+                          }
+                        },
+                        {
+                          "kind": "quod.store",
+                          "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                          "value": {"kind": "quod.local_ref", "name": "bw_flushed"}
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.let",
+              "name": "bw",
+              "type": {
+                "kind": "llvm.struct",
+                "name": "alloc.io.BufWriter",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}]
+              },
+              "init": {
+                "kind": "quod.load",
+                "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                "type": {
+                  "kind": "llvm.struct",
+                  "name": "alloc.io.BufWriter",
+                  "type_args": [{"kind": "quod.type_param", "name": "W"}]
+                }
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "space_now",
+              "type": {"kind": "llvm.usize"},
+              "init": {
+                "kind": "llvm.binop",
+                "op": "sub",
+                "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "cap"},
+                "rhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "pos"}
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "take",
+              "type": {"kind": "llvm.usize"},
+              "init": {"kind": "quod.local_ref", "name": "space_now"}
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "ult",
+                "lhs": {"kind": "llvm.param_ref", "name": "n"},
+                "rhs": {"kind": "quod.local_ref", "name": "space_now"}
+              },
+              "then_body": [
+                {
+                  "kind": "quod.assign",
+                  "name": "take",
+                  "value": {"kind": "llvm.param_ref", "name": "n"}
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "core.bytes.copy",
+                "args": [
+                  {
+                    "kind": "quod.ptr_offset",
+                    "base": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "buf"},
+                    "offset": {
+                      "kind": "quod.widen",
+                      "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "pos"},
+                      "target": {"kind": "llvm.i64"},
+                      "signed": false
+                    }
+                  },
+                  {"kind": "llvm.param_ref", "name": "src"},
+                  {
+                    "kind": "quod.widen",
+                    "value": {"kind": "quod.local_ref", "name": "take"},
+                    "target": {"kind": "llvm.i64"},
+                    "signed": false
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "bw_after",
+              "type": {
+                "kind": "llvm.struct",
+                "name": "alloc.io.BufWriter",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}]
+              },
+              "init": {
+                "kind": "quod.struct_init",
+                "type": "alloc.io.BufWriter",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                "fields": [
+                  {"name": "inner", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "inner"}},
+                  {"name": "alloc", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "alloc"}},
+                  {"name": "buf", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "buf"}},
+                  {"name": "cap", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "cap"}},
+                  {"name": "pos", "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "pos"},
+                    "rhs": {"kind": "quod.local_ref", "name": "take"}
+                  }}
+                ]
+              }
+            },
+            {
+              "kind": "quod.store",
+              "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+              "value": {"kind": "quod.local_ref", "name": "bw_after"}
+            },
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.result.Result",
+                "type_args": [
+                  {"kind": "llvm.usize"},
+                  {"kind": "llvm.enum", "name": "core.io.IoError"}
+                ],
+                "variant": "Ok",
+                "fields": [
+                  {"name": "value", "value": {"kind": "quod.local_ref", "name": "take"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "flush",
+          "params": [
+            {"name": "handle", "type": {"kind": "llvm.i8_ptr"}}
+          ],
+          "return_type": {
+            "kind": "llvm.enum",
+            "name": "core.option.Option",
+            "type_args": [
+              {"kind": "llvm.enum", "name": "core.io.IoError"}
+            ]
+          },
+          "body": [
+            {
+              "kind": "quod.let",
+              "name": "bw",
+              "type": {
+                "kind": "llvm.struct",
+                "name": "alloc.io.BufWriter",
+                "type_args": [{"kind": "quod.type_param", "name": "W"}]
+              },
+              "init": {
+                "kind": "quod.load",
+                "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                "type": {
+                  "kind": "llvm.struct",
+                  "name": "alloc.io.BufWriter",
+                  "type_args": [{"kind": "quod.type_param", "name": "W"}]
+                }
+              }
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "eq",
+                "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "pos"},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
+              },
+              "then_body": [
+                {
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "quod.enum_init",
+                    "enum": "core.option.Option",
+                    "type_args": [
+                      {"kind": "llvm.enum", "name": "core.io.IoError"}
+                    ],
+                    "variant": "None"
+                  }
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.let",
+              "name": "rc",
+              "type": {
+                "kind": "llvm.enum",
+                "name": "core.result.Result",
+                "type_args": [
+                  {"kind": "llvm.usize"},
+                  {"kind": "llvm.enum", "name": "core.io.IoError"}
+                ]
+              },
+              "init": {
+                "kind": "quod.trait_call",
+                "trait": "core.io.Writer",
+                "method": "write",
+                "dispatch_type": {"kind": "quod.type_param", "name": "W"},
+                "args": [
+                  {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "inner"},
+                  {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "buf"},
+                  {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "pos"}
+                ]
+              }
+            },
+            {
+              "kind": "quod.match",
+              "scrutinee": {"kind": "quod.local_ref", "name": "rc"},
+              "arms": [
+                {
+                  "variant": "Err",
+                  "bindings": ["e"],
+                  "body": [
+                    {
+                      "kind": "quod.return_expr",
+                      "value": {
+                        "kind": "quod.enum_init",
+                        "enum": "core.option.Option",
+                        "type_args": [
+                          {"kind": "llvm.enum", "name": "core.io.IoError"}
+                        ],
+                        "variant": "Some",
+                        "fields": [
+                          {"name": "value", "value": {"kind": "quod.local_ref", "name": "e"}}
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "variant": "Ok",
+                  "bindings": ["_n_written"],
+                  "body": [
+                    {
+                      "kind": "quod.let",
+                      "name": "bw_after",
+                      "type": {
+                        "kind": "llvm.struct",
+                        "name": "alloc.io.BufWriter",
+                        "type_args": [{"kind": "quod.type_param", "name": "W"}]
+                      },
+                      "init": {
+                        "kind": "quod.struct_init",
+                        "type": "alloc.io.BufWriter",
+                        "type_args": [{"kind": "quod.type_param", "name": "W"}],
+                        "fields": [
+                          {"name": "inner", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "inner"}},
+                          {"name": "alloc", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "alloc"}},
+                          {"name": "buf", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "buf"}},
+                          {"name": "cap", "value": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "cap"}},
+                          {"name": "pos", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}}
+                        ]
+                      }
+                    },
+                    {
+                      "kind": "quod.store",
+                      "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                      "value": {"kind": "quod.local_ref", "name": "bw_after"}
+                    },
+                    {
+                      "kind": "quod.return_expr",
+                      "value": {
+                        "kind": "quod.enum_init",
+                        "enum": "core.option.Option",
+                        "type_args": [
+                          {"kind": "llvm.enum", "name": "core.io.IoError"}
+                        ],
+                        "variant": "None"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

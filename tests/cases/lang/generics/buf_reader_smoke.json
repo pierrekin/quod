@@ -1,0 +1,161 @@
+{
+  "program": {
+    "imports": [
+      {
+        "module": "alloc.io",
+        "wire": [
+          {"name": "A", "type": {"kind": "llvm.struct", "name": "mem.arena.Arena"}}
+        ]
+      },
+      "core.io",
+      "core.option",
+      "core.result",
+      "mem.arena"
+    ],
+    "constants": [
+      {"name": ".str.src", "value": "*"}
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": {"kind": "llvm.i32"},
+        "body": [
+          {
+            "kind": "quod.let",
+            "name": "a",
+            "type": {"kind": "llvm.i8_ptr"},
+            "init": {
+              "kind": "llvm.call",
+              "function": "mem.arena.new",
+              "args": [{"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 8192}]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "br_inner_ptr",
+            "type": {"kind": "llvm.i8_ptr"},
+            "init": {
+              "kind": "llvm.call",
+              "function": "mem.arena.alloc",
+              "args": [
+                {"kind": "quod.local_ref", "name": "a"},
+                {"kind": "quod.sizeof", "type": {"kind": "llvm.struct", "name": "core.io.BytesReader"}}
+              ]
+            }
+          },
+          {
+            "kind": "quod.store",
+            "ptr": {"kind": "quod.local_ref", "name": "br_inner_ptr"},
+            "value": {
+              "kind": "quod.struct_init",
+              "type": "core.io.BytesReader",
+              "fields": [
+                {"name": "ptr", "value": {"kind": "quod.string_ref", "name": ".str.src"}},
+                {"name": "len", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 1}},
+                {"name": "pos", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}}
+              ]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "bufr_ptr",
+            "type": {"kind": "llvm.i8_ptr"},
+            "init": {
+              "kind": "llvm.call",
+              "function": "alloc.io.buf_reader_with_capacity",
+              "type_args": [{"kind": "llvm.struct", "name": "core.io.BytesReader"}],
+              "args": [
+                {"kind": "quod.local_ref", "name": "a"},
+                {"kind": "quod.local_ref", "name": "br_inner_ptr"},
+                {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 4}
+              ]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "dst",
+            "type": {"kind": "llvm.i8_ptr"},
+            "init": {
+              "kind": "llvm.call",
+              "function": "mem.arena.alloc",
+              "args": [
+                {"kind": "quod.local_ref", "name": "a"},
+                {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 16}
+              ]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "rc",
+            "type": {
+              "kind": "llvm.enum",
+              "name": "core.result.Result",
+              "type_args": [
+                {"kind": "llvm.usize"},
+                {"kind": "llvm.enum", "name": "core.io.IoError"}
+              ]
+            },
+            "init": {
+              "kind": "quod.trait_call",
+              "trait": "core.io.Reader",
+              "method": "read",
+              "dispatch_type": {
+                "kind": "llvm.struct",
+                "name": "alloc.io.BufReader",
+                "type_args": [{"kind": "llvm.struct", "name": "core.io.BytesReader"}]
+              },
+              "args": [
+                {"kind": "quod.local_ref", "name": "bufr_ptr"},
+                {"kind": "quod.local_ref", "name": "dst"},
+                {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 1}
+              ]
+            }
+          },
+          {
+            "kind": "quod.match",
+            "scrutinee": {"kind": "quod.local_ref", "name": "rc"},
+            "arms": [
+              {
+                "variant": "Ok",
+                "bindings": ["_n"],
+                "body": [
+                  {
+                    "kind": "quod.let",
+                    "name": "byte",
+                    "type": {"kind": "llvm.i8"},
+                    "init": {
+                      "kind": "quod.load",
+                      "ptr": {"kind": "quod.local_ref", "name": "dst"},
+                      "type": {"kind": "llvm.i8"}
+                    }
+                  },
+                  {
+                    "kind": "quod.return_expr",
+                    "value": {
+                      "kind": "quod.widen",
+                      "value": {"kind": "quod.local_ref", "name": "byte"},
+                      "target": {"kind": "llvm.i32"},
+                      "signed": false
+                    }
+                  }
+                ]
+              },
+              {
+                "variant": "Err",
+                "bindings": ["_e"],
+                "body": [
+                  {
+                    "kind": "quod.return_expr",
+                    "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {"exit": 42}
+}
