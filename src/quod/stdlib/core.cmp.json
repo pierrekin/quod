@@ -3,17 +3,75 @@
     {
       "name": "core.cmp.Ordering",
       "variants": [
+        {"name": "Less", "fields": []},
+        {"name": "Equal", "fields": []},
+        {"name": "Greater", "fields": []}
+      ]
+    }
+  ],
+  "traits": [
+    {
+      "name": "core.cmp.Eq",
+      "methods": [
         {
-          "name": "Less",
-          "fields": []
-        },
+          "name": "eq",
+          "params": [
+            {"name": "self", "type": {"kind": "quod.self_type"}},
+            {"name": "other", "type": {"kind": "quod.self_type"}}
+          ],
+          "return_type": {"kind": "llvm.i1"}
+        }
+      ]
+    }
+  ],
+  "impls": [
+    {
+      "trait": "core.cmp.Eq",
+      "for_type": {"kind": "llvm.i64"},
+      "methods": [
         {
-          "name": "Equal",
-          "fields": []
-        },
+          "name": "eq",
+          "params": [
+            {"name": "self", "type": {"kind": "quod.self_type"}},
+            {"name": "other", "type": {"kind": "quod.self_type"}}
+          ],
+          "return_type": {"kind": "llvm.i1"},
+          "body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "eq",
+                "lhs": {"kind": "llvm.param_ref", "name": "self"},
+                "rhs": {"kind": "llvm.param_ref", "name": "other"}
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "trait": "core.cmp.Eq",
+      "for_type": {"kind": "llvm.i32"},
+      "methods": [
         {
-          "name": "Greater",
-          "fields": []
+          "name": "eq",
+          "params": [
+            {"name": "self", "type": {"kind": "quod.self_type"}},
+            {"name": "other", "type": {"kind": "quod.self_type"}}
+          ],
+          "return_type": {"kind": "llvm.i1"},
+          "body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "eq",
+                "lhs": {"kind": "llvm.param_ref", "name": "self"},
+                "rhs": {"kind": "llvm.param_ref", "name": "other"}
+              }
+            }
+          ]
         }
       ]
     }
