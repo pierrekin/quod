@@ -1223,61 +1223,12 @@
       "return_type": {"kind": "llvm.void"},
       "body": [
         {
-          "kind": "quod.let",
-          "name": "l",
-          "type": {
-            "kind": "llvm.struct",
-            "name": "alloc.list.List",
-            "type_args": [{"kind": "quod.type_param", "name": "T"}]
-          },
-          "init": {
-            "kind": "quod.load",
-            "ptr": {"kind": "llvm.param_ref", "name": "list_ptr"},
-            "type": {
-              "kind": "llvm.struct",
-              "name": "alloc.list.List",
-              "type_args": [{"kind": "quod.type_param", "name": "T"}]
-            }
-          }
-        },
-        {
-          "kind": "quod.store",
+          "kind": "quod.store_field",
           "ptr": {"kind": "llvm.param_ref", "name": "list_ptr"},
-          "value": {
-            "kind": "quod.struct_init",
-            "type": "alloc.list.List",
-            "type_args": [{"kind": "quod.type_param", "name": "T"}],
-            "fields": [
-              {
-                "name": "ptr",
-                "value": {
-                  "kind": "quod.field",
-                  "value": {"kind": "quod.local_ref", "name": "l"},
-                  "name": "ptr"
-                }
-              },
-              {
-                "name": "len",
-                "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
-              },
-              {
-                "name": "cap",
-                "value": {
-                  "kind": "quod.field",
-                  "value": {"kind": "quod.local_ref", "name": "l"},
-                  "name": "cap"
-                }
-              },
-              {
-                "name": "alloc",
-                "value": {
-                  "kind": "quod.field",
-                  "value": {"kind": "quod.local_ref", "name": "l"},
-                  "name": "alloc"
-                }
-              }
-            ]
-          }
+          "struct_type": "alloc.list.List",
+          "type_args": [{"kind": "quod.type_param", "name": "T"}],
+          "name": "len",
+          "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
         },
         {"kind": "quod.return"}
       ]
@@ -1293,20 +1244,14 @@
       "body": [
         {
           "kind": "quod.let",
-          "name": "l",
-          "type": {
-            "kind": "llvm.struct",
-            "name": "alloc.list.List",
-            "type_args": [{"kind": "quod.type_param", "name": "T"}]
-          },
+          "name": "cur_len",
+          "type": {"kind": "llvm.i64"},
           "init": {
-            "kind": "quod.load",
+            "kind": "quod.load_field",
             "ptr": {"kind": "llvm.param_ref", "name": "list_ptr"},
-            "type": {
-              "kind": "llvm.struct",
-              "name": "alloc.list.List",
-              "type_args": [{"kind": "quod.type_param", "name": "T"}]
-            }
+            "struct_type": "alloc.list.List",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}],
+            "name": "len"
           }
         },
         {
@@ -1315,51 +1260,16 @@
             "kind": "llvm.binop",
             "op": "slt",
             "lhs": {"kind": "llvm.param_ref", "name": "n"},
-            "rhs": {
-              "kind": "quod.field",
-              "value": {"kind": "quod.local_ref", "name": "l"},
-              "name": "len"
-            }
+            "rhs": {"kind": "quod.local_ref", "name": "cur_len"}
           },
           "then_body": [
             {
-              "kind": "quod.store",
+              "kind": "quod.store_field",
               "ptr": {"kind": "llvm.param_ref", "name": "list_ptr"},
-              "value": {
-                "kind": "quod.struct_init",
-                "type": "alloc.list.List",
-                "type_args": [{"kind": "quod.type_param", "name": "T"}],
-                "fields": [
-                  {
-                    "name": "ptr",
-                    "value": {
-                      "kind": "quod.field",
-                      "value": {"kind": "quod.local_ref", "name": "l"},
-                      "name": "ptr"
-                    }
-                  },
-                  {
-                    "name": "len",
-                    "value": {"kind": "llvm.param_ref", "name": "n"}
-                  },
-                  {
-                    "name": "cap",
-                    "value": {
-                      "kind": "quod.field",
-                      "value": {"kind": "quod.local_ref", "name": "l"},
-                      "name": "cap"
-                    }
-                  },
-                  {
-                    "name": "alloc",
-                    "value": {
-                      "kind": "quod.field",
-                      "value": {"kind": "quod.local_ref", "name": "l"},
-                      "name": "alloc"
-                    }
-                  }
-                ]
-              }
+              "struct_type": "alloc.list.List",
+              "type_args": [{"kind": "quod.type_param", "name": "T"}],
+              "name": "len",
+              "value": {"kind": "llvm.param_ref", "name": "n"}
             }
           ],
           "else_body": []
@@ -1467,43 +1377,12 @@
           }
         },
         {
-          "kind": "quod.store",
+          "kind": "quod.store_field",
           "ptr": {"kind": "llvm.param_ref", "name": "list_ptr"},
-          "value": {
-            "kind": "quod.struct_init",
-            "type": "alloc.list.List",
-            "type_args": [{"kind": "quod.type_param", "name": "T"}],
-            "fields": [
-              {
-                "name": "ptr",
-                "value": {
-                  "kind": "quod.field",
-                  "value": {"kind": "quod.local_ref", "name": "l"},
-                  "name": "ptr"
-                }
-              },
-              {
-                "name": "len",
-                "value": {"kind": "quod.local_ref", "name": "new_len"}
-              },
-              {
-                "name": "cap",
-                "value": {
-                  "kind": "quod.field",
-                  "value": {"kind": "quod.local_ref", "name": "l"},
-                  "name": "cap"
-                }
-              },
-              {
-                "name": "alloc",
-                "value": {
-                  "kind": "quod.field",
-                  "value": {"kind": "quod.local_ref", "name": "l"},
-                  "name": "alloc"
-                }
-              }
-            ]
-          }
+          "struct_type": "alloc.list.List",
+          "type_args": [{"kind": "quod.type_param", "name": "T"}],
+          "name": "len",
+          "value": {"kind": "quod.local_ref", "name": "new_len"}
         },
         {
           "kind": "quod.return_expr",
@@ -1530,20 +1409,14 @@
       "body": [
         {
           "kind": "quod.let",
-          "name": "l",
-          "type": {
-            "kind": "llvm.struct",
-            "name": "alloc.list.List",
-            "type_args": [{"kind": "quod.type_param", "name": "T"}]
-          },
+          "name": "cur_len",
+          "type": {"kind": "llvm.i64"},
           "init": {
-            "kind": "quod.load",
+            "kind": "quod.load_field",
             "ptr": {"kind": "llvm.param_ref", "name": "list_ptr"},
-            "type": {
-              "kind": "llvm.struct",
-              "name": "alloc.list.List",
-              "type_args": [{"kind": "quod.type_param", "name": "T"}]
-            }
+            "struct_type": "alloc.list.List",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}],
+            "name": "len"
           }
         },
         {
@@ -1557,11 +1430,7 @@
               {
                 "kind": "llvm.binop",
                 "op": "add",
-                "lhs": {
-                  "kind": "quod.field",
-                  "value": {"kind": "quod.local_ref", "name": "l"},
-                  "name": "len"
-                },
+                "lhs": {"kind": "quod.local_ref", "name": "cur_len"},
                 "rhs": {"kind": "llvm.param_ref", "name": "additional"}
               }
             ]
