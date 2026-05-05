@@ -72,6 +72,8 @@ from quod.model import (
     StructDef,
     StructInit,
     StructType,
+    SelfType,
+    TypeParamRef,
     Unreachable,
     While,
     Widen,
@@ -199,13 +201,29 @@ _TYPE_NAMES: dict[type, str] = {
 
 def type_span(t) -> Span:
     if isinstance(t, StructType):
+        if t.type_args:
+            args = ", ".join(_format_type_short(a) for a in t.type_args)
+            return Span(f"{t.name}<{args}>", "type")
         return Span(t.name, "type")
     if isinstance(t, EnumType):
+        if t.type_args:
+            args = ", ".join(_format_type_short(a) for a in t.type_args)
+            return Span(f"{t.name}<{args}>", "type")
         return Span(t.name, "type")
+    if isinstance(t, TypeParamRef):
+        return Span(t.name, "type")
+    if isinstance(t, SelfType):
+        return Span("Self", "type")
     name = _TYPE_NAMES.get(type(t))
     if name is None:
         raise ValueError(f"unhandled type: {t!r}")
     return Span(name, "type")
+
+
+def _format_type_short(t) -> str:
+    """Compact type-to-string for use inside angle brackets."""
+    from quod.model import _format_type
+    return _format_type(t)
 
 
 # ---------- Expression spans (flat — never wraps) ----------
@@ -650,12 +668,27 @@ def _struct_def_line(sd: StructDef, indent: int) -> Line:
     return Line(sd, indent, struct_def_spans(sd))
 
 
+def _import_spans(imp) -> tuple:
+    spans = [Span(imp.module, "const_name")]
+    if imp.wire:
+        from quod.model import _format_type
+        spans.append(Span(" wire ", "keyword"))
+        bindings = ", ".join(f"{w.name}={_format_type(w.type)}" for w in imp.wire)
+        spans.append(Span(bindings, "type"))
+    return tuple(spans)
+
+
 def format_program_lines(program: Program) -> Iterator[Line]:
     yield Line(program, 0, (Span("program", "keyword"), Span(" {", "punct")))
+    if program.wirables:
+        yield Line(None, 2, (Span("wirables:", "section"),))
+        for w in program.wirables:
+            label = f"{w.name}: {w.bound}" if w.bound else w.name
+            yield Line(None, 4, (Span(label, "type"),))
     if program.imports:
         yield Line(None, 2, (Span("imports:", "section"),))
         for imp in program.imports:
-            yield Line(None, 4, (Span(imp.module, "const_name"),))
+            yield Line(None, 4, _import_spans(imp))
     if program.constants:
         yield Line(None, 2, (Span("constants:", "section"),))
         for c in program.constants:

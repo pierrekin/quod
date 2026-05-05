@@ -1983,12 +1983,37 @@ NodeLabel = Callable[[_Node], str]
 _NO_LABEL: NodeLabel = lambda _node: ""
 
 
+def _format_import(imp: Import) -> str:
+    s = imp.module
+    if imp.wire:
+        bindings = ", ".join(f"{w.name}={_format_type(w.type)}" for w in imp.wire)
+        s += f" wire {bindings}"
+    return s
+
+
+def _format_type_param(tp: TypeParam) -> str:
+    s = tp.name
+    if tp.bound:
+        s += f": {tp.bound}"
+    return s
+
+
+def _format_type_params(tps: tuple) -> str:
+    if not tps:
+        return ""
+    return "<" + ", ".join(_format_type_param(tp) for tp in tps) + ">"
+
+
 def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
     lines: list[str] = ["program {"]
+    if program.wirables:
+        lines.append("  wirables:")
+        for w in program.wirables:
+            lines.append(f"    {_format_type_param(w)}")
     if program.imports:
         lines.append("  imports:")
         for imp in program.imports:
-            lines.append(f"    {imp.module}")
+            lines.append(f"    {_format_import(imp)}")
     if program.constants:
         lines.append("  constants:")
         for c in program.constants:
@@ -2025,8 +2050,9 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
 
 
 def format_struct_def(sd: StructDef) -> str:
+    tp = _format_type_params(sd.type_params)
     body = ", ".join(f"{f.name}: {_format_type(f.type)}" for f in sd.fields)
-    return f"struct {sd.name} {{ {body} }}"
+    return f"struct {sd.name}{tp} {{ {body} }}"
 
 
 def format_enum_def(ed: EnumDef, *, label: NodeLabel = _NO_LABEL) -> str:
@@ -2042,8 +2068,9 @@ def format_enum_def(ed: EnumDef, *, label: NodeLabel = _NO_LABEL) -> str:
 
 
 def format_function(fn: Function, *, label: NodeLabel = _NO_LABEL) -> str:
+    tp = _format_type_params(fn.type_params)
     sig_params = ", ".join(f"{p.name}: {_format_type(p.type)}" for p in fn.params)
-    header = f"{label(fn)}{fn.name}({sig_params}) -> {_format_type(fn.return_type)}"
+    header = f"{label(fn)}{fn.name}{tp}({sig_params}) -> {_format_type(fn.return_type)}"
     if fn.claims:
         header += "  [claims: " + ", ".join(format_claim(c) for c in fn.claims) + "]"
     lines: list[str] = []
@@ -2070,10 +2097,20 @@ def _format_type(t) -> str:
             return "i64"
         case I8PtrType():
             return "i8*"
+        case StructType(name=n, type_args=ta) if ta:
+            args = ", ".join(_format_type(a) for a in ta)
+            return f"{n}<{args}>"
         case StructType(name=n):
             return n
+        case EnumType(name=n, type_args=ta) if ta:
+            args = ", ".join(_format_type(a) for a in ta)
+            return f"{n}<{args}>"
         case EnumType(name=n):
             return n
+        case TypeParamRef(name=n):
+            return n
+        case SelfType():
+            return "Self"
         case VoidType():
             return "void"
     raise ValueError(f"unhandled type: {t!r}")
