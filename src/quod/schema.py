@@ -795,9 +795,11 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     "EnumPayloadField": {
         "class": EnumPayloadField,
         "summary": (
-            "One payload field of an EnumVariant. Restricted to scalar "
-            "types (int widths up to i64, plus i8*) so each field fits "
-            "in a single i64 slot."
+            "One payload field of an EnumVariant. Any value Type is "
+            "allowed — int widths, i8*, named structs, even other enums. "
+            "The enum's payload area is sized as `[N x i64]` where N "
+            "covers the largest variant; per-variant layout uses a "
+            "literal LLVM struct of the field types via bitcast."
         ),
         "example": {"name": "value", "type": {"kind": "llvm.i64"}},
     },
