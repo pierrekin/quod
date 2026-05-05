@@ -38,9 +38,11 @@ def runtime_sources() -> tuple[Path, ...]:
 
 
 def runtime_archive_path(build_dir: Path) -> Path:
-    """Where the compiled archive lives. Stable so the linker invocation can
-    reference it by `-L<dir> -lquodrt`."""
-    return build_dir / "rt" / f"libquodrt-{_ARCHIVE_TAG}.a"
+    """Where the compiled archive lives. The subdir name is deliberately
+    distinctive (not `rt/`) because tests sometimes name their bins after
+    short tokens, and a bin path that collides with the archive subdir
+    would make the linker fail with "Is a directory"."""
+    return build_dir / "quodrt" / f"libquodrt-{_ARCHIVE_TAG}.a"
 
 
 def build_runtime_archive(build_dir: Path, *, target: str | None = None) -> Path | None:

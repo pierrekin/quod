@@ -1,0 +1,606 @@
+{
+  "externs": [
+    {
+      "name": "quod_bswap_u16",
+      "param_types": [
+        {
+          "kind": "llvm.u16"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u16"
+      },
+      "linkage": {
+        "kind": "linkage.runtime"
+      }
+    },
+    {
+      "name": "quod_bswap_u32",
+      "param_types": [
+        {
+          "kind": "llvm.u32"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u32"
+      },
+      "linkage": {
+        "kind": "linkage.runtime"
+      }
+    },
+    {
+      "name": "quod_bswap_u64",
+      "param_types": [
+        {
+          "kind": "llvm.u64"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u64"
+      },
+      "linkage": {
+        "kind": "linkage.runtime"
+      }
+    }
+  ],
+  "functions": [
+    {
+      "name": "core.num.bswap_u16",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u16"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u16"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "quod_bswap_u16",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.bswap_u32",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u32"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "quod_bswap_u32",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.bswap_u64",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u64"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "quod_bswap_u64",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.to_le_u16",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u16"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u16"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.param_ref",
+            "name": "x"
+          }
+        }
+      ],
+      "notes": [
+        "Identity on the only target (x86_64, little-endian). Revisit if quod ever targets a big-endian host."
+      ]
+    },
+    {
+      "name": "core.num.to_le_u32",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u32"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.param_ref",
+            "name": "x"
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.to_le_u64",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u64"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.param_ref",
+            "name": "x"
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.from_le_u16",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u16"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u16"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.param_ref",
+            "name": "x"
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.from_le_u32",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u32"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.param_ref",
+            "name": "x"
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.from_le_u64",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u64"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.param_ref",
+            "name": "x"
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.to_be_u16",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u16"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u16"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "core.num.bswap_u16",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.to_be_u32",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u32"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "core.num.bswap_u32",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.to_be_u64",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u64"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "core.num.bswap_u64",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.from_be_u16",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u16"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u16"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "core.num.bswap_u16",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.from_be_u32",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u32"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "core.num.bswap_u32",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.from_be_u64",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u64"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "core.num.bswap_u64",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.num.narrow_i64_to_i32",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.widen",
+            "value": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            },
+            "target": {
+              "kind": "llvm.i32"
+            },
+            "signed": true
+          }
+        }
+      ],
+      "claims": [
+        {
+          "kind": "int_range",
+          "param": "x",
+          "min": -2147483648,
+          "max": 2147483647
+        }
+      ]
+    },
+    {
+      "name": "core.num.narrow_u64_to_u32",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u32"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.widen",
+            "value": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            },
+            "target": {
+              "kind": "llvm.u32"
+            },
+            "signed": false
+          }
+        }
+      ],
+      "claims": [
+        {
+          "kind": "int_range",
+          "param": "x",
+          "min": 0,
+          "max": 4294967295
+        }
+      ],
+      "notes": [
+        "Bound 4294967295 = u32::MAX fits in i64; signed icmp at lowering produces the correct comparison."
+      ]
+    },
+    {
+      "name": "core.num.i64_to_u64",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.u64"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.widen",
+            "value": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            },
+            "target": {
+              "kind": "llvm.u64"
+            },
+            "signed": false
+          }
+        }
+      ],
+      "claims": [
+        {
+          "kind": "non_negative",
+          "param": "x"
+        }
+      ],
+      "notes": [
+        "Same-width Widen lowers to identity; non_negative ensures the unsigned interpretation matches the signed one."
+      ]
+    },
+    {
+      "name": "core.num.u64_to_i64",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.u64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i64"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.widen",
+            "value": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            },
+            "target": {
+              "kind": "llvm.i64"
+            },
+            "signed": false
+          }
+        }
+      ],
+      "claims": [
+        {
+          "kind": "int_range",
+          "param": "x",
+          "min": 0,
+          "max": 9223372036854775807
+        }
+      ]
+    }
+  ]
+}
