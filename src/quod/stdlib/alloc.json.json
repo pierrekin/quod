@@ -756,6 +756,75 @@
       "claims": []
     },
     {
+      "name": "alloc.json.hex_digit_value",
+      "params": [
+        {"name": "ch", "type": {"kind": "llvm.i8"}}
+      ],
+      "return_type": {"kind": "llvm.i8"},
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "quod.sc_and",
+            "lhs": {"kind": "llvm.binop", "op": "sge", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "0"}},
+            "rhs": {"kind": "llvm.binop", "op": "sle", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "9"}}
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {"kind": "llvm.binop", "op": "sub", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "0"}}
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "quod.sc_and",
+            "lhs": {"kind": "llvm.binop", "op": "sge", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "a"}},
+            "rhs": {"kind": "llvm.binop", "op": "sle", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "f"}}
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {"kind": "llvm.binop", "op": "sub", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "a"}},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 10}
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "quod.sc_and",
+            "lhs": {"kind": "llvm.binop", "op": "sge", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "A"}},
+            "rhs": {"kind": "llvm.binop", "op": "sle", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "F"}}
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {"kind": "llvm.binop", "op": "sub", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "A"}},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 10}
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 255}
+        }
+      ],
+      "claims": []
+    },
+    {
       "name": "alloc.json.parse_null",
       "params": [
         {
@@ -2422,250 +2491,284 @@
                     {
                       "kind": "quod.let",
                       "name": "_bs",
-                      "type": {
-                        "kind": "llvm.i8"
-                      },
-                      "init": {
-                        "kind": "llvm.call",
-                        "function": "alloc.json.consume_byte",
-                        "args": [
-                          {
-                            "kind": "llvm.param_ref",
-                            "name": "p"
-                          }
-                        ]
-                      }
+                      "type": {"kind": "llvm.i8"},
+                      "init": {"kind": "llvm.call", "function": "alloc.json.consume_byte", "args": [{"kind": "llvm.param_ref", "name": "p"}]}
                     },
                     {
                       "kind": "quod.if",
-                      "cond": {
-                        "kind": "llvm.call",
-                        "function": "alloc.json.at_end",
-                        "args": [
-                          {
-                            "kind": "llvm.param_ref",
-                            "name": "p"
-                          }
-                        ]
-                      },
+                      "cond": {"kind": "llvm.call", "function": "alloc.json.at_end", "args": [{"kind": "llvm.param_ref", "name": "p"}]},
                       "then_body": [
-                        {
-                          "kind": "quod.return_expr",
-                          "value": {
-                            "kind": "llvm.call",
-                            "function": "alloc.json.mark_error",
-                            "args": [
-                              {
-                                "kind": "llvm.param_ref",
-                                "name": "p"
-                              }
-                            ]
-                          }
-                        }
+                        {"kind": "quod.return_expr", "value": {"kind": "llvm.call", "function": "alloc.json.mark_error", "args": [{"kind": "llvm.param_ref", "name": "p"}]}}
                       ],
                       "else_body": []
                     },
                     {
                       "kind": "quod.let",
                       "name": "esc",
-                      "type": {
-                        "kind": "llvm.i8"
-                      },
-                      "init": {
-                        "kind": "llvm.call",
-                        "function": "alloc.json.consume_byte",
-                        "args": [
-                          {
-                            "kind": "llvm.param_ref",
-                            "name": "p"
-                          }
-                        ]
-                      }
+                      "type": {"kind": "llvm.i8"},
+                      "init": {"kind": "llvm.call", "function": "alloc.json.consume_byte", "args": [{"kind": "llvm.param_ref", "name": "p"}]}
                     },
                     {
                       "kind": "quod.let",
                       "name": "decoded",
-                      "type": {
-                        "kind": "llvm.i8"
-                      },
-                      "init": {
-                        "kind": "quod.local_ref",
-                        "name": "esc"
-                      }
+                      "type": {"kind": "llvm.i8"},
+                      "init": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 0}
+                    },
+                    {
+                      "kind": "quod.let",
+                      "name": "matched",
+                      "type": {"kind": "llvm.i1"},
+                      "init": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 0}
                     },
                     {
                       "kind": "quod.if",
-                      "cond": {
-                        "kind": "llvm.binop",
-                        "op": "eq",
-                        "lhs": {
-                          "kind": "quod.local_ref",
-                          "name": "esc"
-                        },
-                        "rhs": {
-                          "kind": "quod.char_lit",
-                          "value": "n"
-                        }
-                      },
+                      "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "esc"}, "rhs": {"kind": "quod.char_lit", "value": "\""}},
                       "then_body": [
-                        {
-                          "kind": "quod.assign",
-                          "name": "decoded",
-                          "value": {
-                            "kind": "quod.char_lit",
-                            "value": "\n"
-                          }
-                        }
+                        {"kind": "quod.assign", "name": "decoded", "value": {"kind": "quod.char_lit", "value": "\""}},
+                        {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
                       ],
                       "else_body": []
                     },
                     {
                       "kind": "quod.if",
-                      "cond": {
-                        "kind": "llvm.binop",
-                        "op": "eq",
-                        "lhs": {
-                          "kind": "quod.local_ref",
-                          "name": "esc"
-                        },
-                        "rhs": {
-                          "kind": "quod.char_lit",
-                          "value": "t"
-                        }
-                      },
+                      "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "esc"}, "rhs": {"kind": "quod.char_lit", "value": "\\"}},
                       "then_body": [
-                        {
-                          "kind": "quod.assign",
-                          "name": "decoded",
-                          "value": {
-                            "kind": "quod.char_lit",
-                            "value": "\t"
-                          }
-                        }
+                        {"kind": "quod.assign", "name": "decoded", "value": {"kind": "quod.char_lit", "value": "\\"}},
+                        {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
                       ],
                       "else_body": []
                     },
                     {
                       "kind": "quod.if",
-                      "cond": {
-                        "kind": "llvm.binop",
-                        "op": "eq",
-                        "lhs": {
-                          "kind": "quod.local_ref",
-                          "name": "esc"
-                        },
-                        "rhs": {
-                          "kind": "quod.char_lit",
-                          "value": "r"
-                        }
-                      },
+                      "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "esc"}, "rhs": {"kind": "quod.char_lit", "value": "/"}},
                       "then_body": [
-                        {
-                          "kind": "quod.assign",
-                          "name": "decoded",
-                          "value": {
-                            "kind": "quod.char_lit",
-                            "value": "\r"
-                          }
-                        }
+                        {"kind": "quod.assign", "name": "decoded", "value": {"kind": "quod.char_lit", "value": "/"}},
+                        {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
                       ],
                       "else_body": []
                     },
                     {
                       "kind": "quod.if",
-                      "cond": {
-                        "kind": "llvm.binop",
-                        "op": "eq",
-                        "lhs": {
-                          "kind": "quod.local_ref",
-                          "name": "esc"
-                        },
-                        "rhs": {
-                          "kind": "quod.char_lit",
-                          "value": "b"
-                        }
-                      },
+                      "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "esc"}, "rhs": {"kind": "quod.char_lit", "value": "n"}},
+                      "then_body": [
+                        {"kind": "quod.assign", "name": "decoded", "value": {"kind": "quod.char_lit", "value": "\n"}},
+                        {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
+                      ],
+                      "else_body": []
+                    },
+                    {
+                      "kind": "quod.if",
+                      "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "esc"}, "rhs": {"kind": "quod.char_lit", "value": "t"}},
+                      "then_body": [
+                        {"kind": "quod.assign", "name": "decoded", "value": {"kind": "quod.char_lit", "value": "\t"}},
+                        {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
+                      ],
+                      "else_body": []
+                    },
+                    {
+                      "kind": "quod.if",
+                      "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "esc"}, "rhs": {"kind": "quod.char_lit", "value": "r"}},
+                      "then_body": [
+                        {"kind": "quod.assign", "name": "decoded", "value": {"kind": "quod.char_lit", "value": "\r"}},
+                        {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
+                      ],
+                      "else_body": []
+                    },
+                    {
+                      "kind": "quod.if",
+                      "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "esc"}, "rhs": {"kind": "quod.char_lit", "value": "b"}},
+                      "then_body": [
+                        {"kind": "quod.assign", "name": "decoded", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 8}},
+                        {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
+                      ],
+                      "else_body": []
+                    },
+                    {
+                      "kind": "quod.if",
+                      "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "esc"}, "rhs": {"kind": "quod.char_lit", "value": "f"}},
+                      "then_body": [
+                        {"kind": "quod.assign", "name": "decoded", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 12}},
+                        {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
+                      ],
+                      "else_body": []
+                    },
+                    {
+                      "kind": "quod.if",
+                      "cond": {"kind": "quod.local_ref", "name": "matched"},
                       "then_body": [
                         {
+                          "kind": "quod.store",
+                          "ptr": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "buf"}, "rhs": {"kind": "quod.local_ref", "name": "write_pos"}},
+                          "value": {"kind": "quod.local_ref", "name": "decoded"}
+                        },
+                        {
                           "kind": "quod.assign",
-                          "name": "decoded",
-                          "value": {
-                            "kind": "llvm.const_int",
-                            "type": {
-                              "kind": "llvm.i64"
+                          "name": "write_pos",
+                          "value": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "write_pos"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}}
+                        }
+                      ],
+                      "else_body": [
+                        {
+                          "kind": "quod.if",
+                          "cond": {"kind": "llvm.binop", "op": "ne", "lhs": {"kind": "quod.local_ref", "name": "esc"}, "rhs": {"kind": "quod.char_lit", "value": "u"}},
+                          "then_body": [
+                            {"kind": "quod.return_expr", "value": {"kind": "llvm.call", "function": "alloc.json.mark_error", "args": [{"kind": "llvm.param_ref", "name": "p"}]}}
+                          ],
+                          "else_body": []
+                        },
+                        {
+                          "kind": "quod.let",
+                          "name": "cp",
+                          "type": {"kind": "llvm.i32"},
+                          "init": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
+                        },
+                        {
+                          "kind": "quod.let",
+                          "name": "i",
+                          "type": {"kind": "llvm.i64"},
+                          "init": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
+                        },
+                        {
+                          "kind": "quod.while",
+                          "cond": {"kind": "llvm.binop", "op": "slt", "lhs": {"kind": "quod.local_ref", "name": "i"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4}},
+                          "body": [
+                            {
+                              "kind": "quod.if",
+                              "cond": {"kind": "llvm.call", "function": "alloc.json.at_end", "args": [{"kind": "llvm.param_ref", "name": "p"}]},
+                              "then_body": [
+                                {"kind": "quod.return_expr", "value": {"kind": "llvm.call", "function": "alloc.json.mark_error", "args": [{"kind": "llvm.param_ref", "name": "p"}]}}
+                              ],
+                              "else_body": []
                             },
-                            "value": 8
-                          }
-                        }
-                      ],
-                      "else_body": []
-                    },
-                    {
-                      "kind": "quod.if",
-                      "cond": {
-                        "kind": "llvm.binop",
-                        "op": "eq",
-                        "lhs": {
-                          "kind": "quod.local_ref",
-                          "name": "esc"
-                        },
-                        "rhs": {
-                          "kind": "quod.char_lit",
-                          "value": "f"
-                        }
-                      },
-                      "then_body": [
-                        {
-                          "kind": "quod.assign",
-                          "name": "decoded",
-                          "value": {
-                            "kind": "llvm.const_int",
-                            "type": {
-                              "kind": "llvm.i64"
+                            {
+                              "kind": "quod.let",
+                              "name": "h",
+                              "type": {"kind": "llvm.i8"},
+                              "init": {"kind": "llvm.call", "function": "alloc.json.consume_byte", "args": [{"kind": "llvm.param_ref", "name": "p"}]}
                             },
-                            "value": 12
-                          }
-                        }
-                      ],
-                      "else_body": []
-                    },
-                    {
-                      "kind": "quod.store",
-                      "ptr": {
-                        "kind": "llvm.binop",
-                        "op": "add",
-                        "lhs": {
-                          "kind": "quod.local_ref",
-                          "name": "buf"
+                            {
+                              "kind": "quod.let",
+                              "name": "v",
+                              "type": {"kind": "llvm.i8"},
+                              "init": {"kind": "llvm.call", "function": "alloc.json.hex_digit_value", "args": [{"kind": "quod.local_ref", "name": "h"}]}
+                            },
+                            {
+                              "kind": "quod.if",
+                              "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "v"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 255}},
+                              "then_body": [
+                                {"kind": "quod.return_expr", "value": {"kind": "llvm.call", "function": "alloc.json.mark_error", "args": [{"kind": "llvm.param_ref", "name": "p"}]}}
+                              ],
+                              "else_body": []
+                            },
+                            {
+                              "kind": "quod.assign",
+                              "name": "cp",
+                              "value": {
+                                "kind": "llvm.binop",
+                                "op": "add",
+                                "lhs": {"kind": "llvm.binop", "op": "mul", "lhs": {"kind": "quod.local_ref", "name": "cp"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 16}},
+                                "rhs": {"kind": "quod.widen", "value": {"kind": "quod.local_ref", "name": "v"}, "target": {"kind": "llvm.i32"}, "signed": false}
+                              }
+                            },
+                            {
+                              "kind": "quod.assign",
+                              "name": "i",
+                              "value": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "i"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}}
+                            }
+                          ]
                         },
-                        "rhs": {
-                          "kind": "quod.local_ref",
-                          "name": "write_pos"
+                        {
+                          "kind": "quod.if",
+                          "cond": {"kind": "llvm.binop", "op": "ult", "lhs": {"kind": "quod.local_ref", "name": "cp"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 128}},
+                          "then_body": [
+                            {
+                              "kind": "quod.store",
+                              "ptr": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "buf"}, "rhs": {"kind": "quod.local_ref", "name": "write_pos"}},
+                              "value": {"kind": "quod.widen", "value": {"kind": "quod.local_ref", "name": "cp"}, "target": {"kind": "llvm.i8"}, "signed": false}
+                            },
+                            {
+                              "kind": "quod.assign",
+                              "name": "write_pos",
+                              "value": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "write_pos"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}}
+                            }
+                          ],
+                          "else_body": [
+                            {
+                              "kind": "quod.if",
+                              "cond": {"kind": "llvm.binop", "op": "ult", "lhs": {"kind": "quod.local_ref", "name": "cp"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 2048}},
+                              "then_body": [
+                                {
+                                  "kind": "quod.let",
+                                  "name": "u2_b0",
+                                  "type": {"kind": "llvm.i32"},
+                                  "init": {"kind": "llvm.binop", "op": "or", "lhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 192}, "rhs": {"kind": "llvm.binop", "op": "udiv", "lhs": {"kind": "quod.local_ref", "name": "cp"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 64}}}
+                                },
+                                {
+                                  "kind": "quod.let",
+                                  "name": "u2_b1",
+                                  "type": {"kind": "llvm.i32"},
+                                  "init": {"kind": "llvm.binop", "op": "or", "lhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 128}, "rhs": {"kind": "llvm.binop", "op": "urem", "lhs": {"kind": "quod.local_ref", "name": "cp"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 64}}}
+                                },
+                                {
+                                  "kind": "quod.store",
+                                  "ptr": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "buf"}, "rhs": {"kind": "quod.local_ref", "name": "write_pos"}},
+                                  "value": {"kind": "quod.widen", "value": {"kind": "quod.local_ref", "name": "u2_b0"}, "target": {"kind": "llvm.i8"}, "signed": false}
+                                },
+                                {
+                                  "kind": "quod.store",
+                                  "ptr": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "buf"}, "rhs": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "write_pos"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}}},
+                                  "value": {"kind": "quod.widen", "value": {"kind": "quod.local_ref", "name": "u2_b1"}, "target": {"kind": "llvm.i8"}, "signed": false}
+                                },
+                                {
+                                  "kind": "quod.assign",
+                                  "name": "write_pos",
+                                  "value": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "write_pos"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 2}}
+                                }
+                              ],
+                              "else_body": [
+                                {
+                                  "kind": "quod.let",
+                                  "name": "u3_b0",
+                                  "type": {"kind": "llvm.i32"},
+                                  "init": {"kind": "llvm.binop", "op": "or", "lhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 224}, "rhs": {"kind": "llvm.binop", "op": "udiv", "lhs": {"kind": "quod.local_ref", "name": "cp"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 4096}}}
+                                },
+                                {
+                                  "kind": "quod.let",
+                                  "name": "u3_b1",
+                                  "type": {"kind": "llvm.i32"},
+                                  "init": {"kind": "llvm.binop", "op": "or", "lhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 128}, "rhs": {"kind": "llvm.binop", "op": "urem", "lhs": {"kind": "llvm.binop", "op": "udiv", "lhs": {"kind": "quod.local_ref", "name": "cp"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 64}}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 64}}}
+                                },
+                                {
+                                  "kind": "quod.let",
+                                  "name": "u3_b2",
+                                  "type": {"kind": "llvm.i32"},
+                                  "init": {"kind": "llvm.binop", "op": "or", "lhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 128}, "rhs": {"kind": "llvm.binop", "op": "urem", "lhs": {"kind": "quod.local_ref", "name": "cp"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 64}}}
+                                },
+                                {
+                                  "kind": "quod.store",
+                                  "ptr": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "buf"}, "rhs": {"kind": "quod.local_ref", "name": "write_pos"}},
+                                  "value": {"kind": "quod.widen", "value": {"kind": "quod.local_ref", "name": "u3_b0"}, "target": {"kind": "llvm.i8"}, "signed": false}
+                                },
+                                {
+                                  "kind": "quod.store",
+                                  "ptr": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "buf"}, "rhs": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "write_pos"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}}},
+                                  "value": {"kind": "quod.widen", "value": {"kind": "quod.local_ref", "name": "u3_b1"}, "target": {"kind": "llvm.i8"}, "signed": false}
+                                },
+                                {
+                                  "kind": "quod.store",
+                                  "ptr": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "buf"}, "rhs": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "write_pos"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 2}}},
+                                  "value": {"kind": "quod.widen", "value": {"kind": "quod.local_ref", "name": "u3_b2"}, "target": {"kind": "llvm.i8"}, "signed": false}
+                                },
+                                {
+                                  "kind": "quod.assign",
+                                  "name": "write_pos",
+                                  "value": {"kind": "llvm.binop", "op": "add", "lhs": {"kind": "quod.local_ref", "name": "write_pos"}, "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 3}}
+                                }
+                              ]
+                            }
+                          ]
                         }
-                      },
-                      "value": {
-                        "kind": "quod.local_ref",
-                        "name": "decoded"
-                      }
-                    },
-                    {
-                      "kind": "quod.assign",
-                      "name": "write_pos",
-                      "value": {
-                        "kind": "llvm.binop",
-                        "op": "add",
-                        "lhs": {
-                          "kind": "quod.local_ref",
-                          "name": "write_pos"
-                        },
-                        "rhs": {
-                          "kind": "llvm.const_int",
-                          "type": {
-                            "kind": "llvm.i64"
-                          },
-                          "value": 1
-                        }
-                      }
+                      ]
                     }
                   ],
                   "else_body": [

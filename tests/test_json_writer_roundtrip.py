@@ -9,11 +9,14 @@ Inputs are kept compact (no whitespace) so byte equality is the right
 oracle. Pretty mode is exercised separately by re-parsing its output and
 comparing the value tree (via Python's json module).
 
-Escape coverage is limited to what the existing parser (alloc.json)
-decodes: \\n, \\t, \\r, \\\\, \\". The parser doesn't yet handle \\b,
-\\f, or \\uXXXX, so those round-trip cases are deferred until the
-parser catches up. The serializer can still emit \\b / \\f / \\uXXXX
-correctly when fed raw control bytes.
+Escape coverage spans every escape the writer emits: \\n, \\t, \\r,
+\\b, \\f, \\\\, \\", and \\uXXXX for control codes < 32. The parser
+decodes all of these and the writer re-emits them in the same form,
+so round-trip byte-equality holds.
+
+\\/ is excluded — the writer never emits an escaped forward slash
+(JSON spec allows but doesn't require it), so the round-trip would
+collapse \\/ → / → /. That's a forward-correct asymmetry, not a bug.
 """
 
 from __future__ import annotations
@@ -45,8 +48,13 @@ ROUND_TRIP_INPUTS = [
     r'"\n"',
     r'"\t"',
     r'"\r"',
+    r'"\b"',
+    r'"\f"',
     r'"\\"',
     r'"\""',
+    '"' + chr(92) + 'u0001"',
+    '"' + chr(92) + 'u0005"',
+    '"' + chr(92) + 'u001f"',
     "[]",
     "[1]",
     "[1,2,3]",
