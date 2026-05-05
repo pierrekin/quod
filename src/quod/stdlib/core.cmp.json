@@ -1,0 +1,21 @@
+{
+  "enums": [
+    {
+      "name": "core.cmp.Ordering",
+      "variants": [
+        {
+          "name": "Less",
+          "fields": []
+        },
+        {
+          "name": "Equal",
+          "fields": []
+        },
+        {
+          "name": "Greater",
+          "fields": []
+        }
+      ]
+    }
+  ]
+}

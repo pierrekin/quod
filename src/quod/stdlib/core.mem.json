@@ -1,0 +1,501 @@
+{
+  "imports": [
+    "core.cmp"
+  ],
+  "externs": [
+    {
+      "name": "memset",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        },
+        {
+          "kind": "llvm.i32"
+        },
+        {
+          "kind": "llvm.i64"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
+      "linkage": {
+        "kind": "linkage.libc"
+      }
+    },
+    {
+      "name": "memmove",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        },
+        {
+          "kind": "llvm.i8_ptr"
+        },
+        {
+          "kind": "llvm.i64"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i8_ptr"
+      },
+      "linkage": {
+        "kind": "linkage.libc"
+      }
+    },
+    {
+      "name": "memcmp",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        },
+        {
+          "kind": "llvm.i8_ptr"
+        },
+        {
+          "kind": "llvm.i64"
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "linkage": {
+        "kind": "linkage.libc"
+      }
+    }
+  ],
+  "functions": [
+    {
+      "name": "core.mem.align_up",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "align",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i64"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "mul",
+            "lhs": {
+              "kind": "llvm.binop",
+              "op": "sdiv",
+              "lhs": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {
+                  "kind": "llvm.param_ref",
+                  "name": "x"
+                },
+                "rhs": {
+                  "kind": "llvm.binop",
+                  "op": "sub",
+                  "lhs": {
+                    "kind": "llvm.param_ref",
+                    "name": "align"
+                  },
+                  "rhs": {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i64"
+                    },
+                    "value": 1
+                  }
+                }
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "align"
+              }
+            },
+            "rhs": {
+              "kind": "llvm.param_ref",
+              "name": "align"
+            }
+          }
+        }
+      ],
+      "claims": []
+    },
+    {
+      "name": "core.mem.align_down",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "align",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i64"
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "mul",
+            "lhs": {
+              "kind": "llvm.binop",
+              "op": "sdiv",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "align"
+              }
+            },
+            "rhs": {
+              "kind": "llvm.param_ref",
+              "name": "align"
+            }
+          }
+        }
+      ],
+      "claims": []
+    },
+    {
+      "name": "core.mem.set",
+      "params": [
+        {
+          "name": "dst",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "value",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        },
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.void"
+      },
+      "body": [
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "memset",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "dst"
+              },
+              {
+                "kind": "llvm.param_ref",
+                "name": "value"
+              },
+              {
+                "kind": "llvm.param_ref",
+                "name": "n"
+              }
+            ]
+          }
+        }
+      ],
+      "claims": []
+    },
+    {
+      "name": "core.mem.copy_overlapping",
+      "params": [
+        {
+          "name": "dst",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "src",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.void"
+      },
+      "body": [
+        {
+          "kind": "quod.expr_stmt",
+          "value": {
+            "kind": "llvm.call",
+            "function": "memmove",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "dst"
+              },
+              {
+                "kind": "llvm.param_ref",
+                "name": "src"
+              },
+              {
+                "kind": "llvm.param_ref",
+                "name": "n"
+              }
+            ]
+          }
+        }
+      ],
+      "claims": []
+    },
+    {
+      "name": "core.mem.compare",
+      "params": [
+        {
+          "name": "a",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "alen",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        },
+        {
+          "name": "b",
+          "type": {
+            "kind": "llvm.i8_ptr"
+          }
+        },
+        {
+          "name": "blen",
+          "type": {
+            "kind": "llvm.i64"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.enum",
+        "name": "core.cmp.Ordering"
+      },
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "n",
+          "type": {
+            "kind": "llvm.i64"
+          },
+          "init": {
+            "kind": "llvm.param_ref",
+            "name": "alen"
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "blen"
+            },
+            "rhs": {
+              "kind": "llvm.param_ref",
+              "name": "alen"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.assign",
+              "name": "n",
+              "value": {
+                "kind": "llvm.param_ref",
+                "name": "blen"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "r",
+          "type": {
+            "kind": "llvm.i32"
+          },
+          "init": {
+            "kind": "llvm.call",
+            "function": "memcmp",
+            "args": [
+              {
+                "kind": "llvm.param_ref",
+                "name": "a"
+              },
+              {
+                "kind": "llvm.param_ref",
+                "name": "b"
+              },
+              {
+                "kind": "quod.local_ref",
+                "name": "n"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "r"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.cmp.Ordering",
+                "variant": "Less",
+                "fields": []
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "sgt",
+            "lhs": {
+              "kind": "quod.local_ref",
+              "name": "r"
+            },
+            "rhs": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.cmp.Ordering",
+                "variant": "Greater",
+                "fields": []
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "alen"
+            },
+            "rhs": {
+              "kind": "llvm.param_ref",
+              "name": "blen"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.cmp.Ordering",
+                "variant": "Less",
+                "fields": []
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "sgt",
+            "lhs": {
+              "kind": "llvm.param_ref",
+              "name": "alen"
+            },
+            "rhs": {
+              "kind": "llvm.param_ref",
+              "name": "blen"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.cmp.Ordering",
+                "variant": "Greater",
+                "fields": []
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.enum_init",
+            "enum": "core.cmp.Ordering",
+            "variant": "Equal",
+            "fields": []
+          }
+        }
+      ],
+      "claims": []
+    }
+  ]
+}
