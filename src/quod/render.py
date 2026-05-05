@@ -79,6 +79,7 @@ from quod.model import (
     StructInit,
     StructType,
     SelfType,
+    TraitCall,
     TypeParamRef,
     Unreachable,
     While,
@@ -365,6 +366,19 @@ def _expr_spans(expr) -> tuple[Span, ...]:
                     Span(fi.name, "param"), Span(": ", "punct"),
                     *_expr_spans(fi.value),
                 ))
+            out.append(Span(")", "punct"))
+            return tuple(out)
+        case TraitCall(trait=tname, method=mname, dispatch_type=dt, args=args):
+            out: list[Span] = [
+                Span(tname, "type"), Span("::", "op"),
+                Span(mname, "fn_name"),
+                Span("[", "punct"), type_span(dt), Span("]", "punct"),
+                Span("(", "punct"),
+            ]
+            for i, a in enumerate(args):
+                if i > 0:
+                    out.append(Span(", ", "punct"))
+                out.extend(_expr_spans(a))
             out.append(Span(")", "punct"))
             return tuple(out)
     raise ValueError(f"unhandled expr: {expr!r}")
