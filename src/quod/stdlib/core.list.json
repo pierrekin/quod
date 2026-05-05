@@ -1,0 +1,653 @@
+{
+  "imports": [
+    "core.option"
+  ],
+  "structs": [
+    {
+      "name": "core.list.Slice",
+      "type_params": [{"name": "T"}],
+      "fields": [
+        {"name": "ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "len", "type": {"kind": "llvm.usize"}}
+      ]
+    },
+    {
+      "name": "core.list.SliceMut",
+      "type_params": [{"name": "T"}],
+      "fields": [
+        {"name": "ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "len", "type": {"kind": "llvm.usize"}}
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "name": "core.list.slice_new",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {"name": "ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "len", "type": {"kind": "llvm.usize"}}
+      ],
+      "return_type": {
+        "kind": "llvm.struct",
+        "name": "core.list.Slice",
+        "type_args": [{"kind": "quod.type_param", "name": "T"}]
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.struct_init",
+            "type": "core.list.Slice",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}],
+            "fields": [
+              {"name": "ptr", "value": {"kind": "llvm.param_ref", "name": "ptr"}},
+              {"name": "len", "value": {"kind": "llvm.param_ref", "name": "len"}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.list.slice_len",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.list.Slice",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}]
+          }
+        }
+      ],
+      "return_type": {"kind": "llvm.usize"},
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.field",
+            "value": {"kind": "llvm.param_ref", "name": "s"},
+            "name": "len"
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.list.slice_is_empty",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.list.Slice",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}]
+          }
+        }
+      ],
+      "return_type": {"kind": "llvm.i1"},
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "quod.field",
+              "value": {"kind": "llvm.param_ref", "name": "s"},
+              "name": "len"
+            },
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.list.slice_get",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.list.Slice",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}]
+          }
+        },
+        {"name": "i", "type": {"kind": "llvm.usize"}}
+      ],
+      "return_type": {"kind": "quod.type_param", "name": "T"},
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "stride",
+          "type": {"kind": "llvm.i64"},
+          "init": {"kind": "quod.sizeof", "type": {"kind": "quod.type_param", "name": "T"}}
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.load",
+            "ptr": {
+              "kind": "quod.ptr_offset",
+              "base": {
+                "kind": "quod.field",
+                "value": {"kind": "llvm.param_ref", "name": "s"},
+                "name": "ptr"
+              },
+              "offset": {
+                "kind": "llvm.binop",
+                "op": "mul",
+                "lhs": {
+                  "kind": "quod.widen",
+                  "value": {"kind": "llvm.param_ref", "name": "i"},
+                  "target": {"kind": "llvm.i64"},
+                  "signed": false
+                },
+                "rhs": {"kind": "quod.local_ref", "name": "stride"}
+              }
+            },
+            "type": {"kind": "quod.type_param", "name": "T"}
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.list.slice_get_opt",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.list.Slice",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}]
+          }
+        },
+        {"name": "i", "type": {"kind": "llvm.usize"}}
+      ],
+      "return_type": {
+        "kind": "llvm.enum",
+        "name": "core.option.Option",
+        "type_args": [{"kind": "quod.type_param", "name": "T"}]
+      },
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "uge",
+            "lhs": {"kind": "llvm.param_ref", "name": "i"},
+            "rhs": {
+              "kind": "quod.field",
+              "value": {"kind": "llvm.param_ref", "name": "s"},
+              "name": "len"
+            }
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.option.Option",
+                "type_args": [{"kind": "quod.type_param", "name": "T"}],
+                "variant": "None"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.let",
+          "name": "stride",
+          "type": {"kind": "llvm.i64"},
+          "init": {"kind": "quod.sizeof", "type": {"kind": "quod.type_param", "name": "T"}}
+        },
+        {
+          "kind": "quod.let",
+          "name": "v",
+          "type": {"kind": "quod.type_param", "name": "T"},
+          "init": {
+            "kind": "quod.load",
+            "ptr": {
+              "kind": "quod.ptr_offset",
+              "base": {
+                "kind": "quod.field",
+                "value": {"kind": "llvm.param_ref", "name": "s"},
+                "name": "ptr"
+              },
+              "offset": {
+                "kind": "llvm.binop",
+                "op": "mul",
+                "lhs": {
+                  "kind": "quod.widen",
+                  "value": {"kind": "llvm.param_ref", "name": "i"},
+                  "target": {"kind": "llvm.i64"},
+                  "signed": false
+                },
+                "rhs": {"kind": "quod.local_ref", "name": "stride"}
+              }
+            },
+            "type": {"kind": "quod.type_param", "name": "T"}
+          }
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.enum_init",
+            "enum": "core.option.Option",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}],
+            "variant": "Some",
+            "fields": [
+              {"name": "value", "value": {"kind": "quod.local_ref", "name": "v"}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.list.slice_first",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.list.Slice",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}]
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.enum",
+        "name": "core.option.Option",
+        "type_args": [{"kind": "quod.type_param", "name": "T"}]
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "core.list.slice_get_opt",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}],
+            "args": [
+              {"kind": "llvm.param_ref", "name": "s"},
+              {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.list.slice_last",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.list.Slice",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}]
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.enum",
+        "name": "core.option.Option",
+        "type_args": [{"kind": "quod.type_param", "name": "T"}]
+      },
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "n",
+          "type": {"kind": "llvm.usize"},
+          "init": {
+            "kind": "quod.field",
+            "value": {"kind": "llvm.param_ref", "name": "s"},
+            "name": "len"
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {"kind": "quod.local_ref", "name": "n"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.option.Option",
+                "type_args": [{"kind": "quod.type_param", "name": "T"}],
+                "variant": "None"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.call",
+            "function": "core.list.slice_get_opt",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}],
+            "args": [
+              {"kind": "llvm.param_ref", "name": "s"},
+              {
+                "kind": "llvm.binop",
+                "op": "sub",
+                "lhs": {"kind": "quod.local_ref", "name": "n"},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 1}
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.list.slice_sub",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.list.Slice",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}]
+          }
+        },
+        {"name": "lo", "type": {"kind": "llvm.usize"}},
+        {"name": "hi", "type": {"kind": "llvm.usize"}}
+      ],
+      "return_type": {
+        "kind": "llvm.struct",
+        "name": "core.list.Slice",
+        "type_args": [{"kind": "quod.type_param", "name": "T"}]
+      },
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "stride",
+          "type": {"kind": "llvm.i64"},
+          "init": {"kind": "quod.sizeof", "type": {"kind": "quod.type_param", "name": "T"}}
+        },
+        {
+          "kind": "quod.let",
+          "name": "new_ptr",
+          "type": {"kind": "llvm.i8_ptr"},
+          "init": {
+            "kind": "quod.ptr_offset",
+            "base": {
+              "kind": "quod.field",
+              "value": {"kind": "llvm.param_ref", "name": "s"},
+              "name": "ptr"
+            },
+            "offset": {
+              "kind": "llvm.binop",
+              "op": "mul",
+              "lhs": {
+                "kind": "quod.widen",
+                "value": {"kind": "llvm.param_ref", "name": "lo"},
+                "target": {"kind": "llvm.i64"},
+                "signed": false
+              },
+              "rhs": {"kind": "quod.local_ref", "name": "stride"}
+            }
+          }
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.struct_init",
+            "type": "core.list.Slice",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}],
+            "fields": [
+              {"name": "ptr", "value": {"kind": "quod.local_ref", "name": "new_ptr"}},
+              {
+                "name": "len",
+                "value": {
+                  "kind": "llvm.binop",
+                  "op": "sub",
+                  "lhs": {"kind": "llvm.param_ref", "name": "hi"},
+                  "rhs": {"kind": "llvm.param_ref", "name": "lo"}
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.list.slice_mut_new",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {"name": "ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "len", "type": {"kind": "llvm.usize"}}
+      ],
+      "return_type": {
+        "kind": "llvm.struct",
+        "name": "core.list.SliceMut",
+        "type_args": [{"kind": "quod.type_param", "name": "T"}]
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.struct_init",
+            "type": "core.list.SliceMut",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}],
+            "fields": [
+              {"name": "ptr", "value": {"kind": "llvm.param_ref", "name": "ptr"}},
+              {"name": "len", "value": {"kind": "llvm.param_ref", "name": "len"}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.list.slice_mut_len",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.list.SliceMut",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}]
+          }
+        }
+      ],
+      "return_type": {"kind": "llvm.usize"},
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.field",
+            "value": {"kind": "llvm.param_ref", "name": "s"},
+            "name": "len"
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.list.slice_mut_is_empty",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.list.SliceMut",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}]
+          }
+        }
+      ],
+      "return_type": {"kind": "llvm.i1"},
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {
+              "kind": "quod.field",
+              "value": {"kind": "llvm.param_ref", "name": "s"},
+              "name": "len"
+            },
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.list.slice_mut_get",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.list.SliceMut",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}]
+          }
+        },
+        {"name": "i", "type": {"kind": "llvm.usize"}}
+      ],
+      "return_type": {"kind": "quod.type_param", "name": "T"},
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "stride",
+          "type": {"kind": "llvm.i64"},
+          "init": {"kind": "quod.sizeof", "type": {"kind": "quod.type_param", "name": "T"}}
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.load",
+            "ptr": {
+              "kind": "quod.ptr_offset",
+              "base": {
+                "kind": "quod.field",
+                "value": {"kind": "llvm.param_ref", "name": "s"},
+                "name": "ptr"
+              },
+              "offset": {
+                "kind": "llvm.binop",
+                "op": "mul",
+                "lhs": {
+                  "kind": "quod.widen",
+                  "value": {"kind": "llvm.param_ref", "name": "i"},
+                  "target": {"kind": "llvm.i64"},
+                  "signed": false
+                },
+                "rhs": {"kind": "quod.local_ref", "name": "stride"}
+              }
+            },
+            "type": {"kind": "quod.type_param", "name": "T"}
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.list.slice_mut_set",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.list.SliceMut",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}]
+          }
+        },
+        {"name": "i", "type": {"kind": "llvm.usize"}},
+        {"name": "x", "type": {"kind": "quod.type_param", "name": "T"}}
+      ],
+      "return_type": {"kind": "llvm.void"},
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "stride",
+          "type": {"kind": "llvm.i64"},
+          "init": {"kind": "quod.sizeof", "type": {"kind": "quod.type_param", "name": "T"}}
+        },
+        {
+          "kind": "quod.store",
+          "ptr": {
+            "kind": "quod.ptr_offset",
+            "base": {
+              "kind": "quod.field",
+              "value": {"kind": "llvm.param_ref", "name": "s"},
+              "name": "ptr"
+            },
+            "offset": {
+              "kind": "llvm.binop",
+              "op": "mul",
+              "lhs": {
+                "kind": "quod.widen",
+                "value": {"kind": "llvm.param_ref", "name": "i"},
+                "target": {"kind": "llvm.i64"},
+                "signed": false
+              },
+              "rhs": {"kind": "quod.local_ref", "name": "stride"}
+            }
+          },
+          "value": {"kind": "llvm.param_ref", "name": "x"}
+        },
+        {"kind": "quod.return"}
+      ]
+    },
+    {
+      "name": "core.list.slice_mut_as_slice",
+      "type_params": [{"name": "T"}],
+      "params": [
+        {
+          "name": "s",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "core.list.SliceMut",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}]
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.struct",
+        "name": "core.list.Slice",
+        "type_args": [{"kind": "quod.type_param", "name": "T"}]
+      },
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.struct_init",
+            "type": "core.list.Slice",
+            "type_args": [{"kind": "quod.type_param", "name": "T"}],
+            "fields": [
+              {
+                "name": "ptr",
+                "value": {
+                  "kind": "quod.field",
+                  "value": {"kind": "llvm.param_ref", "name": "s"},
+                  "name": "ptr"
+                }
+              },
+              {
+                "name": "len",
+                "value": {
+                  "kind": "quod.field",
+                  "value": {"kind": "llvm.param_ref", "name": "s"},
+                  "name": "len"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,198 @@
+{
+  "program": {
+    "imports": [
+      {
+        "module": "alloc.list",
+        "wire": [
+          {"name": "A", "type": {"kind": "llvm.struct", "name": "mem.arena.Arena"}}
+        ]
+      },
+      "mem.arena",
+      "core.list",
+      "core.option"
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": {"kind": "llvm.i32"},
+        "body": [
+          {
+            "kind": "quod.let",
+            "name": "a",
+            "type": {"kind": "llvm.i8_ptr"},
+            "init": {
+              "kind": "llvm.call",
+              "function": "mem.arena.new",
+              "args": [
+                {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4096}
+              ]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "xs_ptr",
+            "type": {"kind": "llvm.i8_ptr"},
+            "init": {
+              "kind": "llvm.call",
+              "function": "alloc.list.list_new",
+              "type_args": [{"kind": "llvm.i32"}],
+              "args": [
+                {"kind": "quod.local_ref", "name": "a"},
+                {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4}
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "alloc.list.list_push",
+              "type_args": [{"kind": "llvm.i32"}],
+              "args": [
+                {"kind": "quod.local_ref", "name": "xs_ptr"},
+                {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 10}
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "alloc.list.list_push",
+              "type_args": [{"kind": "llvm.i32"}],
+              "args": [
+                {"kind": "quod.local_ref", "name": "xs_ptr"},
+                {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 5}
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "alloc.list.list_push",
+              "type_args": [{"kind": "llvm.i32"}],
+              "args": [
+                {"kind": "quod.local_ref", "name": "xs_ptr"},
+                {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 25}
+              ]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "popped",
+            "type": {"kind": "llvm.i32"},
+            "init": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
+          },
+          {
+            "kind": "quod.match",
+            "scrutinee": {
+              "kind": "llvm.call",
+              "function": "alloc.list.list_pop",
+              "type_args": [{"kind": "llvm.i32"}],
+              "args": [
+                {"kind": "quod.local_ref", "name": "xs_ptr"}
+              ]
+            },
+            "arms": [
+              {
+                "variant": "Some",
+                "bindings": ["v"],
+                "body": [
+                  {
+                    "kind": "quod.assign",
+                    "name": "popped",
+                    "value": {"kind": "quod.local_ref", "name": "v"}
+                  }
+                ]
+              },
+              {"variant": "None", "bindings": [], "body": []}
+            ]
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "alloc.list.list_set",
+              "type_args": [{"kind": "llvm.i32"}],
+              "args": [
+                {"kind": "quod.local_ref", "name": "xs_ptr"},
+                {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0},
+                {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 12}
+              ]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "xs",
+            "type": {
+              "kind": "llvm.struct",
+              "name": "alloc.list.List",
+              "type_args": [{"kind": "llvm.i32"}]
+            },
+            "init": {
+              "kind": "quod.load",
+              "ptr": {"kind": "quod.local_ref", "name": "xs_ptr"},
+              "type": {
+                "kind": "llvm.struct",
+                "name": "alloc.list.List",
+                "type_args": [{"kind": "llvm.i32"}]
+              }
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "sl",
+            "type": {
+              "kind": "llvm.struct",
+              "name": "core.list.Slice",
+              "type_args": [{"kind": "llvm.i32"}]
+            },
+            "init": {
+              "kind": "llvm.call",
+              "function": "alloc.list.list_as_slice",
+              "type_args": [{"kind": "llvm.i32"}],
+              "args": [
+                {"kind": "quod.local_ref", "name": "xs"}
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "add",
+              "lhs": {"kind": "quod.local_ref", "name": "popped"},
+              "rhs": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {
+                  "kind": "llvm.call",
+                  "function": "core.list.slice_get",
+                  "type_args": [{"kind": "llvm.i32"}],
+                  "args": [
+                    {"kind": "quod.local_ref", "name": "sl"},
+                    {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
+                  ]
+                },
+                "rhs": {
+                  "kind": "llvm.call",
+                  "function": "core.list.slice_get",
+                  "type_args": [{"kind": "llvm.i32"}],
+                  "args": [
+                    {"kind": "quod.local_ref", "name": "sl"},
+                    {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 1}
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "exit": 42
+  }
+}
