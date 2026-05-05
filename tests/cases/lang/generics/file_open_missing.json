@@ -1,0 +1,54 @@
+{
+  "program": {
+    "imports": [
+      "std.io",
+      "core.io",
+      "core.result"
+    ],
+    "constants": [
+      {"name": ".str.missing", "value": "/this/path/does/not/exist/quod-errno-test"}
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": {"kind": "llvm.i32"},
+        "body": [
+          {
+            "kind": "quod.match",
+            "scrutinee": {
+              "kind": "llvm.call",
+              "function": "std.io.open_read",
+              "args": [
+                {"kind": "quod.string_ref", "name": ".str.missing"}
+              ]
+            },
+            "arms": [
+              {
+                "variant": "Ok",
+                "bindings": ["_f"],
+                "body": [
+                  {
+                    "kind": "quod.return_expr",
+                    "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}
+                  }
+                ]
+              },
+              {
+                "variant": "Err",
+                "bindings": ["_e"],
+                "body": [
+                  {
+                    "kind": "quod.return_expr",
+                    "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {"exit": 42}
+}

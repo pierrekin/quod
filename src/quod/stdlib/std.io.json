@@ -53,6 +53,12 @@
       ],
       "return_type": {"kind": "llvm.i64"},
       "linkage": {"kind": "linkage.libc"}
+    },
+    {
+      "name": "__errno_location",
+      "param_types": [],
+      "return_type": {"kind": "llvm.i8_ptr"},
+      "linkage": {"kind": "linkage.libc"}
     }
   ],
   "structs": [
@@ -143,13 +149,13 @@
                       {
                         "name": "err",
                         "value": {
-                          "kind": "quod.enum_init",
-                          "enum": "core.io.IoError",
-                          "variant": "Other",
-                          "fields": [
+                          "kind": "llvm.call",
+                          "function": "std.io.errno_to_io_error",
+                          "args": [
                             {
-                              "name": "errno",
-                              "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
+                              "kind": "llvm.call",
+                              "function": "std.io.errno_get",
+                              "args": []
                             }
                           ]
                         }
@@ -266,13 +272,13 @@
                       {
                         "name": "err",
                         "value": {
-                          "kind": "quod.enum_init",
-                          "enum": "core.io.IoError",
-                          "variant": "Other",
-                          "fields": [
+                          "kind": "llvm.call",
+                          "function": "std.io.errno_to_io_error",
+                          "args": [
                             {
-                              "name": "errno",
-                              "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
+                              "kind": "llvm.call",
+                              "function": "std.io.errno_get",
+                              "args": []
                             }
                           ]
                         }
@@ -480,6 +486,151 @@
       "claims": []
     },
     {
+      "name": "std.io.errno_get",
+      "params": [],
+      "return_type": {"kind": "llvm.i32"},
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "ptr",
+          "type": {"kind": "llvm.i8_ptr"},
+          "init": {
+            "kind": "llvm.call",
+            "function": "__errno_location",
+            "args": []
+          }
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.load",
+            "ptr": {"kind": "quod.local_ref", "name": "ptr"},
+            "type": {"kind": "llvm.i32"}
+          }
+        }
+      ]
+    },
+    {
+      "name": "std.io.errno_to_io_error",
+      "params": [
+        {"name": "e", "type": {"kind": "llvm.i32"}}
+      ],
+      "return_type": {"kind": "llvm.enum", "name": "core.io.IoError"},
+      "body": [
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {"kind": "llvm.param_ref", "name": "e"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 2}
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.io.IoError",
+                "variant": "NotFound"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {"kind": "llvm.param_ref", "name": "e"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 13}
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.io.IoError",
+                "variant": "PermissionDenied"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {"kind": "llvm.param_ref", "name": "e"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 4}
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.io.IoError",
+                "variant": "Interrupted"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {"kind": "llvm.param_ref", "name": "e"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 17}
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.io.IoError",
+                "variant": "AlreadyExists"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "eq",
+            "lhs": {"kind": "llvm.param_ref", "name": "e"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 11}
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.io.IoError",
+                "variant": "WouldBlock"
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.enum_init",
+            "enum": "core.io.IoError",
+            "variant": "Other",
+            "fields": [
+              {"name": "errno", "value": {"kind": "llvm.param_ref", "name": "e"}}
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "std.io.stdin_file",
       "params": [],
       "return_type": {"kind": "llvm.struct", "name": "std.io.File"},
@@ -580,9 +731,15 @@
                   {
                     "name": "err",
                     "value": {
-                      "kind": "quod.enum_init",
-                      "enum": "core.io.IoError",
-                      "variant": "NotFound"
+                      "kind": "llvm.call",
+                      "function": "std.io.errno_to_io_error",
+                      "args": [
+                        {
+                          "kind": "llvm.call",
+                          "function": "std.io.errno_get",
+                          "args": []
+                        }
+                      ]
                     }
                   }
                 ]
