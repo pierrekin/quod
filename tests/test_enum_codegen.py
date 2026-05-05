@@ -923,3 +923,153 @@ def test_try_rejects_mismatched_return_type():
     )
     with pytest.raises(Exception, match="requires the enclosing function"):
         _build_and_run(prog)
+
+
+# ---------- 16. ? sequential: two ? in one body, first happy, second sad ----------
+
+def test_try_sequential_first_happy_second_sad():
+    """Two `?` in the same function body. The first succeeds (happy),
+    the second fails (sad). Exercises builder continuation from the first
+    happy_bb into the second TryExpr's spill/switch."""
+    maybe = _maybe_enum()
+    get_some = Function(
+        name="get_some", return_type=EnumType(name="Maybe"),
+        body=(ReturnExpr(value=EnumInit(
+            enum="Maybe", variant="Some",
+            fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=10)),),
+        )),),
+    )
+    get_none = Function(
+        name="get_none", return_type=EnumType(name="Maybe"),
+        body=(ReturnExpr(value=EnumInit(enum="Maybe", variant="None")),),
+    )
+    use = Function(
+        name="use_it", return_type=EnumType(name="Maybe"),
+        body=(
+            Let(name="a", type=I64Type(), init=TryExpr(value=Call(function="get_some"))),
+            Let(name="b", type=I64Type(), init=TryExpr(value=Call(function="get_none"))),
+            # Unreachable — second ? propagates None.
+            ReturnExpr(value=EnumInit(
+                enum="Maybe", variant="Some",
+                fields=(FieldInit(name="value", value=BinOp(
+                    op="add", lhs=LocalRef(name="a"), rhs=LocalRef(name="b"),
+                )),),
+            )),
+        ),
+    )
+    main = Function(
+        name="main", return_type=I32Type(),
+        body=(
+            Let(name="r", type=EnumType(name="Maybe"), init=Call(function="use_it")),
+            Match(scrutinee=LocalRef(name="r"), arms=(
+                MatchArm(variant="Some", bindings=("v",),
+                         body=(_print_int_call(LocalRef(name="v")),)),
+                MatchArm(variant="None",
+                         body=(_print_int_call(IntLit(type=I64Type(), value=-1)),)),
+            )),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    prog = Program(
+        constants=(_FMT_INT,), externs=(_PRINTF,), enums=(maybe,),
+        functions=(get_some, get_none, use, main),
+    )
+    assert _build_and_run(prog) == "-1\n"
+
+
+# ---------- 17. ? mid-expression: expr?.field on struct payload ----------
+
+def test_try_mid_expression_field_read():
+    """`get_point()?.x` — ? extracts a struct payload and .field reads
+    a field from it without an intermediate let binding."""
+    point = StructDef(name="Point", fields=(
+        StructField(name="x", type=I64Type()),
+        StructField(name="y", type=I64Type()),
+    ))
+    result = EnumDef(name="PointResult", variants=(
+        EnumVariant(name="Ok", fields=(EnumPayloadField(name="value", type=StructType(name="Point")),)),
+        EnumVariant(name="Err"),
+    ))
+    get_point = Function(
+        name="get_point", return_type=EnumType(name="PointResult"),
+        body=(ReturnExpr(value=EnumInit(
+            enum="PointResult", variant="Ok",
+            fields=(FieldInit(name="value", value=StructInit(
+                type="Point",
+                fields=(
+                    FieldInit(name="x", value=IntLit(type=I64Type(), value=7)),
+                    FieldInit(name="y", value=IntLit(type=I64Type(), value=13)),
+                ),
+            )),),
+        )),),
+    )
+    use = Function(
+        name="use_it", return_type=EnumType(name="PointResult"),
+        body=(
+            # expr?.field — no intermediate let for the struct
+            Let(name="xval", type=I64Type(),
+                init=FieldRead(value=TryExpr(value=Call(function="get_point")), name="x")),
+            _print_int_call(LocalRef(name="xval")),
+            ReturnExpr(value=EnumInit(
+                enum="PointResult", variant="Ok",
+                fields=(FieldInit(name="value", value=StructInit(
+                    type="Point",
+                    fields=(
+                        FieldInit(name="x", value=LocalRef(name="xval")),
+                        FieldInit(name="y", value=IntLit(type=I64Type(), value=0)),
+                    ),
+                )),),
+            )),
+        ),
+    )
+    main = Function(
+        name="main", return_type=I32Type(),
+        body=(
+            ExprStmt(value=Call(function="use_it")),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    prog = Program(
+        constants=(_FMT_INT,), externs=(_PRINTF,),
+        structs=(point,), enums=(result,),
+        functions=(get_point, use, main),
+    )
+    assert _build_and_run(prog) == "7\n"
+
+
+# ---------- 18. ? as call argument (not just let init) ----------
+
+def test_try_as_call_argument():
+    """`printf("%lld", get_some()?)` — ? appears as a sub-expression
+    inside a call argument, not as the init of a let. The basic-block
+    split must not break the enclosing call."""
+    maybe = _maybe_enum()
+    get_some = Function(
+        name="get_some", return_type=EnumType(name="Maybe"),
+        body=(ReturnExpr(value=EnumInit(
+            enum="Maybe", variant="Some",
+            fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=55)),),
+        )),),
+    )
+    use = Function(
+        name="use_it", return_type=EnumType(name="Maybe"),
+        body=(
+            _print_int_call(TryExpr(value=Call(function="get_some"))),
+            ReturnExpr(value=EnumInit(
+                enum="Maybe", variant="Some",
+                fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=0)),),
+            )),
+        ),
+    )
+    main = Function(
+        name="main", return_type=I32Type(),
+        body=(
+            ExprStmt(value=Call(function="use_it")),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    prog = Program(
+        constants=(_FMT_INT,), externs=(_PRINTF,), enums=(maybe,),
+        functions=(get_some, use, main),
+    )
+    assert _build_and_run(prog) == "55\n"

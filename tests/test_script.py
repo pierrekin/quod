@@ -39,6 +39,7 @@ from quod.model import (
     StringRef,
     StructInit,
     StructType,
+    TryExpr,
     VoidType,
     While,
     Widen,
@@ -338,6 +339,21 @@ def test_expr_paren_grouping():
     e = fn.body[0].value
     assert e.op == "mul"
     assert isinstance(e.lhs, BinOp) and e.lhs.op == "add"
+
+
+def test_expr_try_postfix():
+    fn = parse_function("fn f() -> i64 { let v: i64 = foo()? return v }")
+    init = fn.body[0].init
+    assert isinstance(init, TryExpr)
+    assert isinstance(init.value, Call) and init.value.function == "foo"
+
+
+def test_expr_try_chained_with_field_read():
+    fn = parse_function("fn f() -> i64 { let v: i64 = bar()?.x return v }")
+    init = fn.body[0].init
+    assert isinstance(init, FieldRead) and init.name == "x"
+    assert isinstance(init.value, TryExpr)
+    assert isinstance(init.value.value, Call) and init.value.value.function == "bar"
 
 
 # ---------- Typed integer literals (i8 / i16 / i32 / i64 / i1 suffixes) ----------
