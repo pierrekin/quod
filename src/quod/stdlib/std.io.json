@@ -2,85 +2,339 @@
   "imports": [
     "core.str",
     "mem.arena",
-    "core.option"
+    "core.option",
+    "core.result",
+    "core.io"
   ],
   "externs": [
     {
       "name": "open",
       "param_types": [
-        {
-          "kind": "llvm.i8_ptr"
-        },
-        {
-          "kind": "llvm.i32"
-        }
+        {"kind": "llvm.i8_ptr"},
+        {"kind": "llvm.i32"}
       ],
-      "return_type": {
-        "kind": "llvm.i32"
-      },
-      "linkage": {
-        "kind": "linkage.libc"
-      }
+      "return_type": {"kind": "llvm.i32"},
+      "linkage": {"kind": "linkage.libc"}
     },
     {
       "name": "read",
       "param_types": [
-        {
-          "kind": "llvm.i32"
-        },
-        {
-          "kind": "llvm.i8_ptr"
-        },
-        {
-          "kind": "llvm.i64"
-        }
+        {"kind": "llvm.i32"},
+        {"kind": "llvm.i8_ptr"},
+        {"kind": "llvm.i64"}
       ],
-      "return_type": {
-        "kind": "llvm.i64"
-      },
-      "linkage": {
-        "kind": "linkage.libc"
-      },
-      "claims": [
-        {
-          "kind": "return_in_range",
-          "min": -1
-        }
-      ]
+      "return_type": {"kind": "llvm.i64"},
+      "linkage": {"kind": "linkage.libc"},
+      "claims": [{"kind": "return_in_range", "min": -1}]
+    },
+    {
+      "name": "write",
+      "param_types": [
+        {"kind": "llvm.i32"},
+        {"kind": "llvm.i8_ptr"},
+        {"kind": "llvm.i64"}
+      ],
+      "return_type": {"kind": "llvm.i64"},
+      "linkage": {"kind": "linkage.libc"},
+      "claims": [{"kind": "return_in_range", "min": -1}]
     },
     {
       "name": "close",
-      "param_types": [
-        {
-          "kind": "llvm.i32"
-        }
-      ],
-      "return_type": {
-        "kind": "llvm.i32"
-      },
-      "linkage": {
-        "kind": "linkage.libc"
-      }
+      "param_types": [{"kind": "llvm.i32"}],
+      "return_type": {"kind": "llvm.i32"},
+      "linkage": {"kind": "linkage.libc"}
     },
     {
       "name": "lseek",
       "param_types": [
-        {
-          "kind": "llvm.i32"
-        },
-        {
-          "kind": "llvm.i64"
-        },
-        {
-          "kind": "llvm.i32"
-        }
+        {"kind": "llvm.i32"},
+        {"kind": "llvm.i64"},
+        {"kind": "llvm.i32"}
       ],
-      "return_type": {
-        "kind": "llvm.i64"
-      },
-      "linkage": {
-        "kind": "linkage.libc"
-      }
+      "return_type": {"kind": "llvm.i64"},
+      "linkage": {"kind": "linkage.libc"}
+    }
+  ],
+  "structs": [
+    {
+      "name": "std.io.File",
+      "fields": [
+        {"name": "fd", "type": {"kind": "llvm.i32"}}
+      ]
+    }
+  ],
+  "impls": [
+    {
+      "trait": "core.io.Reader",
+      "for_type": {"kind": "llvm.struct", "name": "std.io.File"},
+      "methods": [
+        {
+          "name": "read",
+          "params": [
+            {"name": "handle", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "buf", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "n", "type": {"kind": "llvm.usize"}}
+          ],
+          "return_type": {
+            "kind": "llvm.enum",
+            "name": "core.result.Result",
+            "type_args": [
+              {"kind": "llvm.usize"},
+              {"kind": "llvm.enum", "name": "core.io.IoError"}
+            ]
+          },
+          "body": [
+            {
+              "kind": "quod.let",
+              "name": "fd",
+              "type": {"kind": "llvm.i32"},
+              "init": {
+                "kind": "quod.load_field",
+                "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                "struct_type": "std.io.File",
+                "name": "fd"
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "n_signed",
+              "type": {"kind": "llvm.i64"},
+              "init": {
+                "kind": "quod.widen",
+                "value": {"kind": "llvm.param_ref", "name": "n"},
+                "target": {"kind": "llvm.i64"},
+                "signed": false
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "rc",
+              "type": {"kind": "llvm.i64"},
+              "init": {
+                "kind": "llvm.call",
+                "function": "read",
+                "args": [
+                  {"kind": "quod.local_ref", "name": "fd"},
+                  {"kind": "llvm.param_ref", "name": "buf"},
+                  {"kind": "quod.local_ref", "name": "n_signed"}
+                ]
+              }
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "slt",
+                "lhs": {"kind": "quod.local_ref", "name": "rc"},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
+              },
+              "then_body": [
+                {
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "quod.enum_init",
+                    "enum": "core.result.Result",
+                    "type_args": [
+                      {"kind": "llvm.usize"},
+                      {"kind": "llvm.enum", "name": "core.io.IoError"}
+                    ],
+                    "variant": "Err",
+                    "fields": [
+                      {
+                        "name": "err",
+                        "value": {
+                          "kind": "quod.enum_init",
+                          "enum": "core.io.IoError",
+                          "variant": "Other",
+                          "fields": [
+                            {
+                              "name": "errno",
+                              "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.result.Result",
+                "type_args": [
+                  {"kind": "llvm.usize"},
+                  {"kind": "llvm.enum", "name": "core.io.IoError"}
+                ],
+                "variant": "Ok",
+                "fields": [
+                  {
+                    "name": "value",
+                    "value": {
+                      "kind": "quod.widen",
+                      "value": {"kind": "quod.local_ref", "name": "rc"},
+                      "target": {"kind": "llvm.usize"},
+                      "signed": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "trait": "core.io.Writer",
+      "for_type": {"kind": "llvm.struct", "name": "std.io.File"},
+      "methods": [
+        {
+          "name": "write",
+          "params": [
+            {"name": "handle", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "buf", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "n", "type": {"kind": "llvm.usize"}}
+          ],
+          "return_type": {
+            "kind": "llvm.enum",
+            "name": "core.result.Result",
+            "type_args": [
+              {"kind": "llvm.usize"},
+              {"kind": "llvm.enum", "name": "core.io.IoError"}
+            ]
+          },
+          "body": [
+            {
+              "kind": "quod.let",
+              "name": "fd",
+              "type": {"kind": "llvm.i32"},
+              "init": {
+                "kind": "quod.load_field",
+                "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                "struct_type": "std.io.File",
+                "name": "fd"
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "n_signed",
+              "type": {"kind": "llvm.i64"},
+              "init": {
+                "kind": "quod.widen",
+                "value": {"kind": "llvm.param_ref", "name": "n"},
+                "target": {"kind": "llvm.i64"},
+                "signed": false
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "rc",
+              "type": {"kind": "llvm.i64"},
+              "init": {
+                "kind": "llvm.call",
+                "function": "write",
+                "args": [
+                  {"kind": "quod.local_ref", "name": "fd"},
+                  {"kind": "llvm.param_ref", "name": "buf"},
+                  {"kind": "quod.local_ref", "name": "n_signed"}
+                ]
+              }
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "slt",
+                "lhs": {"kind": "quod.local_ref", "name": "rc"},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
+              },
+              "then_body": [
+                {
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "quod.enum_init",
+                    "enum": "core.result.Result",
+                    "type_args": [
+                      {"kind": "llvm.usize"},
+                      {"kind": "llvm.enum", "name": "core.io.IoError"}
+                    ],
+                    "variant": "Err",
+                    "fields": [
+                      {
+                        "name": "err",
+                        "value": {
+                          "kind": "quod.enum_init",
+                          "enum": "core.io.IoError",
+                          "variant": "Other",
+                          "fields": [
+                            {
+                              "name": "errno",
+                              "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.result.Result",
+                "type_args": [
+                  {"kind": "llvm.usize"},
+                  {"kind": "llvm.enum", "name": "core.io.IoError"}
+                ],
+                "variant": "Ok",
+                "fields": [
+                  {
+                    "name": "value",
+                    "value": {
+                      "kind": "quod.widen",
+                      "value": {"kind": "quod.local_ref", "name": "rc"},
+                      "target": {"kind": "llvm.usize"},
+                      "signed": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "flush",
+          "params": [
+            {"name": "handle", "type": {"kind": "llvm.i8_ptr"}}
+          ],
+          "return_type": {
+            "kind": "llvm.enum",
+            "name": "core.option.Option",
+            "type_args": [
+              {"kind": "llvm.enum", "name": "core.io.IoError"}
+            ]
+          },
+          "body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.option.Option",
+                "type_args": [
+                  {"kind": "llvm.enum", "name": "core.io.IoError"}
+                ],
+                "variant": "None"
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "functions": [
@@ -224,6 +478,170 @@
         }
       ],
       "claims": []
+    },
+    {
+      "name": "std.io.stdin_file",
+      "params": [],
+      "return_type": {"kind": "llvm.struct", "name": "std.io.File"},
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.struct_init",
+            "type": "std.io.File",
+            "fields": [
+              {"name": "fd", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "std.io.stdout_file",
+      "params": [],
+      "return_type": {"kind": "llvm.struct", "name": "std.io.File"},
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.struct_init",
+            "type": "std.io.File",
+            "fields": [
+              {"name": "fd", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "std.io.stderr_file",
+      "params": [],
+      "return_type": {"kind": "llvm.struct", "name": "std.io.File"},
+      "body": [
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.struct_init",
+            "type": "std.io.File",
+            "fields": [
+              {"name": "fd", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 2}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "std.io.open_read",
+      "params": [
+        {"name": "path", "type": {"kind": "llvm.i8_ptr"}}
+      ],
+      "return_type": {
+        "kind": "llvm.enum",
+        "name": "core.result.Result",
+        "type_args": [
+          {"kind": "llvm.struct", "name": "std.io.File"},
+          {"kind": "llvm.enum", "name": "core.io.IoError"}
+        ]
+      },
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "fd",
+          "type": {"kind": "llvm.i32"},
+          "init": {
+            "kind": "llvm.call",
+            "function": "open",
+            "args": [
+              {"kind": "llvm.param_ref", "name": "path"},
+              {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
+            ]
+          }
+        },
+        {
+          "kind": "quod.if",
+          "cond": {
+            "kind": "llvm.binop",
+            "op": "slt",
+            "lhs": {"kind": "quod.local_ref", "name": "fd"},
+            "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
+          },
+          "then_body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.result.Result",
+                "type_args": [
+                  {"kind": "llvm.struct", "name": "std.io.File"},
+                  {"kind": "llvm.enum", "name": "core.io.IoError"}
+                ],
+                "variant": "Err",
+                "fields": [
+                  {
+                    "name": "err",
+                    "value": {
+                      "kind": "quod.enum_init",
+                      "enum": "core.io.IoError",
+                      "variant": "NotFound"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "else_body": []
+        },
+        {
+          "kind": "quod.return_expr",
+          "value": {
+            "kind": "quod.enum_init",
+            "enum": "core.result.Result",
+            "type_args": [
+              {"kind": "llvm.struct", "name": "std.io.File"},
+              {"kind": "llvm.enum", "name": "core.io.IoError"}
+            ],
+            "variant": "Ok",
+            "fields": [
+              {
+                "name": "value",
+                "value": {
+                  "kind": "quod.struct_init",
+                  "type": "std.io.File",
+                  "fields": [
+                    {"name": "fd", "value": {"kind": "quod.local_ref", "name": "fd"}}
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "std.io.file_close",
+      "params": [
+        {"name": "file", "type": {"kind": "llvm.struct", "name": "std.io.File"}}
+      ],
+      "return_type": {"kind": "llvm.void"},
+      "body": [
+        {
+          "kind": "quod.let",
+          "name": "_rc",
+          "type": {"kind": "llvm.i32"},
+          "init": {
+            "kind": "llvm.call",
+            "function": "close",
+            "args": [
+              {
+                "kind": "quod.field",
+                "value": {"kind": "llvm.param_ref", "name": "file"},
+                "name": "fd"
+              }
+            ]
+          }
+        },
+        {"kind": "quod.return"}
+      ]
     },
     {
       "name": "std.io.read_file_to_arena",
