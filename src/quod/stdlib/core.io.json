@@ -1,0 +1,422 @@
+{
+  "imports": [
+    "core.result",
+    "core.option",
+    "core.mem"
+  ],
+  "enums": [
+    {
+      "name": "core.io.IoError",
+      "variants": [
+        {"name": "NotFound", "fields": []},
+        {"name": "PermissionDenied", "fields": []},
+        {"name": "Interrupted", "fields": []},
+        {"name": "AlreadyExists", "fields": []},
+        {"name": "WouldBlock", "fields": []},
+        {
+          "name": "Other",
+          "fields": [
+            {"name": "errno", "type": {"kind": "llvm.i32"}}
+          ]
+        }
+      ]
+    }
+  ],
+  "structs": [
+    {
+      "name": "core.io.BytesReader",
+      "fields": [
+        {"name": "ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "len", "type": {"kind": "llvm.usize"}},
+        {"name": "pos", "type": {"kind": "llvm.usize"}}
+      ]
+    },
+    {
+      "name": "core.io.BytesWriter",
+      "fields": [
+        {"name": "ptr", "type": {"kind": "llvm.i8_ptr"}},
+        {"name": "cap", "type": {"kind": "llvm.usize"}},
+        {"name": "pos", "type": {"kind": "llvm.usize"}}
+      ]
+    }
+  ],
+  "traits": [
+    {
+      "name": "core.io.Reader",
+      "methods": [
+        {
+          "name": "read",
+          "params": [
+            {"name": "handle", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "buf", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "n", "type": {"kind": "llvm.usize"}}
+          ],
+          "return_type": {
+            "kind": "llvm.enum",
+            "name": "core.result.Result",
+            "type_args": [
+              {"kind": "llvm.usize"},
+              {"kind": "llvm.enum", "name": "core.io.IoError"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "core.io.Writer",
+      "methods": [
+        {
+          "name": "write",
+          "params": [
+            {"name": "handle", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "buf", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "n", "type": {"kind": "llvm.usize"}}
+          ],
+          "return_type": {
+            "kind": "llvm.enum",
+            "name": "core.result.Result",
+            "type_args": [
+              {"kind": "llvm.usize"},
+              {"kind": "llvm.enum", "name": "core.io.IoError"}
+            ]
+          }
+        },
+        {
+          "name": "flush",
+          "params": [
+            {"name": "handle", "type": {"kind": "llvm.i8_ptr"}}
+          ],
+          "return_type": {
+            "kind": "llvm.enum",
+            "name": "core.option.Option",
+            "type_args": [
+              {"kind": "llvm.enum", "name": "core.io.IoError"}
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "impls": [
+    {
+      "trait": "core.io.Reader",
+      "for_type": {"kind": "llvm.struct", "name": "core.io.BytesReader"},
+      "methods": [
+        {
+          "name": "read",
+          "params": [
+            {"name": "handle", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "buf", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "n", "type": {"kind": "llvm.usize"}}
+          ],
+          "return_type": {
+            "kind": "llvm.enum",
+            "name": "core.result.Result",
+            "type_args": [
+              {"kind": "llvm.usize"},
+              {"kind": "llvm.enum", "name": "core.io.IoError"}
+            ]
+          },
+          "body": [
+            {
+              "kind": "quod.let",
+              "name": "buf_ptr",
+              "type": {"kind": "llvm.i8_ptr"},
+              "init": {
+                "kind": "quod.load_field",
+                "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                "struct_type": "core.io.BytesReader",
+                "name": "ptr"
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "buf_len",
+              "type": {"kind": "llvm.usize"},
+              "init": {
+                "kind": "quod.load_field",
+                "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                "struct_type": "core.io.BytesReader",
+                "name": "len"
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "cur_pos",
+              "type": {"kind": "llvm.usize"},
+              "init": {
+                "kind": "quod.load_field",
+                "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                "struct_type": "core.io.BytesReader",
+                "name": "pos"
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "remaining",
+              "type": {"kind": "llvm.usize"},
+              "init": {
+                "kind": "llvm.binop",
+                "op": "sub",
+                "lhs": {"kind": "quod.local_ref", "name": "buf_len"},
+                "rhs": {"kind": "quod.local_ref", "name": "cur_pos"}
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "take",
+              "type": {"kind": "llvm.usize"},
+              "init": {"kind": "quod.local_ref", "name": "remaining"}
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "ult",
+                "lhs": {"kind": "llvm.param_ref", "name": "n"},
+                "rhs": {"kind": "quod.local_ref", "name": "remaining"}
+              },
+              "then_body": [
+                {
+                  "kind": "quod.assign",
+                  "name": "take",
+                  "value": {"kind": "llvm.param_ref", "name": "n"}
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "core.mem.copy_overlapping",
+                "args": [
+                  {"kind": "llvm.param_ref", "name": "buf"},
+                  {
+                    "kind": "quod.ptr_offset",
+                    "base": {"kind": "quod.local_ref", "name": "buf_ptr"},
+                    "offset": {
+                      "kind": "quod.widen",
+                      "value": {"kind": "quod.local_ref", "name": "cur_pos"},
+                      "target": {"kind": "llvm.i64"},
+                      "signed": false
+                    }
+                  },
+                  {
+                    "kind": "quod.widen",
+                    "value": {"kind": "quod.local_ref", "name": "take"},
+                    "target": {"kind": "llvm.i64"},
+                    "signed": false
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.store_field",
+              "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+              "struct_type": "core.io.BytesReader",
+              "name": "pos",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {"kind": "quod.local_ref", "name": "cur_pos"},
+                "rhs": {"kind": "quod.local_ref", "name": "take"}
+              }
+            },
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.result.Result",
+                "type_args": [
+                  {"kind": "llvm.usize"},
+                  {"kind": "llvm.enum", "name": "core.io.IoError"}
+                ],
+                "variant": "Ok",
+                "fields": [
+                  {
+                    "name": "value",
+                    "value": {"kind": "quod.local_ref", "name": "take"}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "trait": "core.io.Writer",
+      "for_type": {"kind": "llvm.struct", "name": "core.io.BytesWriter"},
+      "methods": [
+        {
+          "name": "write",
+          "params": [
+            {"name": "handle", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "buf", "type": {"kind": "llvm.i8_ptr"}},
+            {"name": "n", "type": {"kind": "llvm.usize"}}
+          ],
+          "return_type": {
+            "kind": "llvm.enum",
+            "name": "core.result.Result",
+            "type_args": [
+              {"kind": "llvm.usize"},
+              {"kind": "llvm.enum", "name": "core.io.IoError"}
+            ]
+          },
+          "body": [
+            {
+              "kind": "quod.let",
+              "name": "buf_ptr",
+              "type": {"kind": "llvm.i8_ptr"},
+              "init": {
+                "kind": "quod.load_field",
+                "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                "struct_type": "core.io.BytesWriter",
+                "name": "ptr"
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "buf_cap",
+              "type": {"kind": "llvm.usize"},
+              "init": {
+                "kind": "quod.load_field",
+                "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                "struct_type": "core.io.BytesWriter",
+                "name": "cap"
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "cur_pos",
+              "type": {"kind": "llvm.usize"},
+              "init": {
+                "kind": "quod.load_field",
+                "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+                "struct_type": "core.io.BytesWriter",
+                "name": "pos"
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "space_left",
+              "type": {"kind": "llvm.usize"},
+              "init": {
+                "kind": "llvm.binop",
+                "op": "sub",
+                "lhs": {"kind": "quod.local_ref", "name": "buf_cap"},
+                "rhs": {"kind": "quod.local_ref", "name": "cur_pos"}
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "take",
+              "type": {"kind": "llvm.usize"},
+              "init": {"kind": "quod.local_ref", "name": "space_left"}
+            },
+            {
+              "kind": "quod.if",
+              "cond": {
+                "kind": "llvm.binop",
+                "op": "ult",
+                "lhs": {"kind": "llvm.param_ref", "name": "n"},
+                "rhs": {"kind": "quod.local_ref", "name": "space_left"}
+              },
+              "then_body": [
+                {
+                  "kind": "quod.assign",
+                  "name": "take",
+                  "value": {"kind": "llvm.param_ref", "name": "n"}
+                }
+              ],
+              "else_body": []
+            },
+            {
+              "kind": "quod.expr_stmt",
+              "value": {
+                "kind": "llvm.call",
+                "function": "core.mem.copy_overlapping",
+                "args": [
+                  {
+                    "kind": "quod.ptr_offset",
+                    "base": {"kind": "quod.local_ref", "name": "buf_ptr"},
+                    "offset": {
+                      "kind": "quod.widen",
+                      "value": {"kind": "quod.local_ref", "name": "cur_pos"},
+                      "target": {"kind": "llvm.i64"},
+                      "signed": false
+                    }
+                  },
+                  {"kind": "llvm.param_ref", "name": "buf"},
+                  {
+                    "kind": "quod.widen",
+                    "value": {"kind": "quod.local_ref", "name": "take"},
+                    "target": {"kind": "llvm.i64"},
+                    "signed": false
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.store_field",
+              "ptr": {"kind": "llvm.param_ref", "name": "handle"},
+              "struct_type": "core.io.BytesWriter",
+              "name": "pos",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {"kind": "quod.local_ref", "name": "cur_pos"},
+                "rhs": {"kind": "quod.local_ref", "name": "take"}
+              }
+            },
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.result.Result",
+                "type_args": [
+                  {"kind": "llvm.usize"},
+                  {"kind": "llvm.enum", "name": "core.io.IoError"}
+                ],
+                "variant": "Ok",
+                "fields": [
+                  {
+                    "name": "value",
+                    "value": {"kind": "quod.local_ref", "name": "take"}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "flush",
+          "params": [
+            {"name": "handle", "type": {"kind": "llvm.i8_ptr"}}
+          ],
+          "return_type": {
+            "kind": "llvm.enum",
+            "name": "core.option.Option",
+            "type_args": [
+              {"kind": "llvm.enum", "name": "core.io.IoError"}
+            ]
+          },
+          "body": [
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.enum_init",
+                "enum": "core.option.Option",
+                "type_args": [
+                  {"kind": "llvm.enum", "name": "core.io.IoError"}
+                ],
+                "variant": "None"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

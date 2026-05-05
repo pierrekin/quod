@@ -524,13 +524,13 @@ def _size_of_quod_type(
     aligned for the most-aligned field).
     """
     match t:
-        case I1Type() | I8Type():
+        case I1Type() | I8Type() | U8Type():
             return (1, 1)
-        case I16Type():
+        case I16Type() | U16Type():
             return (2, 2)
-        case I32Type():
+        case I32Type() | U32Type():
             return (4, 4)
-        case I64Type() | I8PtrType():
+        case I64Type() | U64Type() | IsizeType() | UsizeType() | I8PtrType():
             return (8, 8)
         case StructType(name=name):
             sd = struct_defs.get(name)
