@@ -14,12 +14,18 @@ from __future__ import annotations
 import pytest
 
 from quod.model import (
+    Assign,
+    Call,
     EnumDef,
     EnumInit,
     EnumPayloadField,
     EnumType,
     EnumVariant,
+    ExprStmt,
     FieldInit,
+    FieldRead,
+    FieldSet,
+    For,
     Function,
     I32Type,
     I64Type,
@@ -28,23 +34,41 @@ from quod.model import (
     LocalRef,
     Match,
     MatchArm,
+    Param,
+    ParamRef,
     Program,
+    Return,
     ReturnExpr,
     StructDef,
     StructField,
     StructInit,
     StructType,
+    TryExpr,
+    VoidType,
 )
 from quod.validate import (
+    ASSIGN_UNDECLARED_LOCAL,
+    BARE_RETURN_NON_VOID,
     DUPLICATE_BINDING,
     DUPLICATE_FIELD_INIT,
     DUPLICATE_MATCH_ARM,
     EXTRA_FIELD_INIT,
     EXTRA_MATCH_ARM,
+    FIELDSET_NON_STRUCT_LOCAL,
+    FIELDSET_UNDECLARED_LOCAL,
+    FIELD_READ_NON_STRUCT,
+    FOR_VAR_CONFLICT,
+    LOCAL_DECLARED_TWICE,
+    LOCAL_SHADOWS_PARAM,
     MATCH_ARITY,
     MISSING_FIELD_INIT,
     MULTIPLE_WILDCARDS,
     NON_EXHAUSTIVE_MATCH,
+    RETURN_EXPR_VOID,
+    TRY_INELIGIBLE_ENUM,
+    TRY_RETURN_TYPE_MISMATCH,
+    UNDECLARED_LOCAL,
+    UNDEFINED_FUNCTION,
     UNKNOWN_FIELD,
     UNKNOWN_VARIANT,
     UNRESOLVED_ENUM,
@@ -461,3 +485,241 @@ def test_validate_or_raise_raises_validation_error():
     with pytest.raises(ValidationError) as exc_info:
         validate_or_raise(prog)
     assert any(d.code == UNRESOLVED_STRUCT for d in exc_info.value.diagnostics)
+
+
+# ---------- Phase 2: scope checks ----------
+
+
+def test_undeclared_local():
+    fn = Function(
+        name="f", return_type=I32Type(),
+        body=(ReturnExpr(value=LocalRef(name="ghost")),),
+    )
+    diags = validate(Program(functions=(fn,)))
+    assert UNDECLARED_LOCAL in _codes(diags)
+
+
+def test_local_declared_twice():
+    fn = Function(
+        name="f", return_type=I32Type(),
+        body=(
+            Let(name="x", type=I64Type(), init=IntLit(type=I64Type(), value=1)),
+            Let(name="x", type=I64Type(), init=IntLit(type=I64Type(), value=2)),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    diags = validate(Program(functions=(fn,)))
+    assert LOCAL_DECLARED_TWICE in _codes(diags)
+
+
+def test_local_shadows_param():
+    fn = Function(
+        name="f", return_type=I32Type(),
+        params=(Param(name="x", type=I32Type()),),
+        body=(
+            Let(name="x", type=I64Type(), init=IntLit(type=I64Type(), value=1)),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    diags = validate(Program(functions=(fn,)))
+    assert LOCAL_SHADOWS_PARAM in _codes(diags)
+
+
+def test_for_var_conflict():
+    fn = Function(
+        name="f", return_type=I32Type(),
+        body=(
+            Let(name="i", type=I64Type(), init=IntLit(type=I64Type(), value=0)),
+            For(var="i", type=I64Type(),
+                lo=IntLit(type=I64Type(), value=0),
+                hi=IntLit(type=I64Type(), value=10),
+                body=()),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    diags = validate(Program(functions=(fn,)))
+    assert FOR_VAR_CONFLICT in _codes(diags)
+
+
+def test_undefined_function_call():
+    fn = Function(
+        name="f", return_type=I32Type(),
+        body=(
+            ExprStmt(value=Call(function="ghost_fn", args=())),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    diags = validate(Program(functions=(fn,)))
+    assert UNDEFINED_FUNCTION in _codes(diags)
+
+
+def test_assign_undeclared_local():
+    fn = Function(
+        name="f", return_type=I32Type(),
+        body=(
+            Assign(name="ghost", value=IntLit(type=I64Type(), value=1)),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    diags = validate(Program(functions=(fn,)))
+    assert ASSIGN_UNDECLARED_LOCAL in _codes(diags)
+
+
+def test_fieldset_undeclared_local():
+    fn = Function(
+        name="f", return_type=I32Type(),
+        body=(
+            FieldSet(local="ghost", name="x",
+                     value=IntLit(type=I64Type(), value=1)),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    diags = validate(Program(functions=(fn,)))
+    assert FIELDSET_UNDECLARED_LOCAL in _codes(diags)
+
+
+def test_bare_return_non_void():
+    fn = Function(
+        name="f", return_type=I32Type(),
+        body=(Return(),),
+    )
+    diags = validate(Program(functions=(fn,)))
+    assert BARE_RETURN_NON_VOID in _codes(diags)
+
+
+def test_return_expr_void_function():
+    fn = Function(
+        name="f", return_type=VoidType(),
+        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+    )
+    diags = validate(Program(functions=(fn,)))
+    assert RETURN_EXPR_VOID in _codes(diags)
+
+
+def test_match_arm_bindings_introduce_local_in_arm_scope():
+    """Inside a Some arm, `v` must be referenceable as a local — the
+    validator must push the binding before walking the arm body."""
+    fn = Function(
+        name="f", return_type=I32Type(),
+        body=(
+            Match(
+                scrutinee=EnumInit(
+                    enum="Maybe", variant="Some",
+                    fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=1)),),
+                ),
+                arms=(
+                    MatchArm(variant="Some", bindings=("v",),
+                             body=(ReturnExpr(value=LocalRef(name="v")),)),
+                    MatchArm(variant="None",
+                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
+                ),
+            ),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    diags = validate(Program(enums=(_maybe_enum(),), functions=(fn,)))
+    assert UNDECLARED_LOCAL not in _codes(diags)
+
+
+# ---------- Phase 2: try-operator checks ----------
+
+
+def test_try_ineligible_enum():
+    """A 3-variant enum is not ?-eligible."""
+    bad = EnumDef(name="Bad", variants=(
+        EnumVariant(name="A"),
+        EnumVariant(name="B"),
+        EnumVariant(name="C"),
+    ))
+    fn = Function(
+        name="f", return_type=EnumType(name="Bad"),
+        body=(
+            ReturnExpr(value=TryExpr(value=EnumInit(
+                enum="Bad", variant="A", fields=(),
+            ))),
+        ),
+    )
+    diags = validate(Program(enums=(bad,), functions=(fn,)))
+    assert TRY_INELIGIBLE_ENUM in _codes(diags)
+
+
+def test_try_return_type_mismatch():
+    """Function returning Maybe but ? is on Result — should error."""
+    result = EnumDef(name="R", variants=(
+        EnumVariant(name="Ok", fields=(EnumPayloadField(name="value", type=I64Type()),)),
+        EnumVariant(name="Err"),
+    ))
+    fn = Function(
+        name="f", return_type=EnumType(name="Maybe"),
+        body=(
+            Let(name="v", type=I64Type(), init=TryExpr(value=EnumInit(
+                enum="R", variant="Ok",
+                fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=1)),),
+            ))),
+            ReturnExpr(value=EnumInit(enum="Maybe", variant="None", fields=())),
+        ),
+    )
+    diags = validate(Program(enums=(_maybe_enum(), result), functions=(fn,)))
+    assert TRY_RETURN_TYPE_MISMATCH in _codes(diags)
+
+
+# ---------- Phase 3: type-aware checks ----------
+
+
+def test_field_read_on_non_struct():
+    """Reading .x off an i64 local should be flagged."""
+    fn = Function(
+        name="f", return_type=I64Type(),
+        body=(
+            Let(name="n", type=I64Type(), init=IntLit(type=I64Type(), value=42)),
+            ReturnExpr(value=FieldRead(value=LocalRef(name="n"), name="x")),
+        ),
+    )
+    diags = validate(Program(functions=(fn,)))
+    assert FIELD_READ_NON_STRUCT in _codes(diags)
+
+
+def test_field_read_unknown_field_via_inferred_type():
+    """LocalRef → struct type inference → field lookup → unknown field error."""
+    point = StructDef(name="Point", fields=(
+        StructField(name="x", type=I64Type()),
+        StructField(name="y", type=I64Type()),
+    ))
+    fn = Function(
+        name="f", return_type=I64Type(),
+        body=(
+            Let(name="p", type=StructType(name="Point"),
+                init=StructInit(type="Point", fields=(
+                    FieldInit(name="x", value=IntLit(type=I64Type(), value=1)),
+                    FieldInit(name="y", value=IntLit(type=I64Type(), value=2)),
+                ))),
+            ReturnExpr(value=FieldRead(value=LocalRef(name="p"), name="z")),
+        ),
+    )
+    diags = validate(Program(structs=(point,), functions=(fn,)))
+    assert UNKNOWN_FIELD in _codes(diags)
+
+
+def test_fieldset_non_struct_local():
+    fn = Function(
+        name="f", return_type=I32Type(),
+        body=(
+            Let(name="n", type=I64Type(), init=IntLit(type=I64Type(), value=0)),
+            FieldSet(local="n", name="x", value=IntLit(type=I64Type(), value=1)),
+            ReturnExpr(value=IntLit(type=I32Type(), value=0)),
+        ),
+    )
+    diags = validate(Program(functions=(fn,)))
+    assert FIELDSET_NON_STRUCT_LOCAL in _codes(diags)
+
+
+def test_param_ref_resolves():
+    """ParamRef to a declared param should NOT error."""
+    fn = Function(
+        name="f", return_type=I32Type(),
+        params=(Param(name="x", type=I32Type()),),
+        body=(ReturnExpr(value=ParamRef(name="x")),),
+    )
+    diags = validate(Program(functions=(fn,)))
+    # No undeclared-anything diagnostics.
+    assert not any(d.code in (UNDECLARED_LOCAL,) for d in diags)

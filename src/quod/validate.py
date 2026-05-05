@@ -28,18 +28,32 @@ from quod.model import (
     Assign,
     BinOp,
     Call,
+    CharLit,
     EnumDef,
     EnumInit,
     EnumType,
     ExprStmt,
+    ExternFunction,
     FieldRead,
     FieldSet,
     For,
+    Function,
+    I1Type,
+    I8PtrType,
+    I8Type,
+    I16Type,
+    I32Type,
+    I64Type,
     If,
+    IntLit,
     Let,
     Load,
     LoadField,
+    LocalRef,
     Match,
+    NullPtr,
+    Param,
+    ParamRef,
     Program,
     PtrOffset,
     Return,
@@ -49,6 +63,7 @@ from quod.model import (
     SizeOf,
     Store,
     StoreField,
+    StringRef,
     StructDef,
     StructInit,
     StructType,
@@ -79,6 +94,25 @@ WILDCARD_BINDS = "wildcard_binds"
 MULTIPLE_WILDCARDS = "multiple_wildcards"
 DUPLICATE_BINDING = "duplicate_binding"
 MATCH_ARITY = "match_arity"
+
+# Phase 2: scope and reference checks.
+UNDECLARED_LOCAL = "undeclared_local"
+UNDEFINED_FUNCTION = "undefined_function"
+LOCAL_DECLARED_TWICE = "local_declared_twice"
+LOCAL_SHADOWS_PARAM = "local_shadows_param"
+FOR_VAR_CONFLICT = "for_var_conflict"
+TRY_INELIGIBLE_ENUM = "try_ineligible_enum"
+TRY_RETURN_TYPE_MISMATCH = "try_return_type_mismatch"
+TRY_NON_ENUM = "try_non_enum"
+BARE_RETURN_NON_VOID = "bare_return_non_void"
+RETURN_EXPR_VOID = "return_expr_void"
+ASSIGN_UNDECLARED_LOCAL = "assign_undeclared_local"
+FIELDSET_UNDECLARED_LOCAL = "fieldset_undeclared_local"
+UNDECLARED_PARAM = "undeclared_param"
+
+# Phase 3: type-aware checks (downstream of inference).
+FIELD_READ_NON_STRUCT = "field_read_non_struct"
+FIELDSET_NON_STRUCT_LOCAL = "fieldset_non_struct_local"
 
 
 # ---------- Diagnostic ----------
@@ -134,14 +168,33 @@ class ValidationError(Exception):
 
 
 @dataclass
+class _CallableSig:
+    """Just enough about a function/extern to validate calls and
+    type-infer call expressions."""
+    return_type: object  # a Type node from model.py
+    is_void: bool
+
+
+@dataclass
 class _Ctx:
-    """Per-validation state. `where` is the current Location; we mutate
-    its `detail` as we descend into expressions / statements so any
-    diagnostic emitted gets a meaningful position."""
+    """Per-validation state. `where` is the current Location; mutated as
+    we descend so each diagnostic has a meaningful position.
+
+    The function-scoped state (`fn`, `params`, `locals`, `arm_bindings`)
+    is only populated during a function-body walk; outside of that it's
+    None / empty.
+    """
     structs: dict[str, StructDef]
     enums: dict[str, EnumDef]
+    callables: dict[str, _CallableSig]
     diagnostics: list[Diagnostic] = field(default_factory=list)
     where: Location = field(default_factory=Location)
+    # Per-function fields (set up by _check_function before walking):
+    fn: Function | None = None
+    params: dict[str, object] = field(default_factory=dict)   # name -> Type
+    locals: dict[str, object] = field(default_factory=dict)   # name -> Type
+    # Stack of arm-scoped binding maps (innermost last).
+    arm_bindings: list[dict[str, object]] = field(default_factory=list)
 
     def emit(self, code: str, message: str, *, detail: str | None = None) -> None:
         loc = self.where if detail is None else Location(
@@ -155,6 +208,18 @@ class _Ctx:
             severity="error", code=code, message=message, location=loc,
         ))
 
+    def lookup_local(self, name: str) -> object | None:
+        """Look up a local name in scope: arm bindings (innermost first),
+        then function locals, then params. Returns the declared Type or None."""
+        for scope in reversed(self.arm_bindings):
+            if name in scope:
+                return scope[name]
+        if name in self.locals:
+            return self.locals[name]
+        if name in self.params:
+            return self.params[name]
+        return None
+
 
 # ---------- Entry point ----------
 
@@ -164,7 +229,18 @@ def validate(program: Program) -> tuple[Diagnostic, ...]:
     tuple means the program passed validation."""
     structs = {sd.name: sd for sd in program.structs}
     enums = {ed.name: ed for ed in program.enums}
-    ctx = _Ctx(structs=structs, enums=enums)
+    callables: dict[str, _CallableSig] = {}
+    for ext in program.externs:
+        callables[ext.name] = _CallableSig(
+            return_type=ext.return_type,
+            is_void=isinstance(ext.return_type, VoidType),
+        )
+    for fn in program.functions:
+        callables[fn.name] = _CallableSig(
+            return_type=fn.return_type,
+            is_void=isinstance(fn.return_type, VoidType),
+        )
+    ctx = _Ctx(structs=structs, enums=enums, callables=callables)
 
     # Type refs in struct field types.
     for sd in program.structs:
@@ -181,14 +257,82 @@ def validate(program: Program) -> tuple[Diagnostic, ...]:
 
     # Function signatures + bodies.
     for fn in program.functions:
-        ctx.where = Location(function=fn.name)
-        _check_type(ctx, fn.return_type, detail="return type")
-        for p in fn.params:
-            _check_type(ctx, p.type, detail=f"param {p.name!r}")
-        for stmt in fn.body:
-            _check_stmt(ctx, stmt)
+        _check_function(ctx, fn)
 
     return tuple(ctx.diagnostics)
+
+
+def _check_function(ctx: _Ctx, fn: Function) -> None:
+    """Set up per-function scope, walk body, then tear down."""
+    ctx.where = Location(function=fn.name)
+    ctx.fn = fn
+    ctx.params = {p.name: p.type for p in fn.params}
+    ctx.locals = {}
+    ctx.arm_bindings = []
+
+    _check_type(ctx, fn.return_type, detail="return type")
+    for p in fn.params:
+        _check_type(ctx, p.type, detail=f"param {p.name!r}")
+
+    # Pre-pass: collect all let/for-introduced locals, checking dup &
+    # shadowing. Match-arm bindings are arm-scoped, so they're handled
+    # inline during the main walk, not collected here.
+    _collect_locals(ctx, fn.body)
+
+    # Main walk: check each statement against the populated scope.
+    for stmt in fn.body:
+        _check_stmt(ctx, stmt)
+
+    # Reset (paranoid hygiene; callers should always set these afresh).
+    ctx.fn = None
+    ctx.params = {}
+    ctx.locals = {}
+    ctx.arm_bindings = []
+
+
+def _collect_locals(ctx: _Ctx, body) -> None:
+    """Walk every Let/For in the body, populating `ctx.locals`.
+    Emits LOCAL_DECLARED_TWICE / LOCAL_SHADOWS_PARAM / FOR_VAR_CONFLICT
+    when a name conflicts. Match-arm bindings are NOT collected here —
+    they're scoped to their arm body."""
+    for s in body:
+        match s:
+            case Let(name=name, type=ty):
+                _declare_local(ctx, name, ty, kind="let")
+            case For(var=var, type=ty, body=for_body):
+                if var in ctx.locals or var in ctx.params:
+                    ctx.emit(FOR_VAR_CONFLICT,
+                             f"for-loop var {var!r} conflicts with another local or parameter")
+                else:
+                    ctx.locals[var] = ty
+                _collect_locals(ctx, for_body)
+            case If(then_body=t, else_body=e):
+                _collect_locals(ctx, t)
+                _collect_locals(ctx, e)
+            case While(body=w_body):
+                _collect_locals(ctx, w_body)
+            case Match(arms=arms):
+                for arm in arms:
+                    _collect_locals(ctx, arm.body)
+            case WithArena(name=name, body=wa_body):
+                # Arena handle is bound for the duration of the body.
+                # Lowering desugars to a Let of i8*, so we mirror that here.
+                _declare_local(ctx, name, I8PtrType(), kind="with_arena")
+                _collect_locals(ctx, wa_body)
+            case _:
+                pass
+
+
+def _declare_local(ctx: _Ctx, name: str, ty, *, kind: str) -> None:
+    if name in ctx.params:
+        ctx.emit(LOCAL_SHADOWS_PARAM,
+                 f"local {name!r} shadows parameter of the enclosing function")
+        return
+    if name in ctx.locals:
+        ctx.emit(LOCAL_DECLARED_TWICE,
+                 f"local {name!r} declared twice in the same function")
+        return
+    ctx.locals[name] = ty
 
 
 def validate_or_raise(program: Program) -> None:
@@ -214,17 +358,46 @@ def _check_type(ctx: _Ctx, t, *, detail: str | None = None) -> None:
 
 def _check_stmt(ctx: _Ctx, stmt) -> None:
     match stmt:
-        case ReturnExpr(value=expr) | ExprStmt(value=expr):
+        case ReturnExpr(value=expr):
             _check_expr(ctx, expr)
+            if ctx.fn is not None and isinstance(ctx.fn.return_type, VoidType):
+                ctx.emit(RETURN_EXPR_VOID,
+                         f"function returns void; use bare `return`, not return_expr")
         case Return():
-            pass
-        case Let(type=ty, init=expr):
+            if ctx.fn is not None and not isinstance(ctx.fn.return_type, VoidType):
+                ctx.emit(BARE_RETURN_NON_VOID,
+                         f"function returns {_type_name(ctx.fn.return_type)}, "
+                         f"not void; use return_expr")
+        case ExprStmt(value=expr):
+            _check_expr(ctx, expr)
+        case Let(name=name, type=ty, init=expr):
             _check_type(ctx, ty, detail="let")
             _check_expr(ctx, expr)
-        case Assign(value=expr):
-            _check_expr(ctx, expr)
-        case FieldSet(value=expr):
-            _check_expr(ctx, expr)
+        case Assign(name=name, value=v):
+            if ctx.lookup_local(name) is None:
+                ctx.emit(ASSIGN_UNDECLARED_LOCAL,
+                         f"assign to undeclared local {name!r}")
+            _check_expr(ctx, v)
+        case FieldSet(local=lname, name=fname, value=v):
+            local_ty = ctx.lookup_local(lname)
+            if local_ty is None:
+                ctx.emit(FIELDSET_UNDECLARED_LOCAL,
+                         f"field-set on undeclared local {lname!r}")
+            elif not isinstance(local_ty, StructType):
+                ctx.emit(FIELDSET_NON_STRUCT_LOCAL,
+                         f"field-set {fname!r} on non-struct local "
+                         f"{lname!r} (local type {_type_name(local_ty)})")
+            else:
+                sd = ctx.structs.get(local_ty.name)
+                if sd is None:
+                    ctx.emit(UNRESOLVED_STRUCT,
+                             f"field-set on local {lname!r} of unknown "
+                             f"struct {local_ty.name!r}")
+                elif sd.field(fname) is None:
+                    ctx.emit(UNKNOWN_FIELD,
+                             f"field-set references unknown field {fname!r} "
+                             f"of struct {local_ty.name!r}")
+            _check_expr(ctx, v)
         case Store(ptr=p, value=v):
             _check_expr(ctx, p)
             _check_expr(ctx, v)
@@ -270,6 +443,13 @@ def _check_stmt(ctx: _Ctx, stmt) -> None:
 def _check_match(ctx: _Ctx, m: Match) -> None:
     _check_expr(ctx, m.scrutinee)
 
+    # Try to resolve the scrutinee's enum type — used both for
+    # exhaustiveness AND for binding the right payload types in arm
+    # scopes.
+    scrut_ty = _infer_type(ctx, m.scrutinee)
+    scrut_enum = scrut_ty.name if isinstance(scrut_ty, EnumType) else None
+    ed = ctx.enums.get(scrut_enum) if scrut_enum else None
+
     seen_arms: set[str] = set()
     wildcard_count = 0
     for arm in m.arms:
@@ -285,8 +465,30 @@ def _check_match(ctx: _Ctx, m: Match) -> None:
                 ctx.emit(DUPLICATE_BINDING,
                          f"match arm for {arm.variant!r} binds {b!r} more than once")
             seen_binding.add(b)
-        for s in arm.body:
-            _check_stmt(ctx, s)
+
+        # Build per-arm scope: bindings → declared payload field types
+        # if we know the variant, else just register the names so
+        # LocalRef inside the arm doesn't false-positive.
+        arm_scope: dict[str, object] = {}
+        if ed is not None and arm.variant != "_":
+            var = ed.variant(arm.variant)
+            if var is not None:
+                for i, b in enumerate(arm.bindings):
+                    if i < len(var.fields):
+                        arm_scope[b] = var.fields[i].type
+        # Names not paired with a known field type still get a sentinel
+        # so undefined-local checks accept them (we just can't infer
+        # their type — lowering would catch a true mismatch).
+        for b in arm.bindings:
+            arm_scope.setdefault(b, None)
+
+        ctx.arm_bindings.append(arm_scope)
+        try:
+            for s in arm.body:
+                _check_stmt(ctx, s)
+        finally:
+            ctx.arm_bindings.pop()
+
         if arm.variant in seen_arms:
             ctx.emit(DUPLICATE_MATCH_ARM,
                      f"match has duplicate arm for variant {arm.variant!r}")
@@ -295,12 +497,10 @@ def _check_match(ctx: _Ctx, m: Match) -> None:
     if wildcard_count > 1:
         ctx.emit(MULTIPLE_WILDCARDS, "match has more than one wildcard arm `_`")
 
-    has_wildcard = "_" in seen_arms
-    scrut_enum = _scrutinee_enum_name(m.scrutinee, ctx.enums)
-    if scrut_enum is None:
+    if ed is None:
         return  # Can't statically tell the enum; lower-time runtime check.
 
-    ed = ctx.enums[scrut_enum]
+    has_wildcard = "_" in seen_arms
     declared = {v.name for v in ed.variants}
     named_arms = seen_arms - {"_"}
     missing = declared - named_arms
@@ -351,8 +551,19 @@ def _check_expr(ctx: _Ctx, expr) -> None:
                                        what="enum_init")
             for fi in field_inits:
                 _check_expr(ctx, fi.value)
-        case FieldRead(value=inner):
+        case FieldRead(value=inner, name=fname):
             _check_expr(ctx, inner)
+            inner_ty = _infer_type(ctx, inner)
+            if inner_ty is not None and not isinstance(inner_ty, StructType):
+                ctx.emit(FIELD_READ_NON_STRUCT,
+                         f"field read {fname!r} on non-struct value of "
+                         f"type {_type_name(inner_ty)}")
+            elif isinstance(inner_ty, StructType):
+                sd = ctx.structs.get(inner_ty.name)
+                if sd is not None and sd.field(fname) is None:
+                    ctx.emit(UNKNOWN_FIELD,
+                             f"field read references unknown field "
+                             f"{fname!r} of struct {inner_ty.name!r}")
         case LoadField(ptr=p, struct_type=tname, name=fname):
             _check_expr(ctx, p)
             sd = ctx.structs.get(tname)
@@ -366,7 +577,10 @@ def _check_expr(ctx: _Ctx, expr) -> None:
         case BinOp(lhs=l, rhs=r):
             _check_expr(ctx, l)
             _check_expr(ctx, r)
-        case Call(args=args):
+        case Call(function=fname, args=args):
+            if fname not in ctx.callables:
+                ctx.emit(UNDEFINED_FUNCTION,
+                         f"call to undefined function {fname!r}")
             for a in args:
                 _check_expr(ctx, a)
         case ShortCircuitAnd(lhs=a, rhs=b) | ShortCircuitOr(lhs=a, rhs=b):
@@ -374,6 +588,7 @@ def _check_expr(ctx: _Ctx, expr) -> None:
             _check_expr(ctx, b)
         case TryExpr(value=v):
             _check_expr(ctx, v)
+            _check_try(ctx, v)
         case PtrOffset(base=p, offset=o):
             _check_expr(ctx, p)
             _check_expr(ctx, o)
@@ -384,10 +599,50 @@ def _check_expr(ctx: _Ctx, expr) -> None:
             _check_type(ctx, t)
         case SizeOf(type=t):
             _check_type(ctx, t)
+        case LocalRef(name=name):
+            if ctx.lookup_local(name) is None:
+                # Could also be a param — lookup_local checks both.
+                ctx.emit(UNDECLARED_LOCAL,
+                         f"reference to undeclared local {name!r}")
+        case ParamRef(name=name):
+            if ctx.fn is not None and name not in ctx.params:
+                ctx.emit(UNDECLARED_PARAM,
+                         f"reference to undeclared param {name!r}")
         case _:
-            # Leaves (IntLit, LocalRef, ParamRef, StringRef, NullPtr,
-            # CharLit, EnumPayloadRead, etc.) — nothing to recurse into.
+            # Leaves (IntLit, StringRef, NullPtr, CharLit, etc.) —
+            # nothing to recurse into.
             pass
+
+
+def _check_try(ctx: _Ctx, inner) -> None:
+    """Validate a TryExpr's enum eligibility and return-type match.
+    Type inference tells us the inner enum statically; if it's not
+    inferrable, we skip and let lower catch it (rare in practice)."""
+    if ctx.fn is None:
+        return
+    inner_ty = _infer_type(ctx, inner)
+    if inner_ty is None:
+        return  # Can't infer; lower will catch.
+    if not isinstance(inner_ty, EnumType):
+        ctx.emit(TRY_NON_ENUM,
+                 f"? requires an enum value, got {_type_name(inner_ty)}")
+        return
+    ed = ctx.enums.get(inner_ty.name)
+    if ed is None:
+        # Already emitted UNRESOLVED_ENUM elsewhere; don't double-report.
+        return
+    happy, sad = ed.try_variants()
+    if happy is None:
+        ctx.emit(TRY_INELIGIBLE_ENUM,
+                 f"? on enum {ed.name!r}: not ?-eligible "
+                 f"(needs exactly two variants — one with a single "
+                 f"payload field, one with no payload)")
+        return
+    ret_ty = ctx.fn.return_type
+    if not (isinstance(ret_ty, EnumType) and ret_ty.name == ed.name):
+        ctx.emit(TRY_RETURN_TYPE_MISMATCH,
+                 f"? on {ed.name!r} requires the enclosing function to "
+                 f"return {ed.name!r}, got {_type_name(ret_ty)}")
 
 
 def _check_field_inits(
@@ -414,11 +669,102 @@ def _check_field_inits(
                  f"{what} for {target} missing field(s): {sorted(missing)}")
 
 
-def _scrutinee_enum_name(expr, enums: dict[str, EnumDef]) -> str | None:
-    """Best-effort static enum-name extraction. Mirrors the old helper
-    in model.py; in v1 we only check exhaustiveness when the scrutinee
-    is a literal EnumInit. Other shapes get a runtime check at lower."""
+# ---------- Type inference ----------
+#
+# Best-effort: returns the static type of an expression when we can tell
+# (literals, scope lookups, calls to known functions, struct/enum_init,
+# field reads on inferrable structs, ?-extracted payloads). Returns None
+# when we can't — the caller treats `None` as "skip this check, let
+# lower report at codegen time."
+
+
+def _infer_type(ctx: _Ctx, expr) -> object | None:
     match expr:
-        case EnumInit(enum=name) if name in enums:
-            return name
+        case IntLit(type=t):
+            return t
+        case CharLit():
+            return I8Type()
+        case NullPtr():
+            return I8PtrType()
+        case StringRef():
+            return I8PtrType()
+        case LocalRef(name=name):
+            return ctx.lookup_local(name)
+        case ParamRef(name=name):
+            return ctx.params.get(name)
+        case Call(function=fname):
+            sig = ctx.callables.get(fname)
+            return sig.return_type if sig is not None else None
+        case StructInit(type=name):
+            return StructType(name=name)
+        case EnumInit(enum=ename):
+            return EnumType(name=ename)
+        case Load(type=t):
+            return t
+        case SizeOf():
+            return I64Type()
+        case Widen(target=t):
+            return t
+        case ShortCircuitAnd() | ShortCircuitOr():
+            return I1Type()
+        case BinOp(op=op, lhs=l, rhs=r):
+            # Comparisons return i1; arithmetic propagates the LHS type.
+            if op in ("eq", "ne", "slt", "sle", "sgt", "sge", "ult", "ule", "ugt", "uge"):
+                return I1Type()
+            return _infer_type(ctx, l) or _infer_type(ctx, r)
+        case PtrOffset():
+            return I8PtrType()
+        case LoadField(struct_type=tname, name=fname):
+            sd = ctx.structs.get(tname)
+            if sd is None:
+                return None
+            f = sd.field(fname)
+            return f.type if f is not None else None
+        case FieldRead(value=inner, name=fname):
+            inner_ty = _infer_type(ctx, inner)
+            if not isinstance(inner_ty, StructType):
+                return None
+            sd = ctx.structs.get(inner_ty.name)
+            if sd is None:
+                return None
+            f = sd.field(fname)
+            return f.type if f is not None else None
+        case TryExpr(value=inner):
+            inner_ty = _infer_type(ctx, inner)
+            if not isinstance(inner_ty, EnumType):
+                return None
+            ed = ctx.enums.get(inner_ty.name)
+            if ed is None:
+                return None
+            happy, _ = ed.try_variants()
+            if happy is None or len(happy.fields) != 1:
+                return None
+            return happy.fields[0].type
     return None
+
+
+def _type_name(t) -> str:
+    """Render a Type for diagnostic messages. Cheap, no formatter dep."""
+    match t:
+        case None:
+            return "?"
+        case I1Type():
+            return "i1"
+        case I8Type():
+            return "i8"
+        case I16Type():
+            return "i16"
+        case I32Type():
+            return "i32"
+        case I64Type():
+            return "i64"
+        case I8PtrType():
+            return "i8*"
+        case VoidType():
+            return "void"
+        case StructType(name=n):
+            return n
+        case EnumType(name=n):
+            return n
+        case _:
+            return repr(t)

@@ -208,8 +208,10 @@ def _lower_expr(
         case ParamRef(name=n):
             return params[n]
         case LocalRef(name=n):
-            if n not in locals_:
-                raise ValueError(f"reference to undeclared local {n!r}")
+            assert n in locals_, (
+                f"validator invariant: LocalRef({n!r}) lowered without "
+                f"a matching local — quod.validate should have caught this"
+            )
             return builder.load(locals_[n])
         case BinOp(op="add", lhs=l, rhs=r):
             lv = go(l)
@@ -251,8 +253,10 @@ def _lower_expr(
             return builder.bitcast(gv, I8.as_pointer())
         case Call(function=fname, args=args):
             callee = module.globals.get(fname)
-            if callee is None:
-                raise ValueError(f"call to undeclared function {fname!r}")
+            assert callee is not None, (
+                f"validator invariant: call to undeclared function {fname!r} "
+                f"— quod.validate should have caught this"
+            )
             # Coerce bare int literals at each fixed (non-vararg) parameter
             # position to the callee's declared type. Vararg slots (printf
             # etc.) keep their declared types since the callee has no
@@ -641,13 +645,17 @@ def _collect_local_bindings(
         for s in body:
             match s:
                 case Let(name=name, type=ty):
-                    if name in seen:
-                        raise ValueError(f"local {name!r} declared twice in the same function")
+                    assert name not in seen, (
+                        f"validator invariant: local {name!r} declared twice "
+                        f"— quod.validate should have caught this"
+                    )
                     seen.add(name)
                     out.append((name, _type_to_llvm(ty, struct_tys, enum_tys)))
                 case For(var=var, type=ty, body=for_body):
-                    if var in seen:
-                        raise ValueError(f"for-loop var {var!r} conflicts with another local")
+                    assert var not in seen, (
+                        f"validator invariant: for-loop var {var!r} conflicts "
+                        f"with another local — quod.validate should have caught this"
+                    )
                     seen.add(var)
                     out.append((var, _type_to_llvm(ty, struct_tys, enum_tys)))
                     visit(for_body)
@@ -715,12 +723,10 @@ def _lower_stmt(
             builder.ret(ret_val)
             return
         case Return():
-            if not isinstance(llvm_fn.function_type.return_type, ir.VoidType):
-                raise ValueError(
-                    f"function {llvm_fn.name!r} returns "
-                    f"{llvm_fn.function_type.return_type}, not void; "
-                    "use return_expr"
-                )
+            assert isinstance(llvm_fn.function_type.return_type, ir.VoidType), (
+                f"validator invariant: bare Return in non-void function "
+                f"{llvm_fn.name!r} — quod.validate should have caught this"
+            )
             builder.ret_void()
             return
         case Unreachable():
@@ -742,8 +748,10 @@ def _lower_stmt(
             builder.store(init_val, locals_[name])
             return
         case Assign(name=name, value=v):
-            if name not in locals_:
-                raise ValueError(f"assign to undeclared local {name!r}")
+            assert name in locals_, (
+                f"validator invariant: assign to undeclared local {name!r} "
+                f"— quod.validate should have caught this"
+            )
             dest_ty = locals_[name].type.pointee
             val = lower_expr(_coerce_int_lit(v, dest_ty))
             builder.store(val, locals_[name])
@@ -775,8 +783,10 @@ def _lower_stmt(
             builder.store(val, field_ptr)
             return
         case FieldSet(local=lname, name=fname, value=v):
-            if lname not in locals_:
-                raise ValueError(f"field-set on undeclared local {lname!r}")
+            assert lname in locals_, (
+                f"validator invariant: field-set on undeclared local "
+                f"{lname!r} — quod.validate should have caught this"
+            )
             alloca = locals_[lname]
             pointee = alloca.type.pointee
             if not isinstance(pointee, ir.IdentifiedStructType):
@@ -1135,8 +1145,10 @@ def _lower_function_body(
     # promotes them to SSA values during the optimize pass.
     locals_: dict[str, ir.AllocaInstr] = {}
     for name, ty in _collect_local_bindings(fn.body, struct_tys, enum_tys, enum_defs):
-        if name in params:
-            raise ValueError(f"local {name!r} shadows parameter of {fn.name!r}")
+        assert name not in params, (
+            f"validator invariant: local {name!r} shadows parameter of "
+            f"{fn.name!r} — quod.validate should have caught this"
+        )
         locals_[name] = builder.alloca(ty, name=name)
 
     for claim in entry_claims:
