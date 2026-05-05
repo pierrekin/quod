@@ -21,6 +21,7 @@ from llvmlite import ir
 from quod.analysis import derive_lattice_claims, elaborate
 from quod.runtime import build_runtime_archive
 from quod.resolve import resolve_imports
+from quod.validate import validate_or_raise
 from quod.model import (
     Assign,
     BinOp,
@@ -1622,6 +1623,12 @@ def compile_program(
     # visible to the analysis pass and to lowering, just like user functions.
     program = resolve_imports(program, disabled_tiers=disabled_tiers)
 
+    # Pre-mono validation: catches errors on the generic program where
+    # error messages still point at user-written names (not mangled
+    # post-mono identifiers). Phase 1 does the same checks pre and
+    # post; checks specific to one phase will accrue here over time.
+    validate_or_raise(program)
+
     # Monomorphize generic types: drop generic templates, emit one fresh
     # nominal struct/enum per concrete `(template, args)` instantiation,
     # rewrite all references to the mangled names. Post-mono the program
@@ -1629,6 +1636,12 @@ def compile_program(
     # what the lowerer expects.
     from .monomorphize import monomorphize as _monomorphize
     program = _monomorphize(program)
+
+    # Post-mono validation: every type is concrete, every reference
+    # should resolve. This is the canonical correctness gate before
+    # lowering — lower.py treats remaining `raise ValueError`s as
+    # internal-bug surfaces, not user errors.
+    validate_or_raise(program)
 
     # Elaborate: derive lattice claims and merge them into the program before
     # lowering. Override flags (--enforce-lattice etc.) apply uniformly to

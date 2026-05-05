@@ -1427,32 +1427,23 @@ class _ProgramBase(_Node):
 
 
 def _validate_structs(program: "_ProgramBase") -> None:
-    """Program-wide struct + enum sanity. Runs on both Program and
-    InputProgram.
+    """Program-wide struct + enum *structural* sanity. Runs on both
+    Program and InputProgram at construction time (Pydantic
+    model_validator).
 
-    Structs:
+    Owns only the cheap, definition-local checks that don't need
+    whole-program context:
     - Struct names are unique.
-    - No struct field references an undefined struct.
+    - No duplicate field names within a struct.
+    - Enum names are unique and don't collide with structs.
+    - No duplicate variants per enum, no duplicate fields per variant.
+    - Every enum has at least one variant.
     - No struct contains itself by value (direct or transitive).
-    - Every `StructType` mentioned in a Param/return/Let/Field/StructInit
-      resolves to a defined struct.
-    - Every `StructInit` covers exactly the fields of the named def, with
-      no missing or extra names and no duplicates.
 
-    Enums:
-    - Enum names are unique (and don't collide with struct names).
-    - Variants within an enum are uniquely named; payload fields within a
-      variant are uniquely named.
-    - Every `EnumType` mentioned anywhere resolves to a defined enum.
-    - Every `EnumInit` references a defined (enum, variant) pair and
-      covers exactly the variant's fields.
-    - Every `Match` is exhaustive over its scrutinee's enum and each arm
-      binds the right number of payload locals.
-
-    When `program.imports` is non-empty, struct/enum refs reachable from
-    function bodies / params / externs are deferred — the imported module
-    may bring the type in, and we can't tell from this side. The fully
-    resolved Program (with imports cleared) gets the complete check.
+    Use-site checks (refs resolve, exhaustive matches, struct/enum_init
+    field correctness) live in `quod.validate` — they need the resolved
+    program (post-import-resolution) and benefit from collecting all
+    diagnostics rather than failing fast.
     """
     seen_names: set[str] = set()
     for sd in program.structs:
@@ -1499,24 +1490,6 @@ def _validate_structs(program: "_ProgramBase") -> None:
     for sd in program.structs:
         _check_no_struct_cycle(sd.name, by_name)
 
-    if program.imports:
-        return
-
-    # Validate every type ref reachable from the program is defined.
-    for sd in program.structs:
-        for f in sd.fields:
-            _check_type_refs(f.type, by_name, enums_by_name, where=f"struct {sd.name!r} field {f.name!r}")
-    for fn in program.functions:
-        _check_type_refs(fn.return_type, by_name, enums_by_name, where=f"function {fn.name!r} return type")
-        for p in fn.params:
-            _check_type_refs(p.type, by_name, enums_by_name, where=f"function {fn.name!r} param {p.name!r}")
-        for stmt in fn.body:
-            _check_struct_uses_in_stmt(stmt, by_name, enums_by_name, where=f"function {fn.name!r}")
-    for ext in program.externs:
-        _check_type_refs(ext.return_type, by_name, enums_by_name, where=f"extern {ext.name!r} return type")
-        for t in ext.param_types:
-            _check_type_refs(t, by_name, enums_by_name, where=f"extern {ext.name!r} param")
-
 
 def _check_no_struct_cycle(start: str, by_name: dict[str, "StructDef"]) -> None:
     """DFS: refuse if `start` reaches itself through StructType fields.
@@ -1553,241 +1526,6 @@ def _check_no_struct_cycle(start: str, by_name: dict[str, "StructDef"]) -> None:
     for f in sd.fields:
         if isinstance(f.type, StructType) and not f.type.type_args:
             go(f.type.name, (start,))
-
-
-def _check_type_refs(
-    t: "Type",
-    by_name: dict[str, "StructDef"],
-    enums_by_name: dict[str, "EnumDef"],
-    *,
-    where: str,
-) -> None:
-    if isinstance(t, StructType) and t.name not in by_name:
-        raise ValueError(f"{where}: references undefined struct {t.name!r}")
-    if isinstance(t, EnumType) and t.name not in enums_by_name:
-        raise ValueError(f"{where}: references undefined enum {t.name!r}")
-
-
-def _check_struct_uses_in_stmt(
-    stmt,
-    by_name: dict[str, "StructDef"],
-    enums_by_name: dict[str, "EnumDef"],
-    *,
-    where: str,
-) -> None:
-    match stmt:
-        case ReturnExpr(value=expr) | ExprStmt(value=expr):
-            _check_struct_uses_in_expr(expr, by_name, enums_by_name, where=where)
-        case If(cond=cond, then_body=t_body, else_body=e_body):
-            _check_struct_uses_in_expr(cond, by_name, enums_by_name, where=where)
-            for s in t_body:
-                _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
-            for s in e_body:
-                _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
-        case Let(type=ty, init=expr):
-            _check_type_refs(ty, by_name, enums_by_name, where=f"{where}: let")
-            _check_struct_uses_in_expr(expr, by_name, enums_by_name, where=where)
-        case Assign(value=expr) | FieldSet(value=expr):
-            _check_struct_uses_in_expr(expr, by_name, enums_by_name, where=where)
-        case Store(ptr=p, value=v):
-            _check_struct_uses_in_expr(p, by_name, enums_by_name, where=where)
-            _check_struct_uses_in_expr(v, by_name, enums_by_name, where=where)
-        case StoreField(ptr=p, struct_type=tname, name=fname, value=v):
-            _check_struct_uses_in_expr(p, by_name, enums_by_name, where=where)
-            _check_struct_uses_in_expr(v, by_name, enums_by_name, where=where)
-            sd = by_name.get(tname)
-            if sd is None:
-                raise ValueError(f"{where}: store_field references undefined struct {tname!r}")
-            if sd.field(fname) is None:
-                raise ValueError(
-                    f"{where}: store_field references unknown field {fname!r} of struct {tname!r}"
-                )
-        case While(cond=cond, body=body):
-            _check_struct_uses_in_expr(cond, by_name, enums_by_name, where=where)
-            for s in body:
-                _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
-        case For(lo=lo, hi=hi, body=body):
-            _check_struct_uses_in_expr(lo, by_name, enums_by_name, where=where)
-            _check_struct_uses_in_expr(hi, by_name, enums_by_name, where=where)
-            for s in body:
-                _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
-        case WithArena(capacity=cap, body=body):
-            _check_struct_uses_in_expr(cap, by_name, enums_by_name, where=where)
-            for s in body:
-                _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
-        case Match(scrutinee=scrut, arms=arms):
-            _check_struct_uses_in_expr(scrut, by_name, enums_by_name, where=where)
-            # Per-arm rules independent of scrutinee enum.
-            wildcard_count = 0
-            for arm in arms:
-                if arm.variant == "_":
-                    wildcard_count += 1
-                    if arm.bindings:
-                        raise ValueError(
-                            f"{where}: match wildcard arm `_` cannot take "
-                            f"bindings (use a named variant arm if you "
-                            f"need the payload)"
-                        )
-                seen_binding: set[str] = set()
-                for b in arm.bindings:
-                    if b in seen_binding:
-                        raise ValueError(
-                            f"{where}: match arm for {arm.variant!r} binds "
-                            f"{b!r} more than once"
-                        )
-                    seen_binding.add(b)
-                for s in arm.body:
-                    _check_struct_uses_in_stmt(s, by_name, enums_by_name, where=where)
-            if wildcard_count > 1:
-                raise ValueError(
-                    f"{where}: match has more than one wildcard arm `_`"
-                )
-            arm_variants = [a.variant for a in arms]
-            seen_arms: set[str] = set()
-            for v in arm_variants:
-                if v in seen_arms:
-                    raise ValueError(
-                        f"{where}: match has duplicate arm for variant {v!r}"
-                    )
-                seen_arms.add(v)
-            has_wildcard = "_" in seen_arms
-            scrut_enum = _scrutinee_enum_name(scrut, enums_by_name)
-            if scrut_enum is not None:
-                ed = enums_by_name[scrut_enum]
-                declared = {v.name for v in ed.variants}
-                named_arms = seen_arms - {"_"}
-                missing = declared - named_arms
-                extra = named_arms - declared
-                if missing and not has_wildcard:
-                    raise ValueError(
-                        f"{where}: match on {scrut_enum!r} non-exhaustive — "
-                        f"missing {sorted(missing)} (use `_` for a default arm)"
-                    )
-                if extra:
-                    raise ValueError(
-                        f"{where}: match on {scrut_enum!r} has unknown "
-                        f"variant arms {sorted(extra)}"
-                    )
-                for arm in arms:
-                    if arm.variant == "_":
-                        continue
-                    var = ed.variant(arm.variant)
-                    if var is not None and len(arm.bindings) != len(var.fields):
-                        raise ValueError(
-                            f"{where}: match arm {scrut_enum}::{arm.variant} "
-                            f"binds {len(arm.bindings)} field(s), expected "
-                            f"{len(var.fields)}"
-                        )
-
-
-def _scrutinee_enum_name(expr, enums_by_name: dict[str, "EnumDef"]) -> str | None:
-    """Best-effort: if `expr` is statically an enum value of a known enum,
-    return its name. Used only for validator-time exhaustiveness checks;
-    runtime enum-type checking happens in the lower pass."""
-    match expr:
-        case EnumInit(enum=name) if name in enums_by_name:
-            return name
-    return None
-
-
-def _check_struct_uses_in_expr(
-    expr,
-    by_name: dict[str, "StructDef"],
-    enums_by_name: dict[str, "EnumDef"],
-    *,
-    where: str,
-) -> None:
-    match expr:
-        case StructInit(type=name, fields=field_inits):
-            sd = by_name.get(name)
-            if sd is None:
-                raise ValueError(f"{where}: struct_init references undefined struct {name!r}")
-            init_names = [fi.name for fi in field_inits]
-            seen: set[str] = set()
-            for n in init_names:
-                if n in seen:
-                    raise ValueError(
-                        f"{where}: struct_init for {name!r} sets field {n!r} twice"
-                    )
-                seen.add(n)
-            def_names = {f.name for f in sd.fields}
-            extra = seen - def_names
-            if extra:
-                raise ValueError(
-                    f"{where}: struct_init for {name!r} sets unknown field(s): "
-                    f"{sorted(extra)}"
-                )
-            missing = def_names - seen
-            if missing:
-                raise ValueError(
-                    f"{where}: struct_init for {name!r} missing field(s): "
-                    f"{sorted(missing)}"
-                )
-            for fi in field_inits:
-                _check_struct_uses_in_expr(fi.value, by_name, enums_by_name, where=where)
-        case EnumInit(enum=ename, variant=vname, fields=field_inits):
-            ed = enums_by_name.get(ename)
-            if ed is None:
-                raise ValueError(f"{where}: enum_init references undefined enum {ename!r}")
-            var = ed.variant(vname)
-            if var is None:
-                raise ValueError(
-                    f"{where}: enum_init references unknown variant "
-                    f"{ename}::{vname}"
-                )
-            init_names = [fi.name for fi in field_inits]
-            seen: set[str] = set()
-            for n in init_names:
-                if n in seen:
-                    raise ValueError(
-                        f"{where}: enum_init for {ename}::{vname} sets "
-                        f"field {n!r} twice"
-                    )
-                seen.add(n)
-            def_names = {f.name for f in var.fields}
-            extra = seen - def_names
-            if extra:
-                raise ValueError(
-                    f"{where}: enum_init for {ename}::{vname} sets unknown "
-                    f"field(s): {sorted(extra)}"
-                )
-            missing = def_names - seen
-            if missing:
-                raise ValueError(
-                    f"{where}: enum_init for {ename}::{vname} missing "
-                    f"field(s): {sorted(missing)}"
-                )
-            for fi in field_inits:
-                _check_struct_uses_in_expr(fi.value, by_name, enums_by_name, where=where)
-        case FieldRead(value=inner):
-            _check_struct_uses_in_expr(inner, by_name, enums_by_name, where=where)
-        case LoadField(ptr=p, struct_type=tname, name=fname):
-            _check_struct_uses_in_expr(p, by_name, enums_by_name, where=where)
-            sd = by_name.get(tname)
-            if sd is None:
-                raise ValueError(f"{where}: load_field references undefined struct {tname!r}")
-            if sd.field(fname) is None:
-                raise ValueError(
-                    f"{where}: load_field references unknown field {fname!r} of struct {tname!r}"
-                )
-        case BinOp(lhs=l, rhs=r) | ShortCircuitOr(lhs=l, rhs=r) | ShortCircuitAnd(lhs=l, rhs=r):
-            _check_struct_uses_in_expr(l, by_name, enums_by_name, where=where)
-            _check_struct_uses_in_expr(r, by_name, enums_by_name, where=where)
-        case Call(args=args):
-            for a in args:
-                _check_struct_uses_in_expr(a, by_name, enums_by_name, where=where)
-        case PtrOffset(base=b, offset=o):
-            _check_struct_uses_in_expr(b, by_name, enums_by_name, where=where)
-            _check_struct_uses_in_expr(o, by_name, enums_by_name, where=where)
-        case Widen(value=v):
-            _check_struct_uses_in_expr(v, by_name, enums_by_name, where=where)
-        case Load(ptr=p, type=t):
-            _check_struct_uses_in_expr(p, by_name, enums_by_name, where=where)
-            _check_type_refs(t, by_name, enums_by_name, where=where)
-        case SizeOf(type=t):
-            _check_type_refs(t, by_name, enums_by_name, where=where)
-        case TryExpr(value=v):
-            _check_struct_uses_in_expr(v, by_name, enums_by_name, where=where)
 
 
 class Program(_ProgramBase):
