@@ -1183,6 +1183,15 @@ def _lower_function_body(
     ):
         builder.ret_void()
 
+    # Sweep: any basic block left without a terminator is unreachable from
+    # the well-formed flow (e.g. the dead exit_bb after a `while(true) { ...
+    # return ... }` loop, where every body path returns and subsequent
+    # statements never attach to exit_bb). LLVM rejects unterminated blocks;
+    # `unreachable` documents the intent without introducing wrong behavior.
+    for bb in llvm_fn.basic_blocks:
+        if not bb.is_terminated:
+            ir.IRBuilder(bb).unreachable()
+
 
 _ARENA_MODULE = "mem.arena"
 _ARENA_NEW = "mem.arena.new"
