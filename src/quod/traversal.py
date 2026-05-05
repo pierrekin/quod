@@ -130,6 +130,7 @@ def substitute_in_expr(expr, type_fn: Callable):
     if isinstance(expr, LoadField):
         return expr.model_copy(update={
             "ptr": substitute_in_expr(expr.ptr, type_fn),
+            "type_args": tuple(type_fn(a) for a in expr.type_args),
         })
     if isinstance(expr, PtrOffset):
         return expr.model_copy(update={
@@ -192,6 +193,7 @@ def substitute_in_stmt(stmt, type_fn: Callable):
         return stmt.model_copy(update={
             "ptr":   substitute_in_expr(stmt.ptr,   type_fn),
             "value": substitute_in_expr(stmt.value, type_fn),
+            "type_args": tuple(type_fn(a) for a in stmt.type_args),
         })
     if isinstance(stmt, WithArena):
         return stmt.model_copy(update={

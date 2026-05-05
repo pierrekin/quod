@@ -300,7 +300,9 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "Read one named field of a struct stored at an i8* pointer. "
             "Lowered to bitcast(ptr, T*) + GEP(field index) + load. "
             "Targeted access — no whole-struct register copy. Use this "
-            "for struct-on-heap field reads."
+            "for struct-on-heap field reads. `type_args` populates type "
+            "parameters when struct_type names a generic StructDef; the "
+            "monomorphizer mangles struct_type using the args."
         ),
         "example": {
             "kind": "quod.load_field",
@@ -513,7 +515,9 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "Write a value into one named field of a struct stored at an "
             "i8* pointer. Mutating counterpart of quod.load_field; lowered "
             "to bitcast(ptr, T*) + GEP(field index) + store. Use for "
-            "struct-on-heap field writes."
+            "struct-on-heap field writes. `type_args` populates type "
+            "parameters when struct_type names a generic StructDef; the "
+            "monomorphizer mangles struct_type using the args."
         ),
         "example": {
             "kind": "quod.store_field",

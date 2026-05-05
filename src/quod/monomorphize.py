@@ -264,9 +264,16 @@ def _walk_types_in_expr(expr, fn):
             "value": _walk_types_in_expr(expr.value, fn),
         })
     if isinstance(expr, LoadField):
-        return expr.model_copy(update={
-            "ptr": _walk_types_in_expr(expr.ptr, fn),
-        })
+        new_ptr = _walk_types_in_expr(expr.ptr, fn)
+        if expr.type_args:
+            args = tuple(fn(a) for a in expr.type_args)
+            mangled = _mangle(expr.struct_type, args)
+            return expr.model_copy(update={
+                "ptr": new_ptr,
+                "struct_type": mangled,
+                "type_args": (),
+            })
+        return expr.model_copy(update={"ptr": new_ptr})
     if isinstance(expr, PtrOffset):
         return expr.model_copy(update={
             "base":   _walk_types_in_expr(expr.base,   fn),
@@ -339,10 +346,18 @@ def _walk_types_in_stmt(stmt, fn):
             "value": _walk_types_in_expr(stmt.value, fn),
         })
     if isinstance(stmt, StoreField):
-        return stmt.model_copy(update={
-            "ptr":   _walk_types_in_expr(stmt.ptr,   fn),
-            "value": _walk_types_in_expr(stmt.value, fn),
-        })
+        new_ptr   = _walk_types_in_expr(stmt.ptr,   fn)
+        new_value = _walk_types_in_expr(stmt.value, fn)
+        if stmt.type_args:
+            args = tuple(fn(a) for a in stmt.type_args)
+            mangled = _mangle(stmt.struct_type, args)
+            return stmt.model_copy(update={
+                "ptr": new_ptr,
+                "value": new_value,
+                "struct_type": mangled,
+                "type_args": (),
+            })
+        return stmt.model_copy(update={"ptr": new_ptr, "value": new_value})
     if isinstance(stmt, WithArena):
         return stmt.model_copy(update={
             "capacity": _walk_types_in_expr(stmt.capacity, fn),

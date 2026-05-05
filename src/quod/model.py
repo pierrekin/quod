@@ -149,10 +149,16 @@ class LoadField(_Node):
     name)` but emits the targeted GEP+load instead of materializing the
     whole struct first. Use this for struct-on-heap field reads where the
     register-pressure of a whole-struct load would be wasteful (the arena
-    allocator's hot path is the canonical example)."""
+    allocator's hot path is the canonical example).
+
+    `type_args` populates the type parameters when `struct_type` names a
+    generic StructDef. The monomorphizer mangles `struct_type` using the
+    args (same pattern as StructInit/EnumInit/Call) and clears `type_args`.
+    Empty tuple is the non-generic case."""
     kind: Literal["quod.load_field"] = "quod.load_field"
     ptr: "Expr"
     struct_type: str
+    type_args: tuple["Type", ...] = ()
     name: str
 
 
@@ -690,12 +696,18 @@ class StoreField(_Node):
     Equivalent in effect to loading the whole struct, mutating one
     field, and storing it back, but emits a targeted GEP+store instead.
     The point is the same as `LoadField` — make struct-on-heap mutation
-    expressible without forcing the whole struct through a register."""
+    expressible without forcing the whole struct through a register.
+
+    `type_args` populates the type parameters when `struct_type` names a
+    generic StructDef. The monomorphizer mangles `struct_type` using the
+    args (same pattern as StructInit/EnumInit/Call) and clears `type_args`.
+    Empty tuple is the non-generic case."""
     kind: Literal["quod.store_field"] = "quod.store_field"
-    ptr: Expr           # must lower to i8*
-    struct_type: str    # name of a StructDef
-    name: str           # field name
-    value: Expr         # the field's declared type
+    ptr: Expr                                  # must lower to i8*
+    struct_type: str                           # name of a StructDef
+    type_args: tuple["Type", ...] = ()         # generic instantiation, if any
+    name: str                                  # field name
+    value: Expr                                # the field's declared type
 
 
 class WithArena(_Node):
