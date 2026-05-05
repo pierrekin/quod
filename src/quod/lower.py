@@ -1595,6 +1595,52 @@ def has_function(program: Program, name: str) -> bool:
     return any(fn.name == name for fn in program.functions)
 
 
+def prepare_program(
+    program: Program,
+    *,
+    disabled_tiers: frozenset[str] = frozenset(),
+) -> Program:
+    """Run the standard pre-lowering pipeline and return a program ready
+    to lower. Used by both `compile_program` (build) and `quod check`
+    (validate without emitting artifacts) so the two share one
+    "is this a valid program?" gate.
+
+    Pipeline:
+        1. `--no-alloc` short-circuit on `with_arena`. Build-config
+           friendlier than letting the import resolver fail.
+        2. resolve_imports — pull in stdlib + user imports.
+        3. validate (pre-mono) — error locations point at user-written
+           names, not mangled post-mono identifiers.
+        4. monomorphize — specialize generics to concrete types.
+        5. validate (post-mono) — canonical correctness gate;
+           everything is concrete and every reference should resolve.
+        6. elaborate — derive lattice claims and merge into the program.
+
+    After this, the program is ready for `lower()` and downstream
+    LLVM-only steps (codegen, verify, optimize, link). If `prepare`
+    succeeds, the program is semantically valid; build failures from
+    here on are LLVM/linker concerns, not language correctness.
+    """
+    if "alloc" in disabled_tiers:
+        for fn in program.functions:
+            if _function_uses_with_arena(fn):
+                raise ValueError(
+                    f"function {fn.name!r} uses `with_arena`, which requires "
+                    f"the 'alloc' tier — disabled by --no-alloc"
+                )
+
+    program = resolve_imports(program, disabled_tiers=disabled_tiers)
+    validate_or_raise(program)
+
+    from .monomorphize import monomorphize as _monomorphize
+    program = _monomorphize(program)
+    validate_or_raise(program)
+
+    derived = derive_lattice_claims(program)
+    program = elaborate(program, derived)
+    return program
+
+
 def compile_program(
     program: Program,
     *,
@@ -1621,45 +1667,7 @@ def compile_program(
         raise ValueError(f"profile must be 0..3, got {profile}")
     build_dir.mkdir(parents=True, exist_ok=True)
 
-    # `--no-alloc` blocks `with_arena` too, since it desugars to allocator
-    # calls. Surface the friendlier message before lowering.
-    if "alloc" in disabled_tiers:
-        for fn in program.functions:
-            if _function_uses_with_arena(fn):
-                raise ValueError(
-                    f"function {fn.name!r} uses `with_arena`, which requires "
-                    f"the 'alloc' tier — disabled by --no-alloc"
-                )
-
-    # Resolve imports first: stdlib functions (e.g. std.str) need to be
-    # visible to the analysis pass and to lowering, just like user functions.
-    program = resolve_imports(program, disabled_tiers=disabled_tiers)
-
-    # Pre-mono validation: catches errors on the generic program where
-    # error messages still point at user-written names (not mangled
-    # post-mono identifiers). Phase 1 does the same checks pre and
-    # post; checks specific to one phase will accrue here over time.
-    validate_or_raise(program)
-
-    # Monomorphize generic types: drop generic templates, emit one fresh
-    # nominal struct/enum per concrete `(template, args)` instantiation,
-    # rewrite all references to the mangled names. Post-mono the program
-    # has no remaining `type_params` / `type_args` / `TypeParamRef`s —
-    # what the lowerer expects.
-    from .monomorphize import monomorphize as _monomorphize
-    program = _monomorphize(program)
-
-    # Post-mono validation: every type is concrete, every reference
-    # should resolve. This is the canonical correctness gate before
-    # lowering — lower.py treats remaining `raise ValueError`s as
-    # internal-bug surfaces, not user errors.
-    validate_or_raise(program)
-
-    # Elaborate: derive lattice claims and merge them into the program before
-    # lowering. Override flags (--enforce-lattice etc.) apply uniformly to
-    # both stored and derived claims via the override map.
-    derived = derive_lattice_claims(program)
-    program = elaborate(program, derived)
+    program = prepare_program(program, disabled_tiers=disabled_tiers)
 
     target_machine = make_target_machine(target=target)
     results: list[BinResult] = []

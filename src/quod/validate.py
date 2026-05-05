@@ -56,6 +56,7 @@ from quod.model import (
     ParamRef,
     Program,
     PtrOffset,
+    TypeParamRef,
     Return,
     ReturnExpr,
     ShortCircuitAnd,
@@ -208,9 +209,20 @@ class _Ctx:
             severity="error", code=code, message=message, location=loc,
         ))
 
-    def lookup_local(self, name: str) -> object | None:
-        """Look up a local name in scope: arm bindings (innermost first),
-        then function locals, then params. Returns the declared Type or None."""
+    def name_in_scope(self, name: str) -> bool:
+        """Is this name a declared local, parameter, or active match-arm
+        binding? Used for the existence check (UNDECLARED_LOCAL); type
+        information is not required."""
+        for scope in reversed(self.arm_bindings):
+            if name in scope:
+                return True
+        return name in self.locals or name in self.params
+
+    def lookup_local_type(self, name: str) -> object | None:
+        """Return the declared Type for a name in scope, or None if the
+        name isn't declared *or* the type couldn't be inferred (e.g.,
+        an arm binding whose variant wasn't statically known). Callers
+        that need the existence check should use name_in_scope."""
         for scope in reversed(self.arm_bindings):
             if name in scope:
                 return scope[name]
@@ -374,29 +386,34 @@ def _check_stmt(ctx: _Ctx, stmt) -> None:
             _check_type(ctx, ty, detail="let")
             _check_expr(ctx, expr)
         case Assign(name=name, value=v):
-            if ctx.lookup_local(name) is None:
+            if not ctx.name_in_scope(name):
                 ctx.emit(ASSIGN_UNDECLARED_LOCAL,
                          f"assign to undeclared local {name!r}")
             _check_expr(ctx, v)
         case FieldSet(local=lname, name=fname, value=v):
-            local_ty = ctx.lookup_local(lname)
-            if local_ty is None:
+            if not ctx.name_in_scope(lname):
                 ctx.emit(FIELDSET_UNDECLARED_LOCAL,
                          f"field-set on undeclared local {lname!r}")
-            elif not isinstance(local_ty, StructType):
-                ctx.emit(FIELDSET_NON_STRUCT_LOCAL,
-                         f"field-set {fname!r} on non-struct local "
-                         f"{lname!r} (local type {_type_name(local_ty)})")
             else:
-                sd = ctx.structs.get(local_ty.name)
-                if sd is None:
-                    ctx.emit(UNRESOLVED_STRUCT,
-                             f"field-set on local {lname!r} of unknown "
-                             f"struct {local_ty.name!r}")
-                elif sd.field(fname) is None:
-                    ctx.emit(UNKNOWN_FIELD,
-                             f"field-set references unknown field {fname!r} "
-                             f"of struct {local_ty.name!r}")
+                local_ty = ctx.lookup_local_type(lname)
+                # Skip if type unknown or still generic — both resolve
+                # post-mono, where this same validator pass re-checks.
+                if local_ty is None or isinstance(local_ty, TypeParamRef):
+                    pass
+                elif not isinstance(local_ty, StructType):
+                    ctx.emit(FIELDSET_NON_STRUCT_LOCAL,
+                             f"field-set {fname!r} on non-struct local "
+                             f"{lname!r} (local type {_type_name(local_ty)})")
+                else:
+                    sd = ctx.structs.get(local_ty.name)
+                    if sd is None:
+                        ctx.emit(UNRESOLVED_STRUCT,
+                                 f"field-set on local {lname!r} of unknown "
+                                 f"struct {local_ty.name!r}")
+                    elif sd.field(fname) is None:
+                        ctx.emit(UNKNOWN_FIELD,
+                                 f"field-set references unknown field "
+                                 f"{fname!r} of struct {local_ty.name!r}")
             _check_expr(ctx, v)
         case Store(ptr=p, value=v):
             _check_expr(ctx, p)
@@ -554,11 +571,15 @@ def _check_expr(ctx: _Ctx, expr) -> None:
         case FieldRead(value=inner, name=fname):
             _check_expr(ctx, inner)
             inner_ty = _infer_type(ctx, inner)
-            if inner_ty is not None and not isinstance(inner_ty, StructType):
+            # Skip if unknown or generic (TypeParamRef gets resolved at
+            # mono time; the post-mono validation pass re-checks).
+            if inner_ty is None or isinstance(inner_ty, TypeParamRef):
+                pass
+            elif not isinstance(inner_ty, StructType):
                 ctx.emit(FIELD_READ_NON_STRUCT,
                          f"field read {fname!r} on non-struct value of "
                          f"type {_type_name(inner_ty)}")
-            elif isinstance(inner_ty, StructType):
+            else:
                 sd = ctx.structs.get(inner_ty.name)
                 if sd is not None and sd.field(fname) is None:
                     ctx.emit(UNKNOWN_FIELD,
@@ -600,8 +621,7 @@ def _check_expr(ctx: _Ctx, expr) -> None:
         case SizeOf(type=t):
             _check_type(ctx, t)
         case LocalRef(name=name):
-            if ctx.lookup_local(name) is None:
-                # Could also be a param — lookup_local checks both.
+            if not ctx.name_in_scope(name):
                 ctx.emit(UNDECLARED_LOCAL,
                          f"reference to undeclared local {name!r}")
         case ParamRef(name=name):
@@ -621,8 +641,8 @@ def _check_try(ctx: _Ctx, inner) -> None:
     if ctx.fn is None:
         return
     inner_ty = _infer_type(ctx, inner)
-    if inner_ty is None:
-        return  # Can't infer; lower will catch.
+    if inner_ty is None or isinstance(inner_ty, TypeParamRef):
+        return  # Unknown / generic; post-mono pass re-checks.
     if not isinstance(inner_ty, EnumType):
         ctx.emit(TRY_NON_ENUM,
                  f"? requires an enum value, got {_type_name(inner_ty)}")
@@ -689,7 +709,7 @@ def _infer_type(ctx: _Ctx, expr) -> object | None:
         case StringRef():
             return I8PtrType()
         case LocalRef(name=name):
-            return ctx.lookup_local(name)
+            return ctx.lookup_local_type(name)
         case ParamRef(name=name):
             return ctx.params.get(name)
         case Call(function=fname):

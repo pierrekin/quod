@@ -127,6 +127,7 @@ from quod.render import (
 )
 from quod.schema import render_categories, render_category, render_kind
 from quod.templates import TEMPLATES
+from quod.validate import ValidationError as ValidationError_
 
 
 REGIMES = ("axiom", "witness", "lattice")
@@ -544,8 +545,15 @@ def check() -> None:
             continue
         try:
             program_obj = load_program(program_path)
-            module = lower_mod.lower(program_obj)
+            prepared = lower_mod.prepare_program(program_obj)
+            module = lower_mod.lower(prepared)
             parsed = lower_mod.parse_and_verify(module)
+        except ValidationError_ as e:
+            typer.echo(f"[{prog.name}] FAIL ({len(e.diagnostics)} errors):")
+            for d in e.diagnostics:
+                typer.echo(f"  {d.format()}")
+            failures += 1
+            continue
         except (ValueError, KeyError) as e:
             typer.echo(f"[{prog.name}] FAIL: {e}")
             failures += 1
