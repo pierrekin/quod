@@ -46,7 +46,7 @@ class BinOp(_Node):
     """Binary operation. The operator determines the result type:
 
       arith (s) — add, sub, mul, sdiv, srem        : iN in / iN out
-      arith (u) — udiv                              : iN in / iN out
+      arith (u) — udiv, urem                        : iN in / iN out
       cmp (s)   — slt, sle, sgt, sge, eq, ne       : iN in / i1 out
       cmp (u)   — ult, ule, ugt, uge               : iN in / i1 out
       bitwise   — or, and                           : iN in / iN out
@@ -63,7 +63,7 @@ class BinOp(_Node):
     """
     kind: Literal["llvm.binop"] = "llvm.binop"
     op: Literal[
-        "add", "sub", "mul", "sdiv", "udiv", "srem",
+        "add", "sub", "mul", "sdiv", "udiv", "srem", "urem",
         "slt", "sle", "sgt", "sge", "eq", "ne",
         "ult", "ule", "ugt", "uge",
         "or", "and",
@@ -397,6 +397,22 @@ class I64Type(_Node):
     kind: Literal["llvm.i64"] = "llvm.i64"
 
 
+class U8Type(_Node):
+    kind: Literal["llvm.u8"] = "llvm.u8"
+
+
+class U16Type(_Node):
+    kind: Literal["llvm.u16"] = "llvm.u16"
+
+
+class U32Type(_Node):
+    kind: Literal["llvm.u32"] = "llvm.u32"
+
+
+class U64Type(_Node):
+    kind: Literal["llvm.u64"] = "llvm.u64"
+
+
 class I8PtrType(_Node):
     kind: Literal["llvm.i8_ptr"] = "llvm.i8_ptr"
 
@@ -486,8 +502,12 @@ class VoidType(_Node):
 
 # Integer-only sub-union: usable wherever a pointer would be nonsense
 # (IntLit, function params/return, For loop var, claim-bearing locals).
+# Signedness lives on the type for u8..u64 only as a typing aid — the
+# LLVM lowering is the same width as the corresponding iN, and ops
+# carry their own signedness (sdiv vs udiv, slt vs ult).
 IntType = Annotated[
-    Union[I1Type, I8Type, I16Type, I32Type, I64Type],
+    Union[I1Type, I8Type, I16Type, I32Type, I64Type,
+          U8Type, U16Type, U32Type, U64Type],
     Field(discriminator="kind"),
 ]
 
@@ -500,14 +520,16 @@ IntType = Annotated[
 # construction time, so SelfType only appears in TraitDef method
 # signatures (and the rewriter never sees it).
 Type = Annotated[
-    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType,
+    Union[I1Type, I8Type, I16Type, I32Type, I64Type,
+          U8Type, U16Type, U32Type, U64Type, I8PtrType,
           StructType, EnumType, TypeParamRef, SelfType],
     Field(discriminator="kind"),
 ]
 
 # Type that can appear at a function return position, including void.
 ReturnType = Annotated[
-    Union[I1Type, I8Type, I16Type, I32Type, I64Type, I8PtrType,
+    Union[I1Type, I8Type, I16Type, I32Type, I64Type,
+          U8Type, U16Type, U32Type, U64Type, I8PtrType,
           StructType, EnumType, TypeParamRef, SelfType, VoidType],
     Field(discriminator="kind"),
 ]
@@ -519,14 +541,24 @@ def int_type_width(t: "IntType") -> int:
     match t:
         case I1Type():
             return 1
-        case I8Type():
+        case I8Type() | U8Type():
             return 8
-        case I16Type():
+        case I16Type() | U16Type():
             return 16
-        case I32Type():
+        case I32Type() | U32Type():
             return 32
-        case I64Type():
+        case I64Type() | U64Type():
             return 64
+    raise ValueError(f"not an int type: {t!r}")
+
+
+def int_type_signed(t: "IntType") -> bool:
+    """Whether an int type is signed. i1 is treated as unsigned (boolean)."""
+    match t:
+        case I8Type() | I16Type() | I32Type() | I64Type():
+            return True
+        case I1Type() | U8Type() | U16Type() | U32Type() | U64Type():
+            return False
     raise ValueError(f"not an int type: {t!r}")
 
 
@@ -1179,7 +1211,9 @@ class ExternFunction(_Node):
     @model_validator(mode="after")
     def _check_claims_supported(self):
         ret_is_int = isinstance(
-            self.return_type, (I1Type, I8Type, I16Type, I32Type, I64Type)
+            self.return_type,
+            (I1Type, I8Type, I16Type, I32Type, I64Type,
+             U8Type, U16Type, U32Type, U64Type),
         )
         for c in self.claims:
             if claim_param(c) is not None:
@@ -1833,6 +1867,14 @@ def _format_type(t) -> str:
             return "i32"
         case I64Type():
             return "i64"
+        case U8Type():
+            return "u8"
+        case U16Type():
+            return "u16"
+        case U32Type():
+            return "u32"
+        case U64Type():
+            return "u64"
         case I8PtrType():
             return "i8*"
         case StructType(name=n, type_args=ta) if ta:

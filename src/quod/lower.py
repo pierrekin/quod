@@ -42,6 +42,10 @@ from quod.model import (
     I16Type,
     I32Type,
     I64Type,
+    U8Type,
+    U16Type,
+    U32Type,
+    U64Type,
     If,
     IntLit,
     IntRangeClaim,
@@ -103,13 +107,13 @@ def _type_to_llvm(
     match t:
         case I1Type():
             return I1
-        case I8Type():
+        case I8Type() | U8Type():
             return I8
-        case I16Type():
+        case I16Type() | U16Type():
             return I16
-        case I32Type():
+        case I32Type() | U32Type():
             return I32
-        case I64Type():
+        case I64Type() | U64Type():
             return I64
         case I8PtrType():
             return I8.as_pointer()
@@ -236,6 +240,8 @@ def _lower_expr(
             return builder.udiv(go(l), go(r))
         case BinOp(op="srem", lhs=l, rhs=r):
             return builder.srem(go(l), go(r))
+        case BinOp(op="urem", lhs=l, rhs=r):
+            return builder.urem(go(l), go(r))
         case BinOp(op=op, lhs=l, rhs=r) if op in _ICMP_SIGNED:
             return builder.icmp_signed(_ICMP_SIGNED[op], go(l), go(r))
         case BinOp(op=op, lhs=l, rhs=r) if op in _ICMP_UNSIGNED:

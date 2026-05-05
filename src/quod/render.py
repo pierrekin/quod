@@ -41,6 +41,10 @@ from quod.model import (
     I16Type,
     I32Type,
     I64Type,
+    U8Type,
+    U16Type,
+    U32Type,
+    U64Type,
     I8PtrType,
     If,
     IntLit,
@@ -194,7 +198,9 @@ def _visual_width(spans: Iterable[Span]) -> int:
 
 _TYPE_NAMES: dict[type, str] = {
     I1Type: "i1", I8Type: "i8", I16Type: "i16",
-    I32Type: "i32", I64Type: "i64", I8PtrType: "i8*",
+    I32Type: "i32", I64Type: "i64",
+    U8Type: "u8", U16Type: "u16", U32Type: "u32", U64Type: "u64",
+    I8PtrType: "i8*",
     VoidType: "void",
 }
 

@@ -49,6 +49,10 @@ from quod.model import (
     I16Type,
     I32Type,
     I64Type,
+    U8Type,
+    U16Type,
+    U32Type,
+    U64Type,
     If,
     IntLit,
     IntRangeClaim,
@@ -566,6 +570,26 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "class": I64Type,
         "summary": "64-bit integer. Wide values; the type the argv wrapper parses argv slots into.",
         "example": {"kind": "llvm.i64"},
+    },
+    "llvm.u8": {
+        "class": U8Type,
+        "summary": "8-bit unsigned integer. Same width as i8; signedness lives on ops (udiv/urem/ult/...).",
+        "example": {"kind": "llvm.u8"},
+    },
+    "llvm.u16": {
+        "class": U16Type,
+        "summary": "16-bit unsigned integer.",
+        "example": {"kind": "llvm.u16"},
+    },
+    "llvm.u32": {
+        "class": U32Type,
+        "summary": "32-bit unsigned integer.",
+        "example": {"kind": "llvm.u32"},
+    },
+    "llvm.u64": {
+        "class": U64Type,
+        "summary": "64-bit unsigned integer. Holds values beyond i64's positive range up to 2^64-1.",
+        "example": {"kind": "llvm.u64"},
     },
     "llvm.i8_ptr": {
         "class": I8PtrType,

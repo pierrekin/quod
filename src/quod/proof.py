@@ -41,6 +41,10 @@ from quod.model import (
     I16Type,
     I32Type,
     I64Type,
+    U8Type,
+    U16Type,
+    U32Type,
+    U64Type,
     If,
     IntLit,
     IntRangeClaim,
@@ -67,7 +71,8 @@ def _type_universe(t: IntType) -> tuple[int, int]:
     decide interpretation. SMT's Int is unbounded; the universe constraint
     keeps Z3 honest about widths instead of finding counterexamples that
     couldn't appear in our actual codegen. Signed two's-complement bounds
-    apply for i8..i64; i1 is treated as the unsigned boolean {0, 1}.
+    apply for i8..i64; u8..u64 use [0, 2^N - 1]; i1 is the unsigned
+    boolean {0, 1}.
     """
     match t:
         case I1Type():
@@ -80,6 +85,14 @@ def _type_universe(t: IntType) -> tuple[int, int]:
             return (-(2**31), 2**31 - 1)
         case I64Type():
             return (-(2**63), 2**63 - 1)
+        case U8Type():
+            return (0, 2**8 - 1)
+        case U16Type():
+            return (0, 2**16 - 1)
+        case U32Type():
+            return (0, 2**32 - 1)
+        case U64Type():
+            return (0, 2**64 - 1)
     raise ValueError(f"not an int type: {t!r}")
 
 

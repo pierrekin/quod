@@ -75,6 +75,10 @@ from quod.model import (
     I16Type,
     I32Type,
     I64Type,
+    U8Type,
+    U16Type,
+    U32Type,
+    U64Type,
     IntRangeClaim,
     Justification,
     LibcLinkage,
@@ -1788,6 +1792,7 @@ def const_rename(
 
 _TYPE_NAMES = {
     "i1": I1Type, "i8": I8Type, "i16": I16Type, "i32": I32Type, "i64": I64Type,
+    "u8": U8Type, "u16": U16Type, "u32": U32Type, "u64": U64Type,
     "i8_ptr": I8PtrType,
 }
 

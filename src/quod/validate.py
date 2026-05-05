@@ -44,6 +44,10 @@ from quod.model import (
     I16Type,
     I32Type,
     I64Type,
+    U8Type,
+    U16Type,
+    U32Type,
+    U64Type,
     If,
     IntLit,
     Let,
@@ -778,6 +782,14 @@ def _type_name(t) -> str:
             return "i32"
         case I64Type():
             return "i64"
+        case U8Type():
+            return "u8"
+        case U16Type():
+            return "u16"
+        case U32Type():
+            return "u32"
+        case U64Type():
+            return "u64"
         case I8PtrType():
             return "i8*"
         case VoidType():

@@ -44,6 +44,10 @@ from .model import (
     I16Type,
     I32Type,
     I64Type,
+    U8Type,
+    U16Type,
+    U32Type,
+    U64Type,
     If,
     ImplDef,
     IntLit,
@@ -99,6 +103,14 @@ def _type_to_name(t) -> str:
         return "i32"
     if isinstance(t, I64Type):
         return "i64"
+    if isinstance(t, U8Type):
+        return "u8"
+    if isinstance(t, U16Type):
+        return "u16"
+    if isinstance(t, U32Type):
+        return "u32"
+    if isinstance(t, U64Type):
+        return "u64"
     if isinstance(t, I8PtrType):
         return "i8ptr"
     if isinstance(t, StructType):

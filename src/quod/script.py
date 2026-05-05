@@ -15,7 +15,9 @@ The grammar:
     param      := IDENT ':' type
     body       := '{' stmt* '}'
 
-    type       := 'i1' | 'i8' '*'? | 'i16' | 'i32' | 'i64' | 'void' | IDENT
+    type       := 'i1' | 'i8' '*'? | 'i16' | 'i32' | 'i64'
+                | 'u8' | 'u16' | 'u32' | 'u64'
+                | 'void' | IDENT
 
     stmt       := let_stmt | if_stmt | while_stmt | for_stmt | return_stmt
                 | with_arena | store_stmt | assign_or_field_set_or_expr
@@ -38,7 +40,7 @@ The grammar:
     and_expr   := cmp_expr ('&&' cmp_expr)*
     cmp_expr   := add_expr (CMPOP add_expr)?
     add_expr   := mul_expr (('+' | '-') mul_expr)*
-    mul_expr   := unary_expr (('*' | '/' | '%' | '/u') unary_expr)*
+    mul_expr   := unary_expr (('*' | '/' | '%' | '/u' | '%u') unary_expr)*
     unary_expr := postfix
     postfix    := primary ('.' IDENT)*
 
@@ -92,6 +94,10 @@ from quod.model import (
     I16Type,
     I32Type,
     I64Type,
+    U8Type,
+    U16Type,
+    U32Type,
+    U64Type,
     If,
     IntLit,
     Let,
@@ -133,12 +139,14 @@ _KEYWORDS = frozenset({
     "store", "with_arena", "capacity", "load", "widen", "uwiden",
     "ptr_offset", "sizeof", "to", "null", "true", "false", "match",
     # type keywords
-    "i1", "i8", "i16", "i32", "i64", "void",
+    "i1", "i8", "i16", "i32", "i64",
+    "u8", "u16", "u32", "u64",
+    "void",
 })
 
 # Multi-char operators must be matched before single-char ones.
 _MULTI_OPS = (
-    "->", "==", "!=", "<=", ">=", "<u", ">u", "<=u", ">=u", "/u",
+    "->", "==", "!=", "<=", ">=", "<u", ">u", "<=u", ">=u", "/u", "%u",
     "||", "&&", "..", "::", "=>",
 )
 _SINGLE_OPS = "(){}[],:;=+-*/%<>.&|?"
@@ -248,7 +256,8 @@ def tokenize(src: str) -> list[Token]:
             # Longest first so 'i16' beats 'i1'. The suffix only counts when
             # the next character isn't an identifier char — '42i8x' stays a
             # single literal that will fail to parse cleanly downstream.
-            for suf in ("i64", "i32", "i16", "i8", "i1"):
+            for suf in ("i64", "i32", "i16", "i8", "i1",
+                        "u64", "u32", "u16", "u8"):
                 end = j + len(suf)
                 if (src[j:end] == suf
                         and (end >= n or not (src[end].isalnum() or src[end] == "_"))):
@@ -291,12 +300,14 @@ def tokenize(src: str) -> list[Token]:
 
 _INT_TYPE_BY_SUFFIX = {
     "i1": I1Type, "i8": I8Type, "i16": I16Type, "i32": I32Type, "i64": I64Type,
+    "u8": U8Type, "u16": U16Type, "u32": U32Type, "u64": U64Type,
 }
 
 
 def _split_int_suffix(text: str) -> tuple[str, str | None]:
     """Split '42i8' into ('42', 'i8'); '42' into ('42', None)."""
-    for suf in ("i64", "i32", "i16", "i8", "i1"):
+    for suf in ("i64", "i32", "i16", "i8", "i1",
+                "u64", "u32", "u16", "u8"):
         if text.endswith(suf):
             return text[:-len(suf)], suf
     return text, None
@@ -421,6 +432,7 @@ class Parser:
     _PRIM_TYPE_MAP = {
         "i1": I1Type, "i8": I8Type, "i16": I16Type,
         "i32": I32Type, "i64": I64Type,
+        "u8": U8Type, "u16": U16Type, "u32": U32Type, "u64": U64Type,
     }
 
     def _type(self, *, allow_void: bool):
@@ -535,7 +547,8 @@ class Parser:
         var = self.expect("IDENT").value
         self.expect("OP", ":")
         ty = self._type(allow_void=False)
-        if not isinstance(ty, (I1Type, I8Type, I16Type, I32Type, I64Type)):
+        if not isinstance(ty, (I1Type, I8Type, I16Type, I32Type, I64Type,
+                                U8Type, U16Type, U32Type, U64Type)):
             t = self.peek(-1)
             raise ScriptError("for-loop variable must be an integer type", t.line, t.col)
         self.expect("KW", "in")
@@ -574,7 +587,8 @@ class Parser:
             self.peek().kind == "INT"
             and self.peek(1).kind == "OP" and self.peek(1).value in ("}", ";")
             and isinstance(self._return_type,
-                           (I1Type, I8Type, I16Type, I32Type, I64Type))
+                           (I1Type, I8Type, I16Type, I32Type, I64Type,
+                            U8Type, U16Type, U32Type, U64Type))
         ):
             tok = self.eat()
             digits, _ = _split_int_suffix(tok.value)
@@ -692,9 +706,10 @@ class Parser:
 
     def _mul(self):
         lhs = self._unary()
-        while self.at("OP") and self.peek().value in ("*", "/", "%", "/u"):
+        while self.at("OP") and self.peek().value in ("*", "/", "%", "/u", "%u"):
             op_tok = self.eat()
-            op = {"*": "mul", "/": "sdiv", "%": "srem", "/u": "udiv"}[op_tok.value]
+            op = {"*": "mul", "/": "sdiv", "%": "srem",
+                  "/u": "udiv", "%u": "urem"}[op_tok.value]
             rhs = self._unary()
             lhs = BinOp(op=op, lhs=lhs, rhs=rhs)
         return lhs
