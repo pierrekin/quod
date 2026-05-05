@@ -1,0 +1,63 @@
+{
+  "program": {
+    "imports": [
+      "std.io",
+      "core.io",
+      "core.option",
+      "core.result"
+    ],
+    "constants": [
+      {"name": ".str.missing", "value": "/this/path/does/not/exist/quod-errno-test"}
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": {"kind": "llvm.i32"},
+        "body": [
+          {
+            "kind": "quod.match",
+            "scrutinee": {
+              "kind": "llvm.call",
+              "function": "std.io.open_read",
+              "args": [
+                {"kind": "quod.string_ref", "name": ".str.missing"}
+              ]
+            },
+            "arms": [
+              {
+                "variant": "Ok",
+                "bindings": ["_f"],
+                "body": [
+                  {
+                    "kind": "quod.return_expr",
+                    "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}
+                  }
+                ]
+              },
+              {
+                "variant": "Err",
+                "bindings": ["e"],
+                "body": [
+                  {
+                    "kind": "quod.match",
+                    "scrutinee": {"kind": "quod.local_ref", "name": "e"},
+                    "arms": [
+                      {"variant": "NotFound", "bindings": [], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42}}]},
+                      {"variant": "PermissionDenied", "bindings": [], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 13}}]},
+                      {"variant": "Interrupted", "bindings": [], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 4}}]},
+                      {"variant": "AlreadyExists", "bindings": [], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 17}}]},
+                      {"variant": "WouldBlock", "bindings": [], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 11}}]},
+                      {"variant": "Other", "bindings": ["errno"], "body": [{"kind": "quod.return_expr", "value": {"kind": "quod.local_ref", "name": "errno"}}]}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {"exit": 42}
+}

@@ -577,23 +577,25 @@ def _enum_layout(
     struct_defs: dict[str, StructDef],
     enum_defs: dict[str, EnumDef],
 ) -> tuple[int, int]:
-    """(size, alignment) of an enum value. Layout is conceptually
-    `{i8 tag, [N x i8] payload}` where N is sized to fit the largest
-    variant; the actual struct alignment is the max payload alignment
-    so loads/stores via the variant struct are properly aligned. The
-    tag offset is 0; the payload starts at offset = max_payload_align."""
+    """(size, alignment) of an enum value. Must mirror the actual LLVM
+    layout `{i8 tag, [N x i64] payload}` emitted by lower_program — N
+    is ceil(largest-variant-payload-bytes / 8), min 1. The `[N x i64]`
+    array is 8-aligned, so the whole enum is 8-aligned regardless of
+    what individual variant fields would naturally need; an enum with
+    only an `i32` payload still occupies 16 bytes (1 tag + 7 padding +
+    8 slot). Computing alignment from the variant's natural alignment
+    here would undercount when this enum is itself a payload field of
+    a larger enum."""
     payload_size = 0
-    payload_align = 1
     for v in ed.variants:
-        vsize, valign = _variant_struct_layout(v, struct_defs, enum_defs)
+        vsize, _valign = _variant_struct_layout(v, struct_defs, enum_defs)
         if vsize > payload_size:
             payload_size = vsize
-        if valign > payload_align:
-            payload_align = valign
-    # Tag is one byte at offset 0; payload starts after alignment to
-    # payload_align (so e.g. an i64 payload field is 8-aligned).
+    # n_slots mirrors lower_program: at least 1, ceil-div by 8.
+    n_slots = (payload_size + 7) // 8 or 1
+    payload_align = 8
     payload_offset = _align_to(1, payload_align)
-    total = _align_to(payload_offset + payload_size, payload_align)
+    total = _align_to(payload_offset + 8 * n_slots, payload_align)
     return (total, payload_align)
 
 

@@ -1,0 +1,72 @@
+{
+  "program": {
+    "enums": [
+      {
+        "name": "Inner",
+        "variants": [
+          {"name": "A", "fields": []},
+          {"name": "B", "fields": [{"name": "x", "type": {"kind": "llvm.i32"}}]}
+        ]
+      },
+      {
+        "name": "Outer",
+        "variants": [
+          {"name": "Wrap", "fields": [{"name": "inner", "type": {"kind": "llvm.enum", "name": "Inner"}}]}
+        ]
+      }
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": {"kind": "llvm.i32"},
+        "body": [
+          {
+            "kind": "quod.let",
+            "name": "o",
+            "type": {"kind": "llvm.enum", "name": "Outer"},
+            "init": {
+              "kind": "quod.enum_init",
+              "enum": "Outer",
+              "variant": "Wrap",
+              "fields": [
+                {
+                  "name": "inner",
+                  "value": {
+                    "kind": "quod.enum_init",
+                    "enum": "Inner",
+                    "variant": "B",
+                    "fields": [
+                      {"name": "x", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42}}
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.match",
+            "scrutinee": {"kind": "quod.local_ref", "name": "o"},
+            "arms": [
+              {
+                "variant": "Wrap",
+                "bindings": ["i"],
+                "body": [
+                  {
+                    "kind": "quod.match",
+                    "scrutinee": {"kind": "quod.local_ref", "name": "i"},
+                    "arms": [
+                      {"variant": "A", "bindings": [], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}]},
+                      {"variant": "B", "bindings": ["x"], "body": [{"kind": "quod.return_expr", "value": {"kind": "quod.local_ref", "name": "x"}}]}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {"exit": 42}
+}
