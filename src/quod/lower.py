@@ -1359,14 +1359,26 @@ def lower(
     module.data_layout = str(_tm.target_data)
     overrides = overrides or {}
 
-    # Pass 0: register named struct types. Two phases (allocate, then set
-    # body) so a struct can mention another that's defined later in the
-    # list. Cycles are already rejected by the model validator, so the
-    # second pass terminates.
+    # Pass 0: register named struct AND enum types. Four phases:
+    # (a) allocate identified types for every struct,
+    # (b) allocate identified types for every enum,
+    # (c) set struct bodies (may reference any allocated type),
+    # (d) set enum bodies.
+    # Allocating both type sets up-front lets a struct reference an
+    # enum-typed field (or vice versa) without forcing a topological
+    # ordering. Cycles in struct nesting are already rejected by the
+    # model validator, so body-setting terminates.
     struct_defs: dict[str, StructDef] = {sd.name: sd for sd in program.structs}
+    enum_defs: dict[str, EnumDef] = {ed.name: ed for ed in program.enums}
+    struct_defs_for_layout: dict[str, StructDef] = {sd.name: sd for sd in program.structs}
+
     struct_tys: dict[str, ir.IdentifiedStructType] = {}
     for sd in program.structs:
         struct_tys[sd.name] = module.context.get_identified_type(sd.name)
+    enum_tys: dict[str, ir.IdentifiedStructType] = {}
+    for ed in program.enums:
+        enum_tys[ed.name] = module.context.get_identified_type(ed.name)
+
     for sd in program.structs:
         ty = struct_tys[sd.name]
         # llvmlite shares one LLVMContext across every Module in a Python
@@ -1376,7 +1388,7 @@ def lower(
         # rejects redefinitions with conflicting layouts.
         if not ty.is_opaque:
             continue
-        body = [_type_to_llvm(f.type, struct_tys) for f in sd.fields]
+        body = [_type_to_llvm(f.type, struct_tys, enum_tys) for f in sd.fields]
         ty.set_body(*body)
 
     # Enums: each lowers to an identified `{i8 tag, [N x i64] payload}`
@@ -1388,11 +1400,6 @@ def lower(
     # EnumInit and Match access fields by bitcasting the payload bytes
     # to a per-variant literal LLVM struct type — variants can carry
     # arbitrary types (other structs, even other enums).
-    enum_defs: dict[str, EnumDef] = {ed.name: ed for ed in program.enums}
-    struct_defs_for_layout: dict[str, StructDef] = {sd.name: sd for sd in program.structs}
-    enum_tys: dict[str, ir.IdentifiedStructType] = {}
-    for ed in program.enums:
-        enum_tys[ed.name] = module.context.get_identified_type(ed.name)
     for ed in program.enums:
         ty = enum_tys[ed.name]
         if not ty.is_opaque:

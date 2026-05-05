@@ -1,0 +1,119 @@
+{
+  "program": {
+    "imports": ["mem.arena"],
+    "enums": [
+      {
+        "name": "Inner",
+        "variants": [
+          {"name": "A", "fields": []},
+          {"name": "B", "fields": [{"name": "x", "type": {"kind": "llvm.i32"}}]}
+        ]
+      }
+    ],
+    "structs": [
+      {
+        "name": "Outer",
+        "fields": [
+          {"name": "tag", "type": {"kind": "llvm.i32"}},
+          {"name": "inner", "type": {"kind": "llvm.enum", "name": "Inner"}}
+        ]
+      }
+    ],
+    "functions": [
+      {
+        "name": "main",
+        "params": [],
+        "return_type": {"kind": "llvm.i32"},
+        "body": [
+          {
+            "kind": "quod.let",
+            "name": "a",
+            "type": {"kind": "llvm.i8_ptr"},
+            "init": {
+              "kind": "llvm.call",
+              "function": "mem.arena.new",
+              "args": [{"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4096}]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "p",
+            "type": {"kind": "llvm.i8_ptr"},
+            "init": {
+              "kind": "llvm.call",
+              "function": "mem.arena.alloc",
+              "args": [
+                {"kind": "quod.local_ref", "name": "a"},
+                {"kind": "quod.sizeof", "type": {"kind": "llvm.struct", "name": "Outer"}}
+              ]
+            }
+          },
+          {
+            "kind": "quod.store",
+            "ptr": {"kind": "quod.local_ref", "name": "p"},
+            "value": {
+              "kind": "quod.struct_init",
+              "type": "Outer",
+              "fields": [
+                {"name": "tag", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 7}},
+                {"name": "inner", "value": {
+                  "kind": "quod.enum_init",
+                  "enum": "Inner",
+                  "variant": "B",
+                  "fields": [
+                    {"name": "x", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 35}}
+                  ]
+                }}
+              ]
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "outer_tag",
+            "type": {"kind": "llvm.i32"},
+            "init": {
+              "kind": "quod.load_field",
+              "ptr": {"kind": "quod.local_ref", "name": "p"},
+              "struct_type": "Outer",
+              "name": "tag"
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "inner_val",
+            "type": {"kind": "llvm.enum", "name": "Inner"},
+            "init": {
+              "kind": "quod.load_field",
+              "ptr": {"kind": "quod.local_ref", "name": "p"},
+              "struct_type": "Outer",
+              "name": "inner"
+            }
+          },
+          {
+            "kind": "quod.match",
+            "scrutinee": {"kind": "quod.local_ref", "name": "inner_val"},
+            "arms": [
+              {"variant": "A", "bindings": [], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}]},
+              {
+                "variant": "B",
+                "bindings": ["x"],
+                "body": [
+                  {
+                    "kind": "quod.return_expr",
+                    "value": {
+                      "kind": "llvm.binop",
+                      "op": "add",
+                      "lhs": {"kind": "quod.local_ref", "name": "outer_tag"},
+                      "rhs": {"kind": "quod.local_ref", "name": "x"}
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {"exit": 42}
+}
