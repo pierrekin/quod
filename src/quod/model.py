@@ -669,11 +669,17 @@ class If(_Node):
 
 class Let(_Node):
     """Introduce a mutable local variable. `name` must not shadow a parameter
-    or another local in the same function. Lowered to alloca-at-entry + store."""
+    or another local in the same function. Lowered to alloca-at-entry plus
+    a store of `init` at the binding point. When `init` is None, the
+    local starts out **uninitialized** — alloca only, no store; reading
+    such a local is undefined behaviour, and the validator's forward
+    must-init analysis refuses any program that lets such a read be
+    reachable. The C ingester uses this for `int x;` (no initializer);
+    other source languages can use it too."""
     kind: Literal["quod.let"] = "quod.let"
     name: str
     type: Type
-    init: Expr
+    init: Expr | None = None
 
 
 class Assign(_Node):

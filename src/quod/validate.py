@@ -75,7 +75,9 @@ from quod.model import (
     StructDef,
     StructInit,
     StructType,
+    TraitCall,
     TryExpr,
+    Unreachable,
     VoidType,
     While,
     Widen,
@@ -117,6 +119,7 @@ RETURN_EXPR_VOID = "return_expr_void"
 ASSIGN_UNDECLARED_LOCAL = "assign_undeclared_local"
 FIELDSET_UNDECLARED_LOCAL = "fieldset_undeclared_local"
 UNDECLARED_PARAM = "undeclared_param"
+READ_OF_UNINIT_LOCAL = "read_of_uninit_local"
 
 # Phase 3: type-aware checks (downstream of inference).
 FIELD_READ_NON_STRUCT = "field_read_non_struct"
@@ -302,6 +305,12 @@ def _check_function(ctx: _Ctx, fn: Function) -> None:
     for stmt in fn.body.stmts:
         _check_stmt(ctx, stmt)
 
+    # Definite-init analysis: locals introduced by `Let(init=None)` are
+    # uninitialized at the binding point. Reading them is undefined
+    # behaviour (matches C `int x;`); we refuse if any path can reach
+    # a read before a definite write.
+    _check_definite_init(ctx, fn.body, initially_defined=set(ctx.params.keys()))
+
     # Reset (paranoid hygiene; callers should always set these afresh).
     ctx.fn = None
     ctx.params = {}
@@ -391,7 +400,8 @@ def _check_stmt(ctx: _Ctx, stmt) -> None:
             _check_expr(ctx, expr)
         case Let(name=name, type=ty, init=expr):
             _check_type(ctx, ty, detail="let")
-            _check_expr(ctx, expr)
+            if expr is not None:
+                _check_expr(ctx, expr)
         case Assign(name=name, value=v):
             if not ctx.name_in_scope(name):
                 ctx.emit(ASSIGN_UNDECLARED_LOCAL,
@@ -461,6 +471,170 @@ def _check_stmt(ctx: _Ctx, stmt) -> None:
             # Unknown stmt kinds are out of scope here — lowering will
             # blow up if a stmt is genuinely unhandled. Validation only
             # owns the rules listed above.
+            pass
+
+
+def _check_definite_init(ctx: _Ctx, body, *, initially_defined: set[str]) -> None:
+    """Forward must-init analysis. Emits READ_OF_UNINIT_LOCAL when any
+    `LocalRef(x)` is reachable on a path where `x` was introduced by
+    `Let(init=None)` and not yet definitely written.
+
+    `initially_defined` seeds the analysis with names that are
+    pre-defined at the function entry (parameters). The walk returns
+    the set of names definitely-defined when control falls through the
+    body; callers use this to merge across branches (intersection).
+    """
+    _walk_definite_init(ctx, body, set(initially_defined))
+
+
+def _walk_definite_init(ctx: _Ctx, body, defined: set[str]) -> set[str] | None:
+    """Walk `body.stmts` updating `defined`. Returns the set of names
+    definitely-defined when control falls through, or None if every
+    path through `body` terminates (return / unreachable) — a sentinel
+    that lets callers merge cleanly.
+    """
+    for stmt in body.stmts:
+        new_defined = _check_stmt_init(ctx, stmt, defined)
+        if new_defined is None:
+            return None  # this stmt terminates control flow
+        defined = new_defined
+    return defined
+
+
+def _check_stmt_init(ctx: _Ctx, stmt, defined: set[str]) -> set[str] | None:
+    """Process one statement: (1) check that any LocalRef it contains
+    references a name in `defined`; (2) update and return the new
+    `defined` set, or None if control flow doesn't fall through."""
+    match stmt:
+        case Let(name=name, init=init):
+            if init is not None:
+                _check_expr_reads(ctx, init, defined)
+                defined = defined | {name}
+            # init=None: name remains undefined until a future Assign.
+            return defined
+        case Assign(name=name, value=v):
+            _check_expr_reads(ctx, v, defined)
+            return defined | {name}
+        case ExprStmt(value=expr) | ReturnExpr(value=expr):
+            _check_expr_reads(ctx, expr, defined)
+            return None if isinstance(stmt, ReturnExpr) else defined
+        case Return() | Unreachable():
+            return None
+        case If(cond=cond, then_body=t, else_body=e):
+            _check_expr_reads(ctx, cond, defined)
+            then_def = _walk_definite_init(ctx, t, set(defined))
+            else_def = _walk_definite_init(ctx, e, set(defined))
+            # Intersection — only locals defined on BOTH paths are
+            # definitely-defined after the if. If one branch
+            # terminates (None), inherit the other's set; if both
+            # terminate, the if doesn't fall through.
+            if then_def is None and else_def is None:
+                return None
+            if then_def is None:
+                return else_def
+            if else_def is None:
+                return then_def
+            return then_def & else_def
+        case While(cond=cond, body=b):
+            _check_expr_reads(ctx, cond, defined)
+            # Body might not execute (zero-iteration case), so any
+            # writes inside don't count as definite. Still need to
+            # check reads inside the body against `defined`.
+            _walk_definite_init(ctx, b, set(defined))
+            return defined
+        case For(var=var, lo=lo, hi=hi, body=b):
+            _check_expr_reads(ctx, lo, defined)
+            _check_expr_reads(ctx, hi, defined)
+            # Loop body sees `var` as defined; same zero-iteration
+            # caveat as While for any other writes.
+            _walk_definite_init(ctx, b, set(defined) | {var})
+            return defined
+        case FieldSet(local=lname, value=v):
+            _check_expr_reads(ctx, v, defined)
+            return defined  # field-set doesn't define the local itself
+        case Store(ptr=p, value=v):
+            _check_expr_reads(ctx, p, defined)
+            _check_expr_reads(ctx, v, defined)
+            return defined
+        case StoreField(ptr=p, value=v):
+            _check_expr_reads(ctx, p, defined)
+            _check_expr_reads(ctx, v, defined)
+            return defined
+        case Match(scrutinee=scrut, arms=arms):
+            _check_expr_reads(ctx, scrut, defined)
+            arm_defs: list[set[str] | None] = []
+            for arm in arms:
+                arm_defs.append(_walk_definite_init(
+                    ctx, arm.body, set(defined) | set(arm.bindings),
+                ))
+            non_none = [d for d in arm_defs if d is not None]
+            if not non_none:
+                return None  # every arm terminates
+            result = non_none[0]
+            for d in non_none[1:]:
+                result = result & d
+            # Locals introduced inside arms are scoped to the arm; only
+            # names that were already in `defined` (or universally
+            # defined across arms) survive.
+            return result & defined if not arms else result if non_none else defined
+        case WithArena(name=name, capacity=cap, body=b):
+            _check_expr_reads(ctx, cap, defined)
+            _walk_definite_init(ctx, b, set(defined) | {name})
+            return defined
+        case _:
+            return defined
+
+
+def _check_expr_reads(ctx: _Ctx, expr, defined: set[str]) -> None:
+    """Walk `expr` and emit READ_OF_UNINIT_LOCAL at every LocalRef whose
+    name is declared but not in `defined`."""
+    match expr:
+        case LocalRef(name=name):
+            if name in ctx.locals and name not in defined:
+                ctx.emit(
+                    READ_OF_UNINIT_LOCAL,
+                    f"local {name!r} is read before any definite write — "
+                    f"declared without an initializer, no path through "
+                    f"the program writes it before this read"
+                )
+        case BinOp(lhs=l, rhs=r):
+            _check_expr_reads(ctx, l, defined)
+            _check_expr_reads(ctx, r, defined)
+        case ShortCircuitAnd(lhs=l, rhs=r) | ShortCircuitOr(lhs=l, rhs=r):
+            _check_expr_reads(ctx, l, defined)
+            _check_expr_reads(ctx, r, defined)
+        case IfExpr(cond=cond, then_value=t, else_value=e):
+            _check_expr_reads(ctx, cond, defined)
+            _check_expr_reads(ctx, t, defined)
+            _check_expr_reads(ctx, e, defined)
+        case Call(args=args):
+            for a in args:
+                _check_expr_reads(ctx, a, defined)
+        case PtrOffset(base=b, offset=o):
+            _check_expr_reads(ctx, b, defined)
+            _check_expr_reads(ctx, o, defined)
+        case Widen(value=v):
+            _check_expr_reads(ctx, v, defined)
+        case Load(ptr=p):
+            _check_expr_reads(ctx, p, defined)
+        case LoadField(ptr=p):
+            _check_expr_reads(ctx, p, defined)
+        case FieldRead(value=v):
+            _check_expr_reads(ctx, v, defined)
+        case StructInit(fields=fis):
+            for fi in fis:
+                _check_expr_reads(ctx, fi.value, defined)
+        case EnumInit(fields=fis):
+            for fi in fis:
+                _check_expr_reads(ctx, fi.value, defined)
+        case TryExpr(value=v):
+            _check_expr_reads(ctx, v, defined)
+        case TraitCall(args=args):
+            for a in args:
+                _check_expr_reads(ctx, a, defined)
+        case _:
+            # Leaves: IntLit, ParamRef, StringRef, NullPtr, CharLit,
+            # SizeOf — no LocalRef inside.
             pass
 
 

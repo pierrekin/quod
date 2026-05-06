@@ -430,13 +430,17 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
                     yield from _stmt_lines(s, indent + 2)
             yield Line(None, indent, (Span("}", "punct"),))
         case Let(name=n, type=ty, init=init):
-            yield Line(stmt, indent, (
+            spans: list[Span] = [
                 Span("let", "keyword"), Span(" ", "ws"),
                 Span(n, "local"), Span(": ", "punct"),
-                type_span(ty), Span(" ", "ws"),
-                Span("=", "op"), Span(" ", "ws"),
-                *_expr_spans(init),
-            ))
+                type_span(ty),
+            ]
+            if init is not None:
+                spans.extend((
+                    Span(" ", "ws"), Span("=", "op"), Span(" ", "ws"),
+                    *_expr_spans(init),
+                ))
+            yield Line(stmt, indent, tuple(spans))
         case Assign(name=n, value=v):
             yield Line(stmt, indent, (
                 Span(n, "local"), Span(" ", "ws"),

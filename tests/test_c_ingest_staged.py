@@ -503,6 +503,56 @@ def test_ternary_example_compiles_and_runs(tmp_path):
     assert "sign_or_zero(42)    = 1" in out.stdout
 
 
+UNINIT_LOCAL_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/uninit_local/uninit_local.c"
+
+
+def test_uninit_local_lifts_with_init_none():
+    """`int x;` (no initializer) lifts to layer-A CVarDecl(init=None)
+    and layer-B Let(init=None). The validator's definite-init analysis
+    accepts the program when every read is dominated by a write."""
+    p = ingest_c(UNINIT_LOCAL_C)
+    fn_b = next(f for f in p.functions if f.name == "branched_init")
+    let_x = fn_b.body.stmts[0]
+    from quod.model import Let
+    assert isinstance(let_x, Let) and let_x.name == "x" and let_x.init is None
+
+
+def test_uninit_local_example_compiles_and_runs(tmp_path):
+    import subprocess
+    from quod.lower import compile_program
+    p = ingest_c(UNINIT_LOCAL_C)
+    res = compile_program(
+        p, build_dir=tmp_path, bins=(("uninit_local", "main"),),
+        profile=2, link=True,
+    )
+    out = subprocess.run([str(res.bins[0].binary)], capture_output=True, text=True, timeout=10)
+    assert out.returncode == 0
+    assert "branched_init(5)    = 5" in out.stdout
+    assert "branched_init(-3)   = 3" in out.stdout
+    assert "sequential_init(5)  = 10" in out.stdout
+
+
+def test_uninit_local_read_before_write_refuses(tmp_path):
+    """Reading an uninitialized local on any path that hasn't first
+    written it triggers READ_OF_UNINIT_LOCAL during validation."""
+    from quod.lower import compile_program
+    from quod.validate import ValidationError
+    src = tmp_path / "bad.c"
+    src.write_text(
+        "int bad(int n) {\n"
+        "    int x;\n"
+        "    if (n > 0) { x = 1; }\n"
+        "    return x;\n"  # else-branch doesn't write x
+        "}\n"
+    )
+    p = ingest_c(src)
+    with pytest.raises(ValidationError, match="read_of_uninit_local"):
+        compile_program(
+            p, build_dir=tmp_path, bins=(("bad", "bad"),),
+            profile=2, link=True,
+        )
+
+
 def test_every_c_corpus_example_emits_layer_a():
     """Coverage sweep: every example now produces a `source_units`
     entry. The layer-A widening landed in three steps (calls /

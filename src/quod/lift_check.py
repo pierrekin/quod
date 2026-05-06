@@ -428,10 +428,23 @@ def _check_stmt(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
         if a.name != b.name:
             raise LiftCheckError(f"{path}: var name {a.name!r} vs {b.name!r}")
         _check_value_type(a.type, b.type, path=f"{path}.type")
-        # layer A allows uninitialized decls; layer B requires init. v6's
-        # lifter refuses uninitialized, so this should always match.
+        # Both layers may carry `init=None` for uninitialized locals
+        # (`int x;`). When present, the inits must match structurally.
         if a.init is None:
-            raise LiftCheckError(f"{path}: layer-A var_decl is uninitialized")
+            if b.init is not None:
+                raise LiftCheckError(
+                    f"{path}: layer-A var_decl is uninitialized but layer-B "
+                    f"Let has an init expression"
+                )
+            return {
+                "kind": "var_decl(uninit) ↔ let(uninit)",
+                "a_id": a.id, "name": a.name,
+            }
+        if b.init is None:
+            raise LiftCheckError(
+                f"{path}: layer-A var_decl has an init but layer-B Let "
+                f"is uninitialized"
+            )
         return {
             "kind": "var_decl ↔ let",
             "a_id": a.id, "name": a.name,

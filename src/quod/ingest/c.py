@@ -660,15 +660,23 @@ class _FunctionTranslator:
                 raise _refuse(c, "decl-stmt with no children")
             # Multi-declarator: `int a, b, c;` becomes N consecutive Lets.
             # libclang exposes each declarator as its own VAR_DECL child.
+            # An uninitialized declarator (`int x;`) lifts to
+            # `Let(name, type, init=None)` — the validator's definite-init
+            # analysis refuses any program where such a local is read
+            # before being written.
             lets: list[Statement] = []
             for decl in children:
                 if decl.kind != cx.CursorKind.VAR_DECL:
                     raise _refuse(decl, f"only var declarations supported, got {decl.kind.name}")
                 local_ty = _local_type(decl, decl.type)
-                init_children = list(decl.get_children())
-                if not init_children:
-                    raise _refuse(decl, "uninitialized locals not supported (require `T x = …;`)")
-                init_expr = self.expr(init_children[-1])
+                # libclang's VAR_DECL children include both type refs
+                # (TYPE_REF, NAMESPACE_REF, …) and the optional
+                # initializer expression. Filter to only expression-
+                # kind cursors; the last one (if any) is the init.
+                init_cursors = [
+                    ic for ic in decl.get_children() if ic.kind.is_expression()
+                ]
+                init_expr = self.expr(init_cursors[-1]) if init_cursors else None
                 self._locals.add(decl.spelling)
                 lets.append(Let(name=decl.spelling, type=local_ty, init=init_expr))
             return tuple(lets)
@@ -999,8 +1007,10 @@ class _LayerATranslator:
             for decl in children:
                 if decl.kind != cx.CursorKind.VAR_DECL:
                     raise _refuse(decl, f"layer A: only var declarations supported, got {decl.kind.name}")
-                init_children = list(decl.get_children())
-                init = self.expr(init_children[-1]) if init_children else None
+                init_cursors = [
+                    ic for ic in decl.get_children() if ic.kind.is_expression()
+                ]
+                init = self.expr(init_cursors[-1]) if init_cursors else None
                 sub_decls.append(CVarDecl(
                     id=self._mint("cvardecl"),
                     type=_c_source_type(decl, decl.type),

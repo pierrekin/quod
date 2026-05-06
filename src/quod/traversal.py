@@ -169,7 +169,7 @@ def substitute_in_stmt(stmt, type_fn: Callable):
     if isinstance(stmt, Let):
         return stmt.model_copy(update={
             "type": type_fn(stmt.type),
-            "init": substitute_in_expr(stmt.init, type_fn),
+            "init": (substitute_in_expr(stmt.init, type_fn) if stmt.init is not None else None),
         })
     if isinstance(stmt, Assign):
         return stmt.model_copy(update={"value": substitute_in_expr(stmt.value, type_fn)})

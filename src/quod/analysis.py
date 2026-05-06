@@ -126,7 +126,8 @@ def _walk_calls_in_stmt(stmt) -> Iterator[Call]:
             for s in e_body.stmts:
                 yield from _walk_calls_in_stmt(s)
         case Let(init=expr) | Assign(value=expr) | FieldSet(value=expr):
-            yield from _walk_calls_in_expr(expr)
+            if expr is not None:
+                yield from _walk_calls_in_expr(expr)
         case Store(ptr=p, value=v):
             yield from _walk_calls_in_expr(p)
             yield from _walk_calls_in_expr(v)

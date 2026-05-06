@@ -326,7 +326,7 @@ def _walk_types_in_stmt(stmt, fn):
     if isinstance(stmt, Let):
         return stmt.model_copy(update={
             "type": fn(stmt.type),
-            "init": _walk_types_in_expr(stmt.init, fn),
+            "init": (_walk_types_in_expr(stmt.init, fn) if stmt.init is not None else None),
         })
     if isinstance(stmt, Assign):
         return stmt.model_copy(update={
@@ -518,7 +518,8 @@ def _collect_in_stmt(stmt, sink: set):
             _collect_in_stmt(s, sink)
     elif isinstance(stmt, Let):
         _collect_instantiations(stmt.type, sink)
-        _collect_in_expr(stmt.init, sink)
+        if stmt.init is not None:
+            _collect_in_expr(stmt.init, sink)
     elif isinstance(stmt, Assign):
         _collect_in_expr(stmt.value, sink)
     elif isinstance(stmt, While):
@@ -834,6 +835,8 @@ def _resolve_trait_calls_in_stmt(stmt, impl_index):
             }),
         })
     if isinstance(stmt, Let):
+        if stmt.init is None:
+            return stmt
         return stmt.model_copy(update={
             "init": _resolve_trait_calls_in_expr(stmt.init, impl_index),
         })

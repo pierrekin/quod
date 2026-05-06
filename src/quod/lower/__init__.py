@@ -801,7 +801,13 @@ def _lower_stmt(
             lower_expr(expr)
             return
         case Let(name=name, init=init):
-            # Alloca was pre-emitted at the entry block; just store the init value.
+            # Alloca was pre-emitted at the entry block. Store the init
+            # value if there is one; for an uninitialized local
+            # (init=None), the alloca's contents are undef until a
+            # later Assign — the validator ensures no read happens
+            # before that.
+            if init is None:
+                return
             dest_ty = locals_[name].type.pointee
             init_val = lower_expr(_coerce_int_lit(init, dest_ty))
             builder.store(init_val, locals_[name])

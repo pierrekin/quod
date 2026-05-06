@@ -1,0 +1,120 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_sequential_init",
+    "b_id": "@fn_c_sequential_init",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_5",
+      "stmts": [
+        {
+          "a_id": "@cvardecl_c_sequential_init_1",
+          "kind": "var_decl(uninit) \u2194 let(uninit)",
+          "name": "total"
+        },
+        {
+          "a_id": "@cvardecl_c_sequential_init_2",
+          "init": {
+            "kind": "int_lit",
+            "value": 0
+          },
+          "kind": "var_decl \u2194 let",
+          "name": "i"
+        },
+        {
+          "a_id": "@cvardecl_c_sequential_init_3",
+          "init": {
+            "kind": "int_lit",
+            "value": 0
+          },
+          "kind": "var_decl \u2194 let",
+          "name": "sum"
+        },
+        {
+          "a_id": "@cwhile_c_sequential_init_1",
+          "body": {
+            "a_block": "<inline>",
+            "b_block_id": "@blk_c_4",
+            "stmts": [
+              {
+                "a_id": "@cassign_c_sequential_init_1",
+                "kind": "assign \u2194 assign",
+                "target": "sum",
+                "value": {
+                  "kind": "binop(+) \u2194 binop(add)",
+                  "lhs": {
+                    "kind": "var_ref \u2194 local_ref",
+                    "name": "sum"
+                  },
+                  "rhs": {
+                    "kind": "var_ref \u2194 local_ref",
+                    "name": "i"
+                  }
+                }
+              },
+              {
+                "a_id": "@cassign_c_sequential_init_2",
+                "kind": "assign \u2194 assign",
+                "target": "i",
+                "value": {
+                  "kind": "binop(+) \u2194 binop(add)",
+                  "lhs": {
+                    "kind": "var_ref \u2194 local_ref",
+                    "name": "i"
+                  },
+                  "rhs": {
+                    "kind": "int_lit",
+                    "value": 1
+                  }
+                }
+              }
+            ]
+          },
+          "cond": {
+            "kind": "binop(<) \u2194 binop(slt)",
+            "lhs": {
+              "kind": "var_ref \u2194 local_ref",
+              "name": "i"
+            },
+            "rhs": {
+              "kind": "var_ref \u2194 param_ref",
+              "name": "n"
+            }
+          },
+          "kind": "c.while \u2194 while"
+        },
+        {
+          "a_id": "@cassign_c_sequential_init_3",
+          "kind": "assign \u2194 assign",
+          "target": "total",
+          "value": {
+            "kind": "var_ref \u2194 local_ref",
+            "name": "sum"
+          }
+        },
+        {
+          "a_id": "@creturn_c_sequential_init_1",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "var_ref \u2194 local_ref",
+            "name": "total"
+          }
+        }
+      ]
+    },
+    "name": "sequential_init",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "n"
+      }
+    ],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}
