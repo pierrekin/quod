@@ -1,0 +1,42 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_square",
+    "b_id": "@fn_c_square",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_1",
+      "stmts": [
+        {
+          "a_id": "@creturn_c_square_1",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "binop(*) \u2194 binop(mul)",
+            "lhs": {
+              "kind": "var_ref \u2194 param_ref",
+              "name": "x"
+            },
+            "rhs": {
+              "kind": "var_ref \u2194 param_ref",
+              "name": "x"
+            }
+          }
+        }
+      ]
+    },
+    "name": "square",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "x"
+      }
+    ],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

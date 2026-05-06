@@ -180,6 +180,21 @@
   "edges": [
     {
       "kind": "edge.provenance",
+      "source": "@cfn_c_square",
+      "target": "@fn_c_square"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_sum_squares",
+      "target": "@fn_c_sum_squares"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_main",
+      "target": "@fn_c_main"
+    },
+    {
+      "kind": "edge.provenance",
       "source": "@blk_c_1",
       "target": "@blk_c_lowered_square_1"
     },
@@ -214,28 +229,228 @@
       "kind": "equivalent_to",
       "a_node_id": "@fn_c_square",
       "b_node_id": "@fn_c_lowered_square",
+      "regime": "witness",
       "justification": {
         "kind": "family_lowering",
-        "rule_name": "identity"
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
       }
     },
     {
       "kind": "equivalent_to",
       "a_node_id": "@fn_c_sum_squares",
       "b_node_id": "@fn_c_lowered_sum_squares",
+      "regime": "witness",
       "justification": {
         "kind": "family_lowering",
-        "rule_name": "identity"
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
       }
     },
     {
       "kind": "equivalent_to",
       "a_node_id": "@fn_c_main",
       "b_node_id": "@fn_c_lowered_main",
+      "regime": "witness",
       "justification": {
         "kind": "family_lowering",
-        "rule_name": "identity"
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
       }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_square",
+      "b_node_id": "@fn_c_square",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/square.txt",
+        "artifact_hash": "c15a45ad4a510845148817d7856b940efdc7d4827ebdf5adbaa92fa8288f9ff8"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_sum_squares",
+      "b_node_id": "@fn_c_sum_squares",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/sum_squares.txt",
+        "artifact_hash": "fb1766b0676465adcb136625250c836dd5501a75ed57608b92fdb9da52968d32"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_main",
+      "b_node_id": "@fn_c_main",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/main.txt",
+        "artifact_hash": "2006559109fd8dd2b4ff04eaeae8ece9f1eb33da7bea1542a8b36e6c226eada2"
+      }
+    }
+  ],
+  "source_units": [
+    {
+      "kind": "c_unit",
+      "id": "@cunit_c_arithmetic",
+      "source_path": "arithmetic.c",
+      "functions": [
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_square",
+          "name": "square",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [
+            {
+              "kind": "c.param",
+              "name": "x",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            }
+          ],
+          "body": [
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_square_1",
+              "value": {
+                "kind": "c.binop",
+                "id": "@cbinop_c_square_1",
+                "op": "*",
+                "lhs": {
+                  "kind": "c.var_ref",
+                  "name": "x"
+                },
+                "rhs": {
+                  "kind": "c.var_ref",
+                  "name": "x"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_sum_squares",
+          "name": "sum_squares",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [
+            {
+              "kind": "c.param",
+              "name": "a",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            },
+            {
+              "kind": "c.param",
+              "name": "b",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            }
+          ],
+          "body": [
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_sum_squares_1",
+              "value": {
+                "kind": "c.binop",
+                "id": "@cbinop_c_sum_squares_1",
+                "op": "+",
+                "lhs": {
+                  "kind": "c.call",
+                  "id": "@ccall_c_sum_squares_1",
+                  "callee": "square",
+                  "args": [
+                    {
+                      "kind": "c.var_ref",
+                      "name": "a"
+                    }
+                  ]
+                },
+                "rhs": {
+                  "kind": "c.call",
+                  "id": "@ccall_c_sum_squares_2",
+                  "callee": "square",
+                  "args": [
+                    {
+                      "kind": "c.var_ref",
+                      "name": "b"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_main",
+          "name": "main",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [],
+          "body": [
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_1",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_2",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_1",
+                    "value": "3^2 + 4^2 = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_1",
+                    "callee": "sum_squares",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 3
+                      },
+                      {
+                        "kind": "c.lit_int",
+                        "value": 4
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_main_1",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 0
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "structured_functions": [

@@ -1,0 +1,57 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_in_unit_range",
+    "b_id": "@fn_c_in_unit_range",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_8",
+      "stmts": [
+        {
+          "a_id": "@creturn_c_in_unit_range_1",
+          "cond": {
+            "kind": "&& \u2194 sc_and",
+            "lhs": {
+              "kind": "binop(>=) \u2194 binop(sge)",
+              "lhs": {
+                "kind": "var_ref \u2194 param_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "int_lit",
+                "value": 0
+              }
+            },
+            "rhs": {
+              "kind": "binop(<=) \u2194 binop(sle)",
+              "lhs": {
+                "kind": "var_ref \u2194 param_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "int_lit",
+                "value": 100
+              }
+            }
+          },
+          "kind": "return cond \u2194 if(cond, return 1, return 0)",
+          "transform": "i1_widen"
+        }
+      ]
+    },
+    "name": "in_unit_range",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "x"
+      }
+    ],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

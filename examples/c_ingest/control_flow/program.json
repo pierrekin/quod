@@ -397,6 +397,21 @@
   "edges": [
     {
       "kind": "edge.provenance",
+      "source": "@cfn_c_classify",
+      "target": "@fn_c_classify"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_in_unit_range",
+      "target": "@fn_c_in_unit_range"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_main",
+      "target": "@fn_c_main"
+    },
+    {
+      "kind": "edge.provenance",
       "source": "@blk_c_1",
       "target": "@blk_c_lowered_classify_1"
     },
@@ -461,28 +476,377 @@
       "kind": "equivalent_to",
       "a_node_id": "@fn_c_classify",
       "b_node_id": "@fn_c_lowered_classify",
+      "regime": "witness",
       "justification": {
         "kind": "family_lowering",
-        "rule_name": "identity"
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
       }
     },
     {
       "kind": "equivalent_to",
       "a_node_id": "@fn_c_in_unit_range",
       "b_node_id": "@fn_c_lowered_in_unit_range",
+      "regime": "witness",
       "justification": {
         "kind": "family_lowering",
-        "rule_name": "identity"
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
       }
     },
     {
       "kind": "equivalent_to",
       "a_node_id": "@fn_c_main",
       "b_node_id": "@fn_c_lowered_main",
+      "regime": "witness",
       "justification": {
         "kind": "family_lowering",
-        "rule_name": "identity"
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
       }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_classify",
+      "b_node_id": "@fn_c_classify",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/classify.txt",
+        "artifact_hash": "1b7427e332942e0abb6a9353977b17fa3ad3e6ce752052f3b2b3b702559c9f21"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_in_unit_range",
+      "b_node_id": "@fn_c_in_unit_range",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/in_unit_range.txt",
+        "artifact_hash": "2e968b773e54dc86ac85457b7d172433b0b3eb7b30db8f5758fdb2e6b10bcd37"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_main",
+      "b_node_id": "@fn_c_main",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/main.txt",
+        "artifact_hash": "0235b616d6eb8b5697fc2baf831a51938760e9403f29b86c032093f51b658f84"
+      }
+    }
+  ],
+  "source_units": [
+    {
+      "kind": "c_unit",
+      "id": "@cunit_c_control_flow",
+      "source_path": "control_flow.c",
+      "functions": [
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_classify",
+          "name": "classify",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [
+            {
+              "kind": "c.param",
+              "name": "x",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            }
+          ],
+          "body": [
+            {
+              "kind": "c.if",
+              "id": "@cif_c_classify_2",
+              "cond": {
+                "kind": "c.binop",
+                "id": "@cbinop_c_classify_1",
+                "op": "<",
+                "lhs": {
+                  "kind": "c.var_ref",
+                  "name": "x"
+                },
+                "rhs": {
+                  "kind": "c.lit_int",
+                  "value": 0
+                }
+              },
+              "then_body": [
+                {
+                  "kind": "c.return",
+                  "id": "@creturn_c_classify_1",
+                  "value": {
+                    "kind": "c.lit_int",
+                    "value": -1
+                  }
+                }
+              ],
+              "else_body": [
+                {
+                  "kind": "c.if",
+                  "id": "@cif_c_classify_1",
+                  "cond": {
+                    "kind": "c.binop",
+                    "id": "@cbinop_c_classify_2",
+                    "op": "==",
+                    "lhs": {
+                      "kind": "c.var_ref",
+                      "name": "x"
+                    },
+                    "rhs": {
+                      "kind": "c.lit_int",
+                      "value": 0
+                    }
+                  },
+                  "then_body": [
+                    {
+                      "kind": "c.return",
+                      "id": "@creturn_c_classify_2",
+                      "value": {
+                        "kind": "c.lit_int",
+                        "value": 0
+                      }
+                    }
+                  ],
+                  "else_body": [
+                    {
+                      "kind": "c.return",
+                      "id": "@creturn_c_classify_3",
+                      "value": {
+                        "kind": "c.lit_int",
+                        "value": 1
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_in_unit_range",
+          "name": "in_unit_range",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [
+            {
+              "kind": "c.param",
+              "name": "x",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            }
+          ],
+          "body": [
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_in_unit_range_1",
+              "value": {
+                "kind": "c.binop",
+                "id": "@cbinop_c_in_unit_range_1",
+                "op": "&&",
+                "lhs": {
+                  "kind": "c.binop",
+                  "id": "@cbinop_c_in_unit_range_2",
+                  "op": ">=",
+                  "lhs": {
+                    "kind": "c.var_ref",
+                    "name": "x"
+                  },
+                  "rhs": {
+                    "kind": "c.lit_int",
+                    "value": 0
+                  }
+                },
+                "rhs": {
+                  "kind": "c.binop",
+                  "id": "@cbinop_c_in_unit_range_3",
+                  "op": "<=",
+                  "lhs": {
+                    "kind": "c.var_ref",
+                    "name": "x"
+                  },
+                  "rhs": {
+                    "kind": "c.lit_int",
+                    "value": 100
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_main",
+          "name": "main",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [],
+          "body": [
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_1",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_2",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_1",
+                    "value": "classify(-5) = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_1",
+                    "callee": "classify",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": -5
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_2",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_4",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_2",
+                    "value": "classify(0)  = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_3",
+                    "callee": "classify",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 0
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_3",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_6",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_3",
+                    "value": "classify(42) = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_5",
+                    "callee": "classify",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 42
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_4",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_8",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_4",
+                    "value": "in_unit_range(50) = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_7",
+                    "callee": "in_unit_range",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 50
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_5",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_10",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_5",
+                    "value": "in_unit_range(150) = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_9",
+                    "callee": "in_unit_range",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 150
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_main_1",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 0
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "structured_functions": [

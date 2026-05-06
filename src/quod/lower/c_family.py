@@ -9,22 +9,25 @@ plus the cross-layer provenance metadata:
     inside an enclosing block, and per-statement edges can be added
     later when a use case needs them.
   - One function-level `Equivalence` per function with `FamilyLowering`
-    justification citing the rule(s) used. Functions that needed no
-    lowering get a `rule_name="identity"` claim so the data model is
-    uniform across C-derived programs.
+    justification citing the rule(s) used. Rules with a pinned proof
+    artifact (under `c_family_proofs/`) emit `regime="witness"` with
+    `artifact_path`/`artifact_hash` filled in; `quod equiv verify`
+    re-checks both the hash and the Z3 result. Rules without an
+    artifact (today: `identity` and `c.scoped_block`) emit
+    `regime="axiom"` — honest about what hasn't been proved.
 
-Step-5 supported rules:
+Step-6 supported rules:
 
   - `c.for_general` — `for(init; cond; inc) body` becomes
-    `init; while (cond) { body; inc }`. The init declaration is
-    hoisted out of the for-header into the enclosing block; the inc
-    statement is appended to every iteration of the resulting while.
-    Step 6 pins the rule's correctness proof in Z3 and bumps the
-    Equivalence's regime from `axiom` to `witness`.
+    `init; while (cond) { body; inc }`. Per-iteration equivalence
+    pinned via `c_family_proofs/c_for_general.smt2` (unsat under Z3).
+    Whole-loop equivalence is the meta-theoretic inductive lift — see
+    the artifact's header comment.
   - `c.scoped_block` — drops the wrapper, surfacing the inner core
-    Block. v5 doesn't yet exploit `scope_locals` (all decls in a C
+    Block. v6 doesn't yet exploit `scope_locals` (all decls in a C
     scope are already lexically scoped at layer C); the data is
-    preserved in the layer-B subtree for future analyses.
+    preserved in the layer-B subtree for future analyses. No proof
+    artifact at v6 — the rule is structurally a no-op.
 
 Other `c.*` extensions refuse — they'll grow rules as the C subset
 expands. Refusal mirrors `lower.py`'s discipline: rather than silently
@@ -36,6 +39,9 @@ empty passes through unchanged. Running the pass twice on the same
 input is safe and produces the same output.
 """
 from __future__ import annotations
+
+import hashlib
+from pathlib import Path
 
 from quod.model import (
     Assign,
@@ -56,6 +62,51 @@ from quod.model import (
     While,
     WithArena,
 )
+
+
+# ---------- Proof-artifact registry ----------
+#
+# Per-rule proof artifacts ship with the package under
+# `c_family_proofs/<rule_name>.smt2`. The lowering pass pins each
+# artifact's sha256 in the FamilyLowering justification it emits, and
+# `quod equiv verify` re-checks (a) the hash matches the file's bytes
+# and (b) Z3 returns `unsat` on the artifact.
+#
+# Rules without an artifact in the registry emit FamilyLowering with
+# `artifact_path=None`/`artifact_hash=None` and `regime="axiom"` — the
+# equivalence is asserted but unproved. When a proof lands, drop a new
+# .smt2 in `c_family_proofs/`, register its rule_name here, and the
+# regime auto-bumps to `witness`.
+
+_PROOFS_DIR = Path(__file__).parent / "c_family_proofs"
+
+# Rule name → relative artifact path under the package's `quod/` dir.
+# Stored relative so the path persists meaningfully across machines;
+# verify resolves it against the package's installed location.
+_RULE_PROOFS: dict[str, str] = {
+    "c.for_general":  "lower/c_family_proofs/c_for_general.smt2",
+    "c.scoped_block": "lower/c_family_proofs/c_scoped_block.smt2",
+    "identity":       "lower/c_family_proofs/identity.smt2",
+}
+
+
+def _proof_for(rule_name: str) -> tuple[str, str] | None:
+    """Return (artifact_path, artifact_hash) for `rule_name`, or None
+    if no proof is registered. The path is package-relative (rooted
+    at `src/quod/`); verify resolves it against the package install."""
+    rel = _RULE_PROOFS.get(rule_name)
+    if rel is None:
+        return None
+    full = Path(__file__).parent.parent / rel
+    if not full.exists():
+        # Registered but missing on disk — surface clearly. Misconfiguration
+        # rather than a soundness issue.
+        raise FileNotFoundError(
+            f"c-family proof artifact missing: {full} "
+            f"(registered for rule {rule_name!r})"
+        )
+    digest = hashlib.sha256(full.read_bytes()).hexdigest()
+    return rel, digest
 
 
 def lower_c_family(program: Program) -> Program:
@@ -85,14 +136,29 @@ def lower_c_family(program: Program) -> Program:
         # Function-level edge.
         new_edges.append(ProvenanceEdge(source=b_fn.id, target=c_fn.id))
         # One Equivalence per rule used (or one identity claim if the
-        # function was already pure core). regime=axiom for v5; step 6
-        # pins the SMT artifact and bumps to witness.
+        # function was already pure core). Rules with a registered
+        # proof artifact emit regime=witness with the artifact pinned;
+        # unproven rules stay regime=axiom — honest about which
+        # citations have evidence and which don't.
         rules = sorted(ctx.rules_used) if ctx.rules_used else ["identity"]
         for rule in rules:
+            proof = _proof_for(rule)
+            if proof is None:
+                justification = FamilyLowering(rule_name=rule)
+                regime = "axiom"
+            else:
+                artifact_path, artifact_hash = proof
+                justification = FamilyLowering(
+                    rule_name=rule,
+                    artifact_path=artifact_path,
+                    artifact_hash=artifact_hash,
+                )
+                regime = "witness"
             new_equivalences.append(Equivalence(
                 a_node_id=b_fn.id,
                 b_node_id=c_fn.id,
-                justification=FamilyLowering(rule_name=rule),
+                regime=regime,
+                justification=justification,
             ))
 
     return program.model_copy(update={

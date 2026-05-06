@@ -78,6 +78,11 @@
   "edges": [
     {
       "kind": "edge.provenance",
+      "source": "@cfn_c_foo",
+      "target": "@fn_c_foo"
+    },
+    {
+      "kind": "edge.provenance",
       "source": "@blk_c_1",
       "target": "@blk_c_lowered_foo_1"
     },
@@ -100,12 +105,92 @@
   "equivalences": [
     {
       "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_foo",
+      "b_node_id": "@fn_c_foo",
+      "justification": {
+        "kind": "manual",
+        "signed_by": "quod.ingest.c",
+        "rationale": "structural transcription from C source to layer-B c-like-quod; no semantic decisions in the lift"
+      }
+    },
+    {
+      "kind": "equivalent_to",
       "a_node_id": "@fn_c_foo",
       "b_node_id": "@fn_c_lowered_foo",
+      "regime": "witness",
       "justification": {
         "kind": "family_lowering",
-        "rule_name": "identity"
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
       }
+    }
+  ],
+  "source_units": [
+    {
+      "kind": "c_unit",
+      "id": "@cunit_c_foo",
+      "source_path": "foo.c",
+      "functions": [
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_foo",
+          "name": "foo",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [
+            {
+              "kind": "c.param",
+              "name": "x",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            }
+          ],
+          "body": [
+            {
+              "kind": "c.if",
+              "id": "@cif_c_foo_1",
+              "cond": {
+                "kind": "c.binop",
+                "id": "@cbinop_c_foo_1",
+                "op": ">",
+                "lhs": {
+                  "kind": "c.var_ref",
+                  "name": "x"
+                },
+                "rhs": {
+                  "kind": "c.lit_int",
+                  "value": 0
+                }
+              },
+              "then_body": [
+                {
+                  "kind": "c.return",
+                  "id": "@creturn_c_foo_1",
+                  "value": {
+                    "kind": "c.binop",
+                    "id": "@cbinop_c_foo_2",
+                    "op": "+",
+                    "lhs": {
+                      "kind": "c.var_ref",
+                      "name": "x"
+                    },
+                    "rhs": {
+                      "kind": "c.lit_int",
+                      "value": 1
+                    }
+                  }
+                }
+              ],
+              "else_body": []
+            }
+          ]
+        }
+      ]
     }
   ],
   "structured_functions": [

@@ -30,17 +30,22 @@ from quod.model import (
     CharLit,
     CAssign,
     CBinOp,
+    CCall,
+    CExprStmt,
     CFn,
     CFor,
+    CIf,
     CIntLit,
     CParam,
     CReturn,
     CScopedBlock,
+    CStringLit,
     CStyleFor,
     CType,
     CUnit,
     CVarDecl,
     CVarRef,
+    CWhile,
     DerivedJustification,
     Equivalence,
     EnumDef,
@@ -982,6 +987,31 @@ _KIND_INFO["c.binop"] = {
     },
 }
 
+_KIND_INFO["c.lit_str"] = {
+    "class": CStringLit,
+    "summary": (
+        "A C string literal. Layer A preserves the decoded payload "
+        "(escapes resolved); the layer-B lifter interns these into "
+        "a `StringConstant` and references via `StringRef`."
+    ),
+    "example": {"kind": "c.lit_str", "value": "hello, world\n"},
+}
+
+_KIND_INFO["c.call"] = {
+    "class": CCall,
+    "summary": (
+        "A C function call expression. v6 supports only direct calls "
+        "(non-indirect, non-function-pointer)."
+    ),
+    "example": {
+        "kind": "c.call", "callee": "printf",
+        "args": [
+            {"kind": "c.lit_str", "value": "%d\n"},
+            {"kind": "c.var_ref", "name": "x"},
+        ],
+    },
+}
+
 _KIND_INFO["c.param"] = {
     "class": CParam,
     "summary": "A function parameter in C source.",
@@ -1038,6 +1068,50 @@ _KIND_INFO["c.for"] = {
                            "lhs": {"kind": "c.var_ref", "name": "i"},
                            "rhs": {"kind": "c.lit_int", "value": 1}}},
         "body": [],
+    },
+}
+
+_KIND_INFO["c.if"] = {
+    "class": CIf,
+    "summary": (
+        "`if (cond) { then_body } else { else_body }` — empty "
+        "`else_body` represents an if without else."
+    ),
+    "example": {
+        "kind": "c.if",
+        "cond": {"kind": "c.binop", "op": "<",
+                 "lhs": {"kind": "c.var_ref", "name": "x"},
+                 "rhs": {"kind": "c.lit_int", "value": 0}},
+        "then_body": [
+            {"kind": "c.return", "value": {"kind": "c.lit_int", "value": -1}},
+        ],
+        "else_body": [],
+    },
+}
+
+_KIND_INFO["c.while"] = {
+    "class": CWhile,
+    "summary": "`while (cond) { body }` — pre-test loop.",
+    "example": {
+        "kind": "c.while",
+        "cond": {"kind": "c.binop", "op": "<",
+                 "lhs": {"kind": "c.var_ref", "name": "i"},
+                 "rhs": {"kind": "c.var_ref", "name": "n"}},
+        "body": [],
+    },
+}
+
+_KIND_INFO["c.expr_stmt"] = {
+    "class": CExprStmt,
+    "summary": (
+        "A C expression evaluated for its side effect — typically a "
+        "call like `printf(...)`. v6 only emits this for calls; bare "
+        "expression statements (e.g. `x;`) are refused at ingest time."
+    ),
+    "example": {
+        "kind": "c.expr_stmt",
+        "value": {"kind": "c.call", "callee": "printf",
+                  "args": [{"kind": "c.lit_str", "value": "hi\n"}]},
     },
 }
 
@@ -1146,7 +1220,8 @@ _CATEGORIES: dict[str, list[str]] = {
     "source.c": [
         "c_unit", "c.fn", "c.param", "c.type",
         "c.var_decl", "c.assign", "c.return", "c.for",
-        "c.binop", "c.lit_int", "c.var_ref",
+        "c.if", "c.while", "c.expr_stmt",
+        "c.binop", "c.lit_int", "c.lit_str", "c.var_ref", "c.call",
     ],
     # Layer-B `c.*` extensions — constructs core quod can't represent;
     # lowered to core by lower/c_family.py (step 5).

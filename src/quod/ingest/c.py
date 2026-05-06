@@ -49,19 +49,24 @@ from quod.model import (
     Call,
     CAssign,
     CBinOp,
+    CCall,
     CExpr,
+    CExprStmt,
     CFn,
     CFor,
     CForInit,
+    CIf,
     CIntLit,
     CParam,
     CReturn,
     CStmt,
+    CStringLit,
     CStyleFor,
     CType,
     CUnit,
     CVarDecl,
     CVarRef,
+    CWhile,
     Equivalence,
     ExprStmt,
     Expr,
@@ -251,6 +256,9 @@ class _ProgramState:
         # source produce identical output. Block IDs are inert today
         # (no edges yet) but determinism makes test fixtures pinnable.
         self._block_counter = 0
+        # Counter for layer-B CStyleFor IDs — deterministic so two
+        # ingests of the same source produce byte-identical output.
+        self._cstyle_for_counter = 0
 
     def mint_block_id(self) -> str:
         self._block_counter += 1
@@ -262,6 +270,14 @@ class _ProgramState:
         # symbols across the same translation unit, so the spelling is
         # already unique per ingest.
         return f"@fn_c_{name}"
+
+    def mint_cstyle_for_id(self) -> str:
+        # Layer-B CStyleFor IDs need a deterministic counter so two
+        # ingests of the same source produce byte-identical output.
+        # The model's Field(default_factory) uses uuid, which is fine
+        # for hand-authored programs but breaks ingest determinism.
+        self._cstyle_for_counter += 1
+        return f"@cfor_general_c_{self._cstyle_for_counter}"
 
     def intern_string(self, value: str) -> StringRef:
         if value in self._string_by_value:
@@ -537,6 +553,7 @@ class _FunctionTranslator:
             inc_stmt = self.stmt(inc_cursor)
             body = self._block(body_cursor)
             return CStyleFor(
+                id=self._state.mint_cstyle_for_id(),
                 init=init_stmt, cond=cond_expr, inc=inc_stmt, body=body,
             )
 
@@ -694,7 +711,22 @@ class _LayerATranslator:
     no synthesized fall-through. The supported C subset matches the
     layer-B translator's; unsupported constructs raise `IngestError`
     with the original source location.
+
+    IDs are minted with a per-translator counter (one translator per
+    function) so re-ingest of the same source produces byte-identical
+    output. The default `Field(default_factory=...)` on the model
+    nodes uses uuid4, which is fine for hand-authored programs but
+    breaks ingest determinism.
     """
+
+    def __init__(self, fn_name: str) -> None:
+        self._fn_name = fn_name
+        self._counters: dict[str, int] = {}
+
+    def _mint(self, prefix: str) -> str:
+        n = self._counters.get(prefix, 0) + 1
+        self._counters[prefix] = n
+        return f"@{prefix}_c_{self._fn_name}_{n}"
 
     def expr(self, cursor: cx.Cursor) -> CExpr:
         c = _unwrap(cursor)
@@ -704,12 +736,40 @@ class _LayerATranslator:
             if not tokens:
                 raise _refuse(c, "integer literal with no tokens")
             return CIntLit(value=int(tokens[0], 0))
+        if k == cx.CursorKind.STRING_LITERAL:
+            # Decode via Python's literal_eval (a strict superset of C
+            # string-literal escape syntax — same path the layer-B
+            # ingester uses to intern strings).
+            tokens = [t.spelling for t in c.get_tokens()]
+            if not tokens:
+                raise _refuse(c, "string literal with no tokens")
+            try:
+                value = ast.literal_eval(tokens[0])
+            except (ValueError, SyntaxError) as e:
+                raise _refuse(c, f"could not decode string literal: {e}")
+            if not isinstance(value, str):
+                raise _refuse(c, f"string literal decoded to non-str ({type(value).__name__})")
+            return CStringLit(id=self._mint("clitstr"), value=value)
         if k == cx.CursorKind.DECL_REF_EXPR:
             return CVarRef(name=c.spelling)
+        if k == cx.CursorKind.CALL_EXPR:
+            children = list(c.get_children())
+            if not children:
+                raise _refuse(c, "call expr with no children")
+            callee = _unwrap(children[0])
+            if callee.kind != cx.CursorKind.DECL_REF_EXPR:
+                raise _refuse(c, "layer A: indirect / function-pointer calls not supported")
+            args = tuple(self.expr(a) for a in children[1:])
+            return CCall(
+                id=self._mint("ccall"),
+                callee=callee.spelling,
+                args=args,
+            )
         if k == cx.CursorKind.BINARY_OPERATOR:
             tok = _binop_token(c)
             children = list(c.get_children())
             return CBinOp(
+                id=self._mint("cbinop"),
                 op=tok,
                 lhs=self.expr(children[0]),
                 rhs=self.expr(children[1]),
@@ -729,7 +789,10 @@ class _LayerATranslator:
             if op == "-":
                 if isinstance(inner, CIntLit):
                     return CIntLit(value=-inner.value)
-                return CBinOp(op="-", lhs=CIntLit(value=0), rhs=inner)
+                return CBinOp(
+                    id=self._mint("cbinop"),
+                    op="-", lhs=CIntLit(value=0), rhs=inner,
+                )
             if op == "+":
                 return inner
             raise _refuse(c, f"layer A: unsupported unary operator {op!r}")
@@ -743,8 +806,11 @@ class _LayerATranslator:
             children = list(c.get_children())
             if not children:
                 # Layer A preserves `return;` faithfully.
-                return CReturn(value=None)
-            return CReturn(value=self.expr(children[0]))
+                return CReturn(id=self._mint("creturn"), value=None)
+            return CReturn(
+                id=self._mint("creturn"),
+                value=self.expr(children[0]),
+            )
 
         if k == cx.CursorKind.DECL_STMT:
             children = list(c.get_children())
@@ -756,6 +822,7 @@ class _LayerATranslator:
             init_children = list(decl.get_children())
             init = self.expr(init_children[-1]) if init_children else None
             return CVarDecl(
+                id=self._mint("cvardecl"),
                 type=_c_source_type(decl, decl.type),
                 name=decl.spelling,
                 init=init,
@@ -769,7 +836,11 @@ class _LayerATranslator:
                 lhs = _unwrap(children[0])
                 if lhs.kind != cx.CursorKind.DECL_REF_EXPR:
                     raise _refuse(lhs, "layer A: only simple `name = expr` assignment supported")
-                return CAssign(target=lhs.spelling, value=self.expr(children[1]))
+                return CAssign(
+                    id=self._mint("cassign"),
+                    target=lhs.spelling,
+                    value=self.expr(children[1]),
+                )
             raise _refuse(c, "layer A: bare expression-as-statement only supported for assignments")
 
         if k == cx.CursorKind.FOR_STMT:
@@ -782,10 +853,45 @@ class _LayerATranslator:
                 )
             init_cursor, cond_cursor, inc_cursor, body_cursor = children
             return CFor(
+                id=self._mint("cfor"),
                 init=self._for_init(init_cursor),
                 cond=self.expr(cond_cursor),
                 inc=self._for_init(inc_cursor),
                 body=tuple(self.stmt(s) for s in self._compound_children(body_cursor)),
+            )
+
+        if k == cx.CursorKind.IF_STMT:
+            children = list(c.get_children())
+            if len(children) not in (2, 3):
+                raise _refuse(c, f"layer A: if-stmt with {len(children)} children")
+            cond = self.expr(children[0])
+            then_body = tuple(self.stmt(s) for s in self._compound_children(children[1]))
+            else_body = (
+                tuple(self.stmt(s) for s in self._compound_children(children[2]))
+                if len(children) == 3
+                else ()
+            )
+            return CIf(
+                id=self._mint("cif"),
+                cond=cond, then_body=then_body, else_body=else_body,
+            )
+
+        if k == cx.CursorKind.WHILE_STMT:
+            children = list(c.get_children())
+            if len(children) != 2:
+                raise _refuse(c, f"layer A: while-stmt with {len(children)} children")
+            cond = self.expr(children[0])
+            body = tuple(self.stmt(s) for s in self._compound_children(children[1]))
+            return CWhile(
+                id=self._mint("cwhile"),
+                cond=cond, body=body,
+            )
+
+        if k == cx.CursorKind.CALL_EXPR:
+            # `printf(...);` and similar — call as a statement-effect.
+            return CExprStmt(
+                id=self._mint("cexprstmt"),
+                value=self.expr(c),
             )
 
         raise _refuse(c, f"layer A: unsupported statement kind: {k.name}")
@@ -835,7 +941,7 @@ def _translate_function_layer_a(
             body_cursor = child
     if body_cursor is None:
         raise _refuse(cursor, "layer A: function has no body")
-    translator = _LayerATranslator()
+    translator = _LayerATranslator(cursor.spelling)
     body = tuple(translator.stmt(s) for s in body_cursor.get_children())
     return CFn(
         id=f"@cfn_c_{cursor.spelling}",

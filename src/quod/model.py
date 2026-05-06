@@ -862,11 +862,23 @@ class DerivedJustification(_Node):
 
 
 class LiftEquivalence(_Node):
-    """Justifies an A→B (or any layer→layer transcription) equivalence
-    via a pinned proof artifact. `artifact_path` and `artifact_hash`
-    follow the same shape as Z3Justification: the file's bytes hashed at
-    prove time, re-checked at verify time. The inner statement of the
-    proof is `lifted_b ~ source_a over D` for the relevant nodes' IDs.
+    """Justifies an A→B (source-language → c-like-quod) equivalence
+    via a pinned *structural transcription record* — produced by
+    `quod.lift_check.walk_lift`, which walks both subtrees in
+    lockstep and confirms one-to-one node correspondence per a
+    per-construct table.
+
+    `artifact_path` is relative to the program's resolve_root; the
+    file's bytes are hashed at prove time and re-checked at verify
+    time. Verification is hash-only: re-walking the layer-A and
+    layer-B subtrees in memory reproduces the artifact bytes
+    deterministically, so a hash match is sufficient evidence that
+    the lift is still faithful. No Z3 invocation — the artifact
+    is JSON, not SMT.
+
+    Future SMT-based A→B proofs (once we have them) would land as
+    a distinct justification kind; this one is reserved for the
+    structural-correspondence-record shape.
     """
     kind: Literal["lift_equivalence"] = "lift_equivalence"
     artifact_path: str
@@ -1659,8 +1671,29 @@ class CBinOp(_Node):
     rhs: "CExpr"
 
 
+class CStringLit(_Node):
+    """A C string literal — `"hello, world"` etc. The value is the
+    decoded payload (escapes resolved). The layer-B lifter interns
+    these into `StringConstant`s and references them via `StringRef`;
+    layer A preserves the literal value before interning so the
+    original source spelling is recoverable."""
+    kind: Literal["c.lit_str"] = "c.lit_str"
+    id: str = Field(default_factory=lambda: _mint_node_id("clitstr"))
+    value: str
+
+
+class CCall(_Node):
+    """A C function call expression — `printf("...", x)`,
+    `square(a)`, etc. `callee` is the called function's spelling; v6
+    only supports direct (non-indirect) calls."""
+    kind: Literal["c.call"] = "c.call"
+    id: str = Field(default_factory=lambda: _mint_node_id("ccall"))
+    callee: str
+    args: tuple["CExpr", ...] = ()
+
+
 CExpr = Annotated[
-    Union[CIntLit, CVarRef, CBinOp],
+    Union[CIntLit, CVarRef, CBinOp, CStringLit, CCall],
     Field(discriminator="kind"),
 ]
 
@@ -1710,6 +1743,34 @@ class CFor(_Node):
     body: tuple["CStmt", ...] = ()
 
 
+class CIf(_Node):
+    """`if (cond) { then } else { else }` — both bodies as flat lists
+    of layer-A statements. Empty `else_body` means the if had no else
+    clause."""
+    kind: Literal["c.if"] = "c.if"
+    id: str = Field(default_factory=lambda: _mint_node_id("cif"))
+    cond: CExpr
+    then_body: tuple["CStmt", ...] = ()
+    else_body: tuple["CStmt", ...] = ()
+
+
+class CWhile(_Node):
+    """`while (cond) { body }` — pre-test loop."""
+    kind: Literal["c.while"] = "c.while"
+    id: str = Field(default_factory=lambda: _mint_node_id("cwhile"))
+    cond: CExpr
+    body: tuple["CStmt", ...] = ()
+
+
+class CExprStmt(_Node):
+    """An expression evaluated for its side effect — typically a call
+    like `printf(...)`. v6 only emits `CExprStmt(CCall(...))`; bare
+    expression statements (e.g. `x;`) are refused at ingest time."""
+    kind: Literal["c.expr_stmt"] = "c.expr_stmt"
+    id: str = Field(default_factory=lambda: _mint_node_id("cexprstmt"))
+    value: CExpr
+
+
 # CForInit is the union of statements that may appear in a C for-loop's
 # init or inc slot — a declaration or an assignment. Distinct from CStmt
 # because for-init permits a declaration even outside a block scope; the
@@ -1721,7 +1782,7 @@ CForInit = Annotated[
 
 
 CStmt = Annotated[
-    Union[CVarDecl, CAssign, CReturn, CFor],
+    Union[CVarDecl, CAssign, CReturn, CFor, CIf, CWhile, CExprStmt],
     Field(discriminator="kind"),
 ]
 
@@ -2332,6 +2393,19 @@ def _format_c_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
             head = f"{pad}{prefix}for ({init_s}; {cond_s}; {inc_s}) {{"
             body_lines = "\n".join(_format_c_stmt(s, indent + 2, label=label) for s in body)
             return f"{head}\n{body_lines}\n{pad}}}"
+        case CIf(cond=cond, then_body=tb, else_body=eb):
+            head = f"{pad}{prefix}if ({_format_c_expr(cond)}) {{"
+            then_lines = "\n".join(_format_c_stmt(s, indent + 2, label=label) for s in tb)
+            if not eb:
+                return f"{head}\n{then_lines}\n{pad}}}"
+            else_lines = "\n".join(_format_c_stmt(s, indent + 2, label=label) for s in eb)
+            return f"{head}\n{then_lines}\n{pad}}} else {{\n{else_lines}\n{pad}}}"
+        case CWhile(cond=cond, body=body):
+            head = f"{pad}{prefix}while ({_format_c_expr(cond)}) {{"
+            body_lines = "\n".join(_format_c_stmt(s, indent + 2, label=label) for s in body)
+            return f"{head}\n{body_lines}\n{pad}}}"
+        case CExprStmt(value=v):
+            return f"{pad}{prefix}{_format_c_expr(v)};"
     raise ValueError(f"unhandled c.* statement: {stmt!r}")
 
 
@@ -2352,10 +2426,15 @@ def _format_c_expr(e) -> str:
     match e:
         case CIntLit(value=v):
             return str(v)
+        case CStringLit(value=v):
+            return repr(v)
         case CVarRef(name=n):
             return n
         case CBinOp(op=op, lhs=l, rhs=r):
             return f"({_format_c_expr(l)} {op} {_format_c_expr(r)})"
+        case CCall(callee=callee, args=args):
+            args_s = ", ".join(_format_c_expr(a) for a in args)
+            return f"{callee}({args_s})"
     raise ValueError(f"unhandled c.* expression: {e!r}")
 
 

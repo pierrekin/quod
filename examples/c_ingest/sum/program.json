@@ -147,21 +147,25 @@
   "equivalences": [
     {
       "kind": "equivalent_to",
-      "a_node_id": "@cfn_c_sum",
-      "b_node_id": "@fn_c_sum",
+      "a_node_id": "@fn_c_sum",
+      "b_node_id": "@fn_c_lowered_sum",
+      "regime": "witness",
       "justification": {
-        "kind": "manual",
-        "signed_by": "quod.ingest.c",
-        "rationale": "structural transcription from C source to layer-B c-like-quod; no semantic decisions in the lift"
+        "kind": "family_lowering",
+        "rule_name": "c.for_general",
+        "artifact_path": "lower/c_family_proofs/c_for_general.smt2",
+        "artifact_hash": "277c4da2dc2acfded6393503798bb32d7fd59258291ac084b8e334b548cc602e"
       }
     },
     {
       "kind": "equivalent_to",
-      "a_node_id": "@fn_c_sum",
-      "b_node_id": "@fn_c_lowered_sum",
+      "a_node_id": "@cfn_c_sum",
+      "b_node_id": "@fn_c_sum",
+      "regime": "witness",
       "justification": {
-        "kind": "family_lowering",
-        "rule_name": "c.for_general"
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/sum.txt",
+        "artifact_hash": "fbfc614cecc3afc46720f7709d714f7c1647240dec2fed3aec6458c9eb21a6f0"
       }
     }
   ],
@@ -192,7 +196,7 @@
           "body": [
             {
               "kind": "c.var_decl",
-              "id": "@cvardecl_0550efb96fe6",
+              "id": "@cvardecl_c_sum_1",
               "type": {
                 "kind": "c.type",
                 "name": "int"
@@ -205,10 +209,10 @@
             },
             {
               "kind": "c.for",
-              "id": "@cfor_cb245dcca4a7",
+              "id": "@cfor_c_sum_1",
               "init": {
                 "kind": "c.var_decl",
-                "id": "@cvardecl_c6f245d968d8",
+                "id": "@cvardecl_c_sum_2",
                 "type": {
                   "kind": "c.type",
                   "name": "int"
@@ -221,7 +225,7 @@
               },
               "cond": {
                 "kind": "c.binop",
-                "id": "@cbinop_1b8d1fc2f465",
+                "id": "@cbinop_c_sum_1",
                 "op": "<",
                 "lhs": {
                   "kind": "c.var_ref",
@@ -234,11 +238,11 @@
               },
               "inc": {
                 "kind": "c.assign",
-                "id": "@cassign_317ccd63ba94",
+                "id": "@cassign_c_sum_1",
                 "target": "i",
                 "value": {
                   "kind": "c.binop",
-                  "id": "@cbinop_f5f31dc9172c",
+                  "id": "@cbinop_c_sum_2",
                   "op": "+",
                   "lhs": {
                     "kind": "c.var_ref",
@@ -253,11 +257,11 @@
               "body": [
                 {
                   "kind": "c.assign",
-                  "id": "@cassign_b71bbe5ee38b",
+                  "id": "@cassign_c_sum_2",
                   "target": "s",
                   "value": {
                     "kind": "c.binop",
-                    "id": "@cbinop_11c46f2106db",
+                    "id": "@cbinop_c_sum_3",
                     "op": "+",
                     "lhs": {
                       "kind": "c.var_ref",
@@ -273,7 +277,7 @@
             },
             {
               "kind": "c.return",
-              "id": "@creturn_8942b333232d",
+              "id": "@creturn_c_sum_1",
               "value": {
                 "kind": "c.var_ref",
                 "name": "s"
@@ -318,7 +322,7 @@
           },
           {
             "kind": "c.for_general",
-            "id": "@cfor_general_3789131a46d1",
+            "id": "@cfor_general_c_1",
             "init": {
               "kind": "quod.let",
               "name": "i",

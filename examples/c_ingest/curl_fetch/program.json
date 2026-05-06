@@ -137,9 +137,12 @@
       "kind": "equivalent_to",
       "a_node_id": "@fn_c_main",
       "b_node_id": "@fn_c_lowered_main",
+      "regime": "witness",
       "justification": {
         "kind": "family_lowering",
-        "rule_name": "identity"
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
       }
     }
   ],

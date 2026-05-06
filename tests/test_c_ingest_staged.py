@@ -152,25 +152,52 @@ def test_sum_c_compiles_and_runs(tmp_path):
         assert out.returncode == expected, f"sum({n}): got {out.returncode}, expected {expected}"
 
 
-def test_existing_c_examples_get_lowered_to_pure_core():
-    """The existing C ingest corpus uses constructs (string literals,
-    printf calls, if/while) that v5's layer-A translator doesn't
-    cover yet. The all-or-nothing layer-A fallback skips
-    `source_units` for those files, but the c-family lowering pass
-    still runs against `structured_functions` and produces a layer-C
-    `Program.functions`. For programs that don't use any `c.*`
-    extensions, the lowering rule that fires is `identity`."""
+def test_existing_c_examples_get_full_three_layer_lift():
+    """As of the layer-A widening (calls / strings / if / while
+    landed), the loops.c example produces all three layers — layer A
+    under `source_units`, layer B under `structured_functions`,
+    layer C under `functions`. The B→C rule cited is `identity`
+    (no `c.*` extensions present).
+
+    Files that still use constructs outside the v6 layer-A subset
+    (pointer-typed locals — `string_offset.c`, enum constants —
+    `curl_fetch.c`) hit the all-or-nothing fallback and emit no
+    `source_units`. See `test_curl_fetch_falls_back_to_layer_b_only`."""
     examples = Path(__file__).resolve().parents[1] / "examples/c_ingest"
     p = ingest_c(examples / "loops/loops.c")
-    assert p.source_units == ()  # layer-A translator doesn't cover printf/if/while yet
-    # Layer-B and layer-C populated:
+
+    # Layer A populated.
+    assert len(p.source_units) == 1
+    assert p.source_units[0].source_path == "loops.c"
+    assert {fn.name for fn in p.source_units[0].functions} == {
+        "sum_to", "factorial", "main",
+    }
+
+    # Layer B / C populated as before.
     assert len(p.structured_functions) == 3
     assert len(p.functions) == 3
     assert {fn.name for fn in p.functions} == {"sum_to", "factorial", "main"}
-    # B→C function-level edges + an `identity` FamilyLowering claim
-    # per function (no extensions present).
+
+    # B→C `identity` (no extensions); A→B manual (CLI ingest path
+    # would upgrade to LiftEquivalence; pure-Python ingest_c stops at
+    # ManualJustification).
     family_claims = [
         e for e in p.equivalences if e.justification.kind == "family_lowering"
     ]
-    assert len(family_claims) == 3
     assert {c.justification.rule_name for c in family_claims} == {"identity"}
+    a_to_b = [e for e in p.equivalences if e.justification.kind == "manual"]
+    assert len(a_to_b) == 3
+
+
+def test_curl_fetch_falls_back_to_layer_b_only():
+    """`curl_fetch.c` uses pointer-typed locals (`CURL *handle`) and
+    enum constants (`CURLOPT_URL`) that are outside v6's layer-A
+    subset. The all-or-nothing fallback produces a layer-B-only
+    program; layer C still works."""
+    examples = Path(__file__).resolve().parents[1] / "examples/c_ingest"
+    p = ingest_c(examples / "curl_fetch/curl_fetch.c")
+    assert p.source_units == ()
+    # Layer B and layer C still populated; B→C `identity` cited.
+    assert len(p.structured_functions) == 1
+    assert len(p.functions) == 1
+    assert p.functions[0].name == "main"
