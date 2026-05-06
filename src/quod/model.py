@@ -958,9 +958,9 @@ class LiftEquivalence(_Node):
     the lift is still faithful. No Z3 invocation — the artifact
     is JSON, not SMT.
 
-    Future SMT-based A→B proofs (once we have them) would land as
-    a distinct justification kind; this one is reserved for the
-    structural-correspondence-record shape.
+    SMT-based A→B proofs would land as a distinct justification
+    kind; this one is reserved for the structural-correspondence-
+    record shape.
     """
     kind: Literal["lift_equivalence"] = "lift_equivalence"
     artifact_path: str
