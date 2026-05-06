@@ -1,0 +1,159 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_find_first_negative",
+    "b_id": "@fn_c_find_first_negative",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_6",
+      "stmts": [
+        {
+          "a_id": "@cvardecl_c_find_first_negative_1",
+          "init": {
+            "kind": "int_lit",
+            "value": 0
+          },
+          "kind": "var_decl \u2194 let",
+          "name": "i"
+        },
+        {
+          "a_id": "@cwhile_c_find_first_negative_1",
+          "body": {
+            "a_block": "<inline>",
+            "b_block_id": "@blk_c_1",
+            "stmts": [
+              {
+                "a_id": "@cif_c_find_first_negative_1",
+                "cond": {
+                  "kind": "binop(<) \u2194 binop(slt)",
+                  "lhs": {
+                    "kind": "binop(-) \u2194 binop(sub)",
+                    "lhs": {
+                      "kind": "var_ref \u2194 local_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "int_lit",
+                      "value": 5
+                    }
+                  },
+                  "rhs": {
+                    "kind": "int_lit",
+                    "value": 0
+                  }
+                },
+                "else_body": {
+                  "a_block": "<inline>",
+                  "b_block_id": "@blk_c_3",
+                  "stmts": []
+                },
+                "kind": "c.if \u2194 if",
+                "then_body": {
+                  "a_block": "<inline>",
+                  "b_block_id": "@blk_c_2",
+                  "stmts": [
+                    {
+                      "a_id": "@creturn_c_find_first_negative_1",
+                      "kind": "return e \u2194 return_expr",
+                      "value": {
+                        "kind": "binop(-) \u2194 binop(sub)",
+                        "lhs": {
+                          "kind": "var_ref \u2194 local_ref",
+                          "name": "i"
+                        },
+                        "rhs": {
+                          "kind": "int_lit",
+                          "value": 5
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "a_id": "@cif_c_find_first_negative_2",
+                "cond": {
+                  "kind": "binop(>=) \u2194 binop(sge)",
+                  "lhs": {
+                    "kind": "var_ref \u2194 local_ref",
+                    "name": "i"
+                  },
+                  "rhs": {
+                    "kind": "int_lit",
+                    "value": 100
+                  }
+                },
+                "else_body": {
+                  "a_block": "<inline>",
+                  "b_block_id": "@blk_c_5",
+                  "stmts": []
+                },
+                "kind": "c.if \u2194 if",
+                "then_body": {
+                  "a_block": "<inline>",
+                  "b_block_id": "@blk_c_4",
+                  "stmts": [
+                    {
+                      "a_id": "@cbreak_c_find_first_negative_1",
+                      "kind": "c.break \u2194 break"
+                    }
+                  ]
+                }
+              },
+              {
+                "a_id": "@cassign_c_find_first_negative_1",
+                "kind": "assign \u2194 assign",
+                "target": "i",
+                "value": {
+                  "kind": "binop(+) \u2194 binop(add)",
+                  "lhs": {
+                    "kind": "var_ref \u2194 local_ref",
+                    "name": "i"
+                  },
+                  "rhs": {
+                    "kind": "int_lit",
+                    "value": 1
+                  }
+                }
+              }
+            ]
+          },
+          "cond": {
+            "kind": "binop(<) \u2194 binop(slt)",
+            "lhs": {
+              "kind": "var_ref \u2194 local_ref",
+              "name": "i"
+            },
+            "rhs": {
+              "kind": "var_ref \u2194 param_ref",
+              "name": "n"
+            }
+          },
+          "kind": "c.while \u2194 while"
+        },
+        {
+          "a_id": "@creturn_c_find_first_negative_2",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "int_lit",
+            "value": -999
+          }
+        }
+      ]
+    },
+    "name": "find_first_negative",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "n"
+      }
+    ],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

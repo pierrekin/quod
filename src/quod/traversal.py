@@ -47,6 +47,8 @@ from .model import (
     NullPtr,
     ParamRef,
     PtrOffset,
+    Break,
+    Continue,
     Return,
     ReturnExpr,
     ShortCircuitAnd,
@@ -154,7 +156,7 @@ def substitute_in_expr(expr, type_fn: Callable):
 def substitute_in_stmt(stmt, type_fn: Callable):
     if isinstance(stmt, ReturnExpr):
         return stmt.model_copy(update={"value": substitute_in_expr(stmt.value, type_fn)})
-    if isinstance(stmt, (Return, Unreachable)):
+    if isinstance(stmt, (Return, Unreachable, Break, Continue)):
         return stmt
     if isinstance(stmt, If):
         return stmt.model_copy(update={

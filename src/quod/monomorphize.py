@@ -65,6 +65,8 @@ from .model import (
     ParamRef,
     Program,
     PtrOffset,
+    Break,
+    Continue,
     Return,
     ReturnExpr,
     ShortCircuitAnd,
@@ -309,9 +311,7 @@ def _walk_types_in_stmt(stmt, fn):
         return stmt.model_copy(update={
             "value": _walk_types_in_expr(stmt.value, fn),
         })
-    if isinstance(stmt, Return):
-        return stmt
-    if isinstance(stmt, Unreachable):
+    if isinstance(stmt, (Return, Unreachable, Break, Continue)):
         return stmt
     if isinstance(stmt, If):
         return stmt.model_copy(update={
@@ -508,7 +508,7 @@ def _collect_in_expr(expr, sink: set):
 def _collect_in_stmt(stmt, sink: set):
     if isinstance(stmt, ReturnExpr):
         _collect_in_expr(stmt.value, sink)
-    elif isinstance(stmt, (Return, Unreachable)):
+    elif isinstance(stmt, (Return, Unreachable, Break, Continue)):
         return
     elif isinstance(stmt, If):
         _collect_in_expr(stmt.cond, sink)
@@ -822,7 +822,7 @@ def _resolve_trait_calls_in_stmt(stmt, impl_index):
         return stmt.model_copy(update={
             "value": _resolve_trait_calls_in_expr(stmt.value, impl_index),
         })
-    if isinstance(stmt, (Return, Unreachable)):
+    if isinstance(stmt, (Return, Unreachable, Break, Continue)):
         return stmt
     if isinstance(stmt, If):
         return stmt.model_copy(update={

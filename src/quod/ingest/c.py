@@ -46,14 +46,18 @@ from quod.model import (
     Assign,
     BinOp,
     Block,
+    Break,
     Call,
     CAddressOf,
     CArraySubscript,
     CAssign,
     CBinOp,
+    CBreak,
     CCall,
     CCompoundAssign,
+    CContinue,
     CEnumConstRef,
+    Continue,
     CExpr,
     CExprStmt,
     CFn,
@@ -783,6 +787,12 @@ class _FunctionTranslator:
         if k == cx.CursorKind.CALL_EXPR:
             return (ExprStmt(value=self.expr(c)),)
 
+        if k == cx.CursorKind.BREAK_STMT:
+            return (Break(),)
+
+        if k == cx.CursorKind.CONTINUE_STMT:
+            return (Continue(),)
+
         raise _refuse(c, f"unsupported statement kind: {k.name}")
 
     def _block(self, cursor: cx.Cursor) -> Block:
@@ -1154,6 +1164,12 @@ class _LayerATranslator:
                 id=self._mint("cexprstmt"),
                 value=self.expr(c),
             )
+
+        if k == cx.CursorKind.BREAK_STMT:
+            return CBreak(id=self._mint("cbreak"))
+
+        if k == cx.CursorKind.CONTINUE_STMT:
+            return CContinue(id=self._mint("ccontinue"))
 
         raise _refuse(c, f"layer A: unsupported statement kind: {k.name}")
 

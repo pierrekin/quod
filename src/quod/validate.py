@@ -75,6 +75,8 @@ from quod.model import (
     StructDef,
     StructInit,
     StructType,
+    Break,
+    Continue,
     TraitCall,
     TryExpr,
     Unreachable,
@@ -120,6 +122,8 @@ ASSIGN_UNDECLARED_LOCAL = "assign_undeclared_local"
 FIELDSET_UNDECLARED_LOCAL = "fieldset_undeclared_local"
 UNDECLARED_PARAM = "undeclared_param"
 READ_OF_UNINIT_LOCAL = "read_of_uninit_local"
+BREAK_OUTSIDE_LOOP = "break_outside_loop"
+CONTINUE_OUTSIDE_LOOP = "continue_outside_loop"
 
 # Phase 3: type-aware checks (downstream of inference).
 FIELD_READ_NON_STRUCT = "field_read_non_struct"
@@ -206,6 +210,10 @@ class _Ctx:
     locals: dict[str, object] = field(default_factory=dict)   # name -> Type
     # Stack of arm-scoped binding maps (innermost last).
     arm_bindings: list[dict[str, object]] = field(default_factory=list)
+    # Number of enclosing loops (`While` / `For`). Incremented when
+    # entering a loop body, decremented on exit; `Break` / `Continue`
+    # are valid only when this is positive.
+    loop_depth: int = 0
 
     def emit(self, code: str, message: str, *, detail: str | None = None) -> None:
         loc = self.where if detail is None else Location(
@@ -454,13 +462,27 @@ def _check_stmt(ctx: _Ctx, stmt) -> None:
                 _check_stmt(ctx, s)
         case While(cond=cond, body=body):
             _check_expr(ctx, cond)
-            for s in body.stmts:
-                _check_stmt(ctx, s)
+            ctx.loop_depth += 1
+            try:
+                for s in body.stmts:
+                    _check_stmt(ctx, s)
+            finally:
+                ctx.loop_depth -= 1
         case For(lo=lo, hi=hi, body=body):
             _check_expr(ctx, lo)
             _check_expr(ctx, hi)
-            for s in body.stmts:
-                _check_stmt(ctx, s)
+            ctx.loop_depth += 1
+            try:
+                for s in body.stmts:
+                    _check_stmt(ctx, s)
+            finally:
+                ctx.loop_depth -= 1
+        case Break():
+            if ctx.loop_depth == 0:
+                ctx.emit(BREAK_OUTSIDE_LOOP, "`break` outside any enclosing loop")
+        case Continue():
+            if ctx.loop_depth == 0:
+                ctx.emit(CONTINUE_OUTSIDE_LOOP, "`continue` outside any enclosing loop")
         case WithArena(capacity=cap, body=body):
             _check_expr(ctx, cap)
             for s in body.stmts:
@@ -518,7 +540,7 @@ def _check_stmt_init(ctx: _Ctx, stmt, defined: set[str]) -> set[str] | None:
         case ExprStmt(value=expr) | ReturnExpr(value=expr):
             _check_expr_reads(ctx, expr, defined)
             return None if isinstance(stmt, ReturnExpr) else defined
-        case Return() | Unreachable():
+        case Return() | Unreachable() | Break() | Continue():
             return None
         case If(cond=cond, then_body=t, else_body=e):
             _check_expr_reads(ctx, cond, defined)

@@ -635,6 +635,23 @@ class Unreachable(_Node):
     kind: Literal["quod.unreachable"] = "quod.unreachable"
 
 
+class Break(_Node):
+    """Exit the innermost enclosing loop (`while` or `for`). The
+    validator refuses any `Break` outside a loop body. Lowers to
+    `br loop-exit`."""
+    kind: Literal["quod.break"] = "quod.break"
+
+
+class Continue(_Node):
+    """Skip to the next iteration of the innermost enclosing loop.
+    The validator refuses any `Continue` outside a loop body. Lowers
+    to `br loop-cond` (or, when the source is a c-family
+    `for (init; cond; inc) body`, the c-family lowering pre-rewrites
+    `continue` to `inc; continue` so the inc step is preserved per
+    C semantics)."""
+    kind: Literal["quod.continue"] = "quod.continue"
+
+
 def _mint_block_id() -> str:
     return f"@blk_{uuid4().hex[:12]}"
 
@@ -822,8 +839,8 @@ class Match(_Node):
 
 Statement = Annotated[
     Union[
-        ReturnExpr, Return, Unreachable, If, Let, Assign, While, For,
-        ExprStmt, FieldSet, Store, StoreField, WithArena, Match,
+        ReturnExpr, Return, Unreachable, Break, Continue, If, Let, Assign,
+        While, For, ExprStmt, FieldSet, Store, StoreField, WithArena, Match,
         # Forward-declared `c.*` family extension. CStyleFor is defined
         # below near the staged-lift section; the union uses a string
         # forward-ref to keep its definition close to the other family
@@ -836,16 +853,18 @@ Statement = Annotated[
 
 def body_always_terminates(stmts) -> bool:
     """Conservative: True only when the last reachable statement is provably
-    a terminator — a `return`, an `unreachable`, an `if` whose branches
-    both terminate, or a `match` whose arms (and wildcard, if present)
-    all terminate. Used by the C ingest to decide whether a fall-through
-    needs synthesizing, and by the lowering pass to suppress dead trailing
-    instructions (e.g. arena drops after a body that never falls through)."""
+    a terminator — a `return`, an `unreachable`, a `break` or `continue`
+    (which exit the enclosing loop without falling through), an `if`
+    whose branches both terminate, or a `match` whose arms (and wildcard,
+    if present) all terminate. Used by the C ingest to decide whether a
+    fall-through needs synthesizing, and by the lowering pass to suppress
+    dead trailing instructions (e.g. arena drops after a body that never
+    falls through)."""
     if not stmts:
         return False
     last = stmts[-1]
     match last:
-        case ReturnExpr() | Return() | Unreachable():
+        case ReturnExpr() | Return() | Unreachable() | Break() | Continue():
             return True
         case If(then_body=t, else_body=e):
             return body_always_terminates(t.stmts) and body_always_terminates(e.stmts)
@@ -1802,6 +1821,23 @@ class CAddressOf(_Node):
     target: "CExpr"
 
 
+class CBreak(_Node):
+    """`break;` — exit the innermost enclosing loop. Layer A preserves
+    the source statement; the lift produces a layer-B `Break` (core)."""
+    kind: Literal["c.break"] = "c.break"
+    id: str = Field(default_factory=lambda: _mint_node_id("cbreak"))
+
+
+class CContinue(_Node):
+    """`continue;` — skip to the next iteration of the innermost
+    enclosing loop. Layer A preserves the source statement; the lift
+    produces a layer-B `Continue` (core). Inside a c.for_general,
+    the c-family lowering pre-rewrites `continue` to `inc; continue`
+    so the inc step is preserved per C semantics."""
+    kind: Literal["c.continue"] = "c.continue"
+    id: str = Field(default_factory=lambda: _mint_node_id("ccontinue"))
+
+
 class CTernary(_Node):
     """`cond ? then_value : else_value` — the C ternary operator.
 
@@ -1962,7 +1998,7 @@ class CMultiVarDecl(_Node):
 
 CStmt = Annotated[
     Union[CVarDecl, CMultiVarDecl, CAssign, CCompoundAssign, CReturn,
-          CFor, CIf, CWhile, CExprStmt],
+          CFor, CIf, CWhile, CExprStmt, CBreak, CContinue],
     Field(discriminator="kind"),
 ]
 

@@ -26,14 +26,18 @@ from quod import model
 from quod.model import (
     Assign,
     BinOp,
+    Break,
     Call,
     CharLit,
     CAddressOf,
     CArraySubscript,
     CAssign,
     CBinOp,
+    CBreak,
     CCall,
     CCompoundAssign,
+    CContinue,
+    Continue,
     CEnumConstRef,
     CExprStmt,
     CFn,
@@ -232,6 +236,26 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
                     "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 100}},
         },
         "see_also": ["llvm.binop", "quod.sc_and"],
+    },
+    "quod.break": {
+        "class": Break,
+        "summary": (
+            "Exit the innermost enclosing loop. Validator refuses any "
+            "Break outside a loop body."
+        ),
+        "example": {"kind": "quod.break"},
+        "see_also": ["quod.continue", "quod.while", "quod.for"],
+    },
+    "quod.continue": {
+        "class": Continue,
+        "summary": (
+            "Skip to the next iteration of the innermost enclosing loop. "
+            "Validator refuses any Continue outside a loop body. Inside "
+            "a c.for_general body, the c-family lowering pre-rewrites "
+            "Continue to `inc; continue` so C semantics are preserved."
+        ),
+        "example": {"kind": "quod.continue"},
+        "see_also": ["quod.break", "quod.while", "quod.for"],
     },
     "quod.sc_and": {
         "class": ShortCircuitAnd,
@@ -1084,6 +1108,22 @@ _KIND_INFO["c.array_subscript"] = {
     },
 }
 
+_KIND_INFO["c.break"] = {
+    "class": CBreak,
+    "summary": "`break;` — exit the innermost enclosing loop. Lifts to layer-B `Break`.",
+    "example": {"kind": "c.break"},
+}
+
+_KIND_INFO["c.continue"] = {
+    "class": CContinue,
+    "summary": (
+        "`continue;` — skip to the next iteration. Lifts to layer-B "
+        "`Continue`. Inside a c.for_general body, the c-family lowering "
+        "pre-rewrites this to `inc; continue` so C semantics are preserved."
+    ),
+    "example": {"kind": "c.continue"},
+}
+
 _KIND_INFO["c.ternary"] = {
     "class": CTernary,
     "summary": (
@@ -1352,7 +1392,8 @@ _CATEGORIES: dict[str, list[str]] = {
         "quod.trait_call",
     ],
     "statement": [
-        "quod.return_expr", "quod.return", "quod.unreachable", "quod.if",
+        "quod.return_expr", "quod.return", "quod.unreachable",
+        "quod.break", "quod.continue", "quod.if",
         "quod.let", "quod.assign", "quod.while", "quod.for", "quod.expr_stmt",
         "quod.field_set", "quod.store", "quod.store_field",
         "quod.with_arena", "quod.match",
@@ -1379,6 +1420,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "c_unit", "c.fn", "c.param", "c.type", "c.type.ptr",
         "c.var_decl", "c.multi_var_decl", "c.assign", "c.compound_assign",
         "c.return", "c.for", "c.if", "c.while", "c.expr_stmt",
+        "c.break", "c.continue",
         "c.binop", "c.lit_int", "c.lit_str", "c.var_ref",
         "c.enum_const_ref", "c.call",
         "c.array_subscript", "c.addr_of", "c.unary", "c.ternary",

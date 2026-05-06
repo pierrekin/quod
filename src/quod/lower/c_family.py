@@ -47,6 +47,7 @@ from quod.model import (
     Assign,
     Block,
     BlockOrScoped,
+    Continue,
     CScopedBlock,
     CStyleFor,
     Equivalence,
@@ -221,6 +222,38 @@ def _lower_block(b: Block, ctx: _LowerContext) -> Block:
     return Block(id=new_block_id, stmts=tuple(new_stmts))
 
 
+def _rewrite_continue_with_inc(
+    stmts: tuple[Statement, ...], inc_stmts: tuple[Statement, ...],
+) -> tuple[Statement, ...]:
+    """Replace each `Continue` in `stmts` with `inc; continue`, preserving
+    C for-loop semantics. Recurses into `If` branches (nested in the same
+    loop scope) but stops at any nested loop (`While`, `For`, `CStyleFor`,
+    `DoWhile`) — those loops have their own `continue` target."""
+    out: list[Statement] = []
+    for s in stmts:
+        if isinstance(s, Continue):
+            # Replace with `inc; continue`. Note inc_stmts may be empty
+            # (sparse for `for (init; cond; ) body` — then continue is
+            # plain).
+            out.extend(inc_stmts)
+            out.append(s)
+        elif isinstance(s, If):
+            out.append(s.model_copy(update={
+                "then_body": s.then_body.model_copy(update={
+                    "stmts": _rewrite_continue_with_inc(s.then_body.stmts, inc_stmts),
+                }),
+                "else_body": s.else_body.model_copy(update={
+                    "stmts": _rewrite_continue_with_inc(s.else_body.stmts, inc_stmts),
+                }),
+            }))
+        elif isinstance(s, (While, For, CStyleFor)):
+            # Nested loop has its own continue target — don't recurse.
+            out.append(s)
+        else:
+            out.append(s)
+    return tuple(out)
+
+
 def _lower_statement(stmt: Statement, ctx: _LowerContext) -> tuple[Statement, ...]:
     """Lower one layer-B statement; may produce 0..N replacement
     statements at layer C. Recurses into nested body slots so any
@@ -235,14 +268,23 @@ def _lower_statement(stmt: Statement, ctx: _LowerContext) -> tuple[Statement, ..
         inc_stmts = _lower_statement(stmt.inc, ctx) if stmt.inc is not None else ()
         # Body lowers via the block path (handles CScopedBlock too).
         body_block = _lower_block_or_scoped(stmt.body, ctx)
-        # Append `inc` statements at the end of body. New block ID
-        # since we materially changed the contents — keeps the edge
-        # graph honest about which contents go with which ID.
+        # C semantics: `continue` inside a for-loop jumps to the *inc*
+        # step, not the cond. The naïve rewrite to `while (cond) { body;
+        # inc; }` would have continue jump to the cond, skipping inc —
+        # a silent miscompilation. Pre-rewrite each `Continue` in the
+        # body (not inside a nested loop, which has its own continue
+        # target) to `inc; continue`, so the inc executes before the
+        # while-loop's natural continue.
+        body_stmts = _rewrite_continue_with_inc(body_block.stmts, tuple(inc_stmts))
+        # Append `inc` statements at the end of body so fall-through
+        # iterations also run inc. New block ID since we materially
+        # changed the contents — keeps the edge graph honest about
+        # which contents go with which ID.
         with_inc_id = ctx.mint_block_id()
         ctx.edges.append(ProvenanceEdge(source=body_block.id, target=with_inc_id))
         with_inc = Block(
             id=with_inc_id,
-            stmts=body_block.stmts + tuple(inc_stmts),
+            stmts=body_stmts + tuple(inc_stmts),
         )
         # An absent cond (`for (init;;inc) body`) means "loop forever
         # unless body breaks out" — we model it as `while (true)` with

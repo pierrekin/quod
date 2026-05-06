@@ -49,6 +49,8 @@ from quod.model import (
     U64Type,
     IsizeType,
     UsizeType,
+    Break,
+    Continue,
     If,
     IfExpr,
     IntLit,
@@ -753,9 +755,15 @@ def _lower_stmt(
     struct_tys: dict[str, "ir.IdentifiedStructType"],
     enum_defs: dict[str, EnumDef],
     enum_tys: dict[str, "ir.IdentifiedStructType"],
+    loop_stack: list[tuple[ir.Block, ir.Block]] | None = None,
 ) -> None:
     """Lower a statement. `return_claims` are emitted as llvm.assume / runtime
-    check at every ret, so callers (after inlining) see the bound."""
+    check at every ret, so callers (after inlining) see the bound. The
+    `loop_stack` carries (continue_target, break_target) for each enclosing
+    loop, so `Break` / `Continue` can branch to the right basic block."""
+    if loop_stack is None:
+        loop_stack = []
+
     def lower_expr(e):
         return _lower_expr(
             builder, e, params, module,
@@ -773,6 +781,7 @@ def _lower_stmt(
                 extern_sigs=extern_sigs,
                 struct_defs=struct_defs, struct_tys=struct_tys,
                 enum_defs=enum_defs, enum_tys=enum_tys,
+                loop_stack=loop_stack,
             )
 
     match stmt:
@@ -796,6 +805,22 @@ def _lower_stmt(
             # would error.
             if not builder.block.is_terminated:
                 builder.unreachable()
+            return
+        case Break():
+            assert loop_stack, (
+                "validator invariant: Break outside a loop — "
+                "quod.validate should have caught this"
+            )
+            _, break_target = loop_stack[-1]
+            builder.branch(break_target)
+            return
+        case Continue():
+            assert loop_stack, (
+                "validator invariant: Continue outside a loop — "
+                "quod.validate should have caught this"
+            )
+            continue_target, _ = loop_stack[-1]
+            builder.branch(continue_target)
             return
         case ExprStmt(value=expr):
             lower_expr(expr)
@@ -893,6 +918,7 @@ def _lower_stmt(
                     extern_sigs=extern_sigs,
                     struct_defs=struct_defs, struct_tys=struct_tys,
                     enum_defs=enum_defs, enum_tys=enum_tys,
+                    loop_stack=loop_stack,
                 )
             if not builder.block.is_terminated:
                 builder.branch(ensure_merge())
@@ -906,6 +932,7 @@ def _lower_stmt(
                     extern_sigs=extern_sigs,
                     struct_defs=struct_defs, struct_tys=struct_tys,
                     enum_defs=enum_defs, enum_tys=enum_tys,
+                    loop_stack=loop_stack,
                 )
             if not builder.block.is_terminated:
                 builder.branch(ensure_merge())
@@ -924,7 +951,13 @@ def _lower_stmt(
             builder.cbranch(cond_val, body_bb, exit_bb)
 
             builder.position_at_end(body_bb)
-            lower_body(body)
+            # Push (continue_target=header, break_target=exit) for the
+            # body's nested Break/Continue. Pop when the body finishes.
+            loop_stack.append((header_bb, exit_bb))
+            try:
+                lower_body(body)
+            finally:
+                loop_stack.pop()
             if not builder.block.is_terminated:
                 builder.branch(header_bb)
 
@@ -941,6 +974,7 @@ def _lower_stmt(
 
             header_bb = llvm_fn.append_basic_block("for.header")
             body_bb = llvm_fn.append_basic_block("for.body")
+            inc_bb = llvm_fn.append_basic_block("for.inc")
             exit_bb = llvm_fn.append_basic_block("for.exit")
             builder.branch(header_bb)
 
@@ -950,13 +984,20 @@ def _lower_stmt(
             builder.cbranch(cmp, body_bb, exit_bb)
 
             builder.position_at_end(body_bb)
-            lower_body(body)
+            # Continue jumps to the inc step (matches C for-loop
+            # semantics); break jumps to the exit.
+            loop_stack.append((inc_bb, exit_bb))
+            try:
+                lower_body(body)
+            finally:
+                loop_stack.pop()
             if not builder.block.is_terminated:
-                # increment + back-edge — step constant matches the var's width
-                cur2 = builder.load(alloca)
-                nxt = builder.add(cur2, ir.Constant(var_ty, 1))
-                builder.store(nxt, alloca)
-                builder.branch(header_bb)
+                builder.branch(inc_bb)
+            builder.position_at_end(inc_bb)
+            cur2 = builder.load(alloca)
+            nxt = builder.add(cur2, ir.Constant(var_ty, 1))
+            builder.store(nxt, alloca)
+            builder.branch(header_bb)
 
             builder.position_at_end(exit_bb)
             return

@@ -62,14 +62,18 @@ from quod.model import (
     Assign,
     BinOp,
     Block,
+    Break,
     Call,
     CAddressOf,
     CArraySubscript,
     CAssign,
     CBinOp,
+    CBreak,
     CCall,
     CCompoundAssign,
+    CContinue,
     CEnumConstRef,
+    Continue,
     CExprStmt,
     CFn,
     CFor,
@@ -577,6 +581,16 @@ def _check_stmt(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
             "a_id": a.id,
             "value": _check_expr(a.value, b.value, path=f"{path}.value", ctx=ctx),
         }
+
+    if isinstance(a, CBreak):
+        if not isinstance(b, Break):
+            raise LiftCheckError(f"{path}: layer-A CBreak vs layer-B {type(b).__name__}")
+        return {"kind": "c.break ↔ break", "a_id": a.id}
+
+    if isinstance(a, CContinue):
+        if not isinstance(b, Continue):
+            raise LiftCheckError(f"{path}: layer-A CContinue vs layer-B {type(b).__name__}")
+        return {"kind": "c.continue ↔ continue", "a_id": a.id}
 
     raise LiftCheckError(
         f"{path}: layer-A {type(a).__name__} has no v6 correspondence rule"

@@ -28,6 +28,7 @@ import pytest
 from quod.ingest.c import IngestError, ingest_c
 from quod.lower import compile_program
 from quod.model import (
+    Break,
     CAssign,
     CBinOp,
     CFor,
@@ -37,7 +38,9 @@ from quod.model import (
     CVarDecl,
     CVarRef,
     Equivalence,
+    If,
     ProvenanceEdge,
+    While,
 )
 
 
@@ -603,6 +606,72 @@ def test_sparse_for_example_compiles_and_runs(tmp_path):
     assert "sum_no_init(5)  = 10" in out.stdout
     assert "sum_no_inc(5)   = 10" in out.stdout
     assert "sum_no_cond(5)  = 10" in out.stdout
+
+
+BREAK_CONTINUE_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/break_continue/break_continue.c"
+
+
+def test_break_continue_lift_to_core():
+    """`break;` and `continue;` lift to layer-A CBreak/CContinue and
+    layer-B Break/Continue (core)."""
+    from quod.model import CBreak, CContinue, Break, Continue
+    p = ingest_c(BREAK_CONTINUE_C)
+
+    cfn = next(cf for cf in p.source_units[0].functions if cf.name == "find_first_negative")
+    # body: int i = 0; while (i < n) { ...; if (i >= 100) break; ...; i = i + 1; } return -999;
+    while_a = next(s for s in cfn.body if s.kind == "c.while")
+    # The break is inside an if-then inside the while body.
+    found_break = False
+    for s in while_a.body:
+        if s.kind == "c.if":
+            if any(t.kind == "c.break" for t in s.then_body):
+                found_break = True
+                break
+    assert found_break
+
+    fn_b = next(f for f in p.structured_functions if f.name == "find_first_negative")
+    # Same shape on layer B but with While + Break.
+    while_b = next(s for s in fn_b.body.stmts if isinstance(s, While))
+    found_break_b = False
+    for s in while_b.body.stmts:
+        if isinstance(s, If):
+            if any(isinstance(t, Break) for t in s.then_body.stmts):
+                found_break_b = True
+                break
+    assert found_break_b
+
+
+def test_break_continue_example_compiles_and_runs(tmp_path):
+    import subprocess
+    from quod.lower import compile_program
+    p = ingest_c(BREAK_CONTINUE_C)
+    res = compile_program(
+        p, build_dir=tmp_path, bins=(("bc", "main"),),
+        profile=2, link=True,
+    )
+    out = subprocess.run([str(res.bins[0].binary)], capture_output=True, text=True, timeout=10)
+    assert out.returncode == 0
+    assert "find_first_negative(20) = -5" in out.stdout
+    # sum_evens(10) = 0+2+4+6+8 = 20 — only correct if the for-loop's
+    # `continue` runs the inc step (the c-family pre-rewrite).
+    assert "sum_evens(10)           = 20" in out.stdout
+
+
+def test_break_outside_loop_refuses(tmp_path):
+    """A `break;` outside any enclosing loop is refused by the validator."""
+    from quod.lower import compile_program
+    from quod.validate import ValidationError
+    src = tmp_path / "bad_break.c"
+    src.write_text("int f(void) { break; return 0; }\n")
+    # Clang itself rejects break outside a loop at parse time, so the
+    # ingester sees the error before we get to validate. Either way,
+    # the program is refused.
+    with pytest.raises((IngestError, ValidationError)):
+        p = ingest_c(src)
+        compile_program(
+            p, build_dir=tmp_path, bins=(("bad", "f"),),
+            profile=2, link=True,
+        )
 
 
 def test_every_c_corpus_example_emits_layer_a():
