@@ -2,6 +2,7 @@
   "constants": [],
   "functions": [
     {
+      "id": "@fn_c_lowered_foo",
       "name": "foo",
       "params": [
         {
@@ -14,55 +15,171 @@
       "return_type": {
         "kind": "llvm.i32"
       },
-      "body": [
-        {
-          "kind": "quod.if",
-          "cond": {
-            "kind": "llvm.binop",
-            "op": "sgt",
-            "lhs": {
-              "kind": "llvm.param_ref",
-              "name": "x"
-            },
-            "rhs": {
-              "kind": "llvm.const_int",
-              "type": {
-                "kind": "llvm.i32"
+      "body": {
+        "id": "@blk_c_lowered_foo_3",
+        "stmts": [
+          {
+            "kind": "quod.if",
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "sgt",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
               },
-              "value": 0
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 0
+              }
+            },
+            "then_body": {
+              "id": "@blk_c_lowered_foo_1",
+              "stmts": [
+                {
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "llvm.param_ref",
+                      "name": "x"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 1
+                    }
+                  }
+                }
+              ]
+            },
+            "else_body": {
+              "id": "@blk_c_lowered_foo_2",
+              "stmts": []
             }
           },
-          "then_body": [
-            {
-              "kind": "quod.return_expr",
-              "value": {
-                "kind": "llvm.binop",
-                "op": "add",
-                "lhs": {
-                  "kind": "llvm.param_ref",
-                  "name": "x"
-                },
-                "rhs": {
-                  "kind": "llvm.const_int",
-                  "type": {
-                    "kind": "llvm.i32"
-                  },
-                  "value": 1
-                }
-              }
-            }
-          ],
-          "else_body": []
-        },
-        {
-          "kind": "quod.unreachable"
-        }
-      ],
+          {
+            "kind": "quod.unreachable"
+          }
+        ]
+      },
       "claims": [],
       "notes": [
         "ingested from foo.c:5"
       ]
     }
   ],
-  "externs": []
+  "externs": [],
+  "edges": [
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_1",
+      "target": "@blk_c_lowered_foo_1"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_2",
+      "target": "@blk_c_lowered_foo_2"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_3",
+      "target": "@blk_c_lowered_foo_3"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@fn_c_foo",
+      "target": "@fn_c_lowered_foo"
+    }
+  ],
+  "equivalences": [
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@fn_c_foo",
+      "b_node_id": "@fn_c_lowered_foo",
+      "justification": {
+        "kind": "family_lowering",
+        "rule_name": "identity"
+      }
+    }
+  ],
+  "structured_functions": [
+    {
+      "id": "@fn_c_foo",
+      "name": "foo",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_3",
+        "stmts": [
+          {
+            "kind": "quod.if",
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "sgt",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 0
+              }
+            },
+            "then_body": {
+              "id": "@blk_c_1",
+              "stmts": [
+                {
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "llvm.param_ref",
+                      "name": "x"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 1
+                    }
+                  }
+                }
+              ]
+            },
+            "else_body": {
+              "id": "@blk_c_2",
+              "stmts": []
+            }
+          },
+          {
+            "kind": "quod.unreachable"
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from foo.c:5"
+      ]
+    }
+  ]
 }

@@ -37,7 +37,7 @@
       "return_type": {
         "kind": "llvm.i8_ptr"
       },
-      "body": [
+      "body": {"id": "@blk_alloc.str_1", "stmts": [
         {
           "kind": "quod.let",
           "name": "p",
@@ -136,7 +136,7 @@
             "name": "p"
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -158,7 +158,7 @@
       "return_type": {
         "kind": "llvm.i8_ptr"
       },
-      "body": [
+      "body": {"id": "@blk_alloc.str_2", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -181,7 +181,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.str.builder_ensure_cap",
@@ -202,7 +202,7 @@
       "return_type": {
         "kind": "llvm.void"
       },
-      "body": [
+      "body": {"id": "@blk_alloc.str_3", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -228,7 +228,7 @@
         {
           "kind": "quod.return"
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.str.builder_push_byte",
@@ -249,7 +249,7 @@
       "return_type": {
         "kind": "llvm.void"
       },
-      "body": [
+      "body": {"id": "@blk_alloc.str_4", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -275,7 +275,7 @@
         {
           "kind": "quod.return"
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.str.builder_push_bytes",
@@ -302,7 +302,7 @@
       "return_type": {
         "kind": "llvm.void"
       },
-      "body": [
+      "body": {"id": "@blk_alloc.str_6", "stmts": [
         {
           "kind": "quod.for",
           "var": "i",
@@ -320,7 +320,7 @@
             "kind": "llvm.param_ref",
             "name": "n"
           },
-          "body": [
+          "body": {"id": "@blk_alloc.str_5", "stmts": [
             {
               "kind": "quod.let",
               "name": "byte",
@@ -367,12 +367,12 @@
                 ]
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return"
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.str.builder_push_str",
@@ -394,7 +394,7 @@
       "return_type": {
         "kind": "llvm.void"
       },
-      "body": [
+      "body": {"id": "@blk_alloc.str_7", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -427,7 +427,7 @@
         {
           "kind": "quod.return"
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.str.builder_into_str",
@@ -443,7 +443,7 @@
         "kind": "llvm.struct",
         "name": "core.str.String"
       },
-      "body": [
+      "body": {"id": "@blk_alloc.str_8", "stmts": [
         {
           "kind": "quod.let",
           "name": "l",
@@ -504,7 +504,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.str.builder_len",
@@ -519,7 +519,7 @@
       "return_type": {
         "kind": "llvm.i64"
       },
-      "body": [
+      "body": {"id": "@blk_alloc.str_9", "stmts": [
         {
           "kind": "quod.let",
           "name": "l",
@@ -567,7 +567,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.str.builder_cap",
@@ -582,7 +582,7 @@
       "return_type": {
         "kind": "llvm.i64"
       },
-      "body": [
+      "body": {"id": "@blk_alloc.str_10", "stmts": [
         {
           "kind": "quod.let",
           "name": "l",
@@ -630,7 +630,7 @@
             ]
           }
         }
-      ]
+      ]}
     }
   ],
   "wirables": [

@@ -60,7 +60,7 @@
         {"name": "n", "type": {"kind": "llvm.i64"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_8", "stmts": [
         {
           "kind": "quod.let",
           "name": "cur_err",
@@ -81,8 +81,8 @@
           "kind": "quod.match",
           "scrutinee": {"kind": "quod.local_ref", "name": "cur_err"},
           "arms": [
-            {"variant": "Some", "bindings": ["_e"], "body": [{"kind": "quod.return"}]},
-            {"variant": "None", "bindings": [], "body": []}
+            {"variant": "Some", "bindings": ["_e"], "body": {"id": "@blk_alloc.json.io_1", "stmts": [{"kind": "quod.return"}]}},
+            {"variant": "None", "bindings": [], "body": {"id": "@blk_alloc.json.io_2", "stmts": []}}
           ]
         },
         {
@@ -122,7 +122,7 @@
             "lhs": {"kind": "quod.local_ref", "name": "remaining"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
           },
-          "body": [
+          "body": {"id": "@blk_alloc.json.io_7", "stmts": [
             {
               "kind": "quod.let",
               "name": "rc",
@@ -153,7 +153,7 @@
                 {
                   "variant": "Err",
                   "bindings": ["e"],
-                  "body": [
+                  "body": {"id": "@blk_alloc.json.io_3", "stmts": [
                     {
                       "kind": "quod.store_field",
                       "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
@@ -171,12 +171,12 @@
                       }
                     },
                     {"kind": "quod.return"}
-                  ]
+                  ]}
                 },
                 {
                   "variant": "Ok",
                   "bindings": ["written"],
-                  "body": [
+                  "body": {"id": "@blk_alloc.json.io_6", "stmts": [
                     {
                       "kind": "quod.if",
                       "cond": {
@@ -185,7 +185,7 @@
                         "lhs": {"kind": "quod.local_ref", "name": "written"},
                         "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
                       },
-                      "then_body": [
+                      "then_body": {"id": "@blk_alloc.json.io_4", "stmts": [
                         {
                           "kind": "quod.store_field",
                           "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
@@ -213,8 +213,8 @@
                           }
                         },
                         {"kind": "quod.return"}
-                      ],
-                      "else_body": []
+                      ]},
+                      "else_body": {"id": "@blk_alloc.json.io_5", "stmts": []}
                     },
                     {
                       "kind": "quod.assign",
@@ -240,13 +240,13 @@
                         "rhs": {"kind": "quod.local_ref", "name": "written"}
                       }
                     }
-                  ]
+                  ]}
                 }
               ]
             }
-          ]
+          ]}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.emit_byte",
@@ -256,7 +256,7 @@
         {"name": "byte", "type": {"kind": "llvm.i8"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_9", "stmts": [
         {
           "kind": "quod.let",
           "name": "scratch",
@@ -287,7 +287,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.hex_char",
@@ -295,7 +295,7 @@
         {"name": "n", "type": {"kind": "llvm.i8"}}
       ],
       "return_type": {"kind": "llvm.i8"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_12", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -304,7 +304,7 @@
             "lhs": {"kind": "llvm.param_ref", "name": "n"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 10}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_10", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -314,8 +314,8 @@
                 "rhs": {"kind": "quod.char_lit", "value": "0"}
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_11", "stmts": []}
         },
         {
           "kind": "quod.return_expr",
@@ -331,7 +331,7 @@
             "rhs": {"kind": "quod.char_lit", "value": "a"}
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.escape_byte",
@@ -341,56 +341,56 @@
         {"name": "ch", "type": {"kind": "llvm.i8"}}
       ],
       "return_type": {"kind": "llvm.i1"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_25", "stmts": [
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "\""}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_13", "stmts": [
             {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
             {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\""}]}},
             {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_14", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "\\"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_15", "stmts": [
             {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
             {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
             {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_16", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "\n"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_17", "stmts": [
             {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
             {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "n"}]}},
             {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_18", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "\t"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_19", "stmts": [
             {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
             {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "t"}]}},
             {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_20", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "\r"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_21", "stmts": [
             {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
             {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "r"}]}},
             {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_22", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -400,7 +400,7 @@
             "lhs": {"kind": "llvm.param_ref", "name": "ch"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 32}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_23", "stmts": [
             {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\\"}]}},
             {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "u"}]}},
             {"kind": "quod.expr_stmt", "value": {"kind": "llvm.call", "function": "alloc.json.io.emit_byte", "type_args": [{"kind": "quod.type_param", "name": "W"}], "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "0"}]}},
@@ -452,11 +452,11 @@
               }
             },
             {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_24", "stmts": []}
         },
         {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 0}}
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.emit_string_chars",
@@ -467,7 +467,7 @@
         {"name": "len", "type": {"kind": "llvm.i64"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_29", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -491,7 +491,7 @@
             "lhs": {"kind": "quod.local_ref", "name": "i"},
             "rhs": {"kind": "llvm.param_ref", "name": "len"}
           },
-          "body": [
+          "body": {"id": "@blk_alloc.json.io_28", "stmts": [
             {
               "kind": "quod.let",
               "name": "ch",
@@ -529,7 +529,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "handled"},
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 0}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_26", "stmts": [
                 {
                   "kind": "quod.expr_stmt",
                   "value": {
@@ -542,8 +542,8 @@
                     ]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_27", "stmts": []}
             },
             {
               "kind": "quod.assign",
@@ -555,7 +555,7 @@
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.expr_stmt",
@@ -566,7 +566,7 @@
             "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "\""}]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.emit_digits",
@@ -576,7 +576,7 @@
         {"name": "n", "type": {"kind": "llvm.i64"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_32", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -585,7 +585,7 @@
             "lhs": {"kind": "llvm.param_ref", "name": "n"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 10}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_30", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -603,8 +603,8 @@
                 ]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_31", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -644,7 +644,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.emit_number",
@@ -654,7 +654,7 @@
         {"name": "n", "type": {"kind": "llvm.i64"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_37", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -663,7 +663,7 @@
             "lhs": {"kind": "llvm.param_ref", "name": "n"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_33", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -674,8 +674,8 @@
               }
             },
             {"kind": "quod.return"}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_34", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -691,7 +691,7 @@
             "lhs": {"kind": "llvm.param_ref", "name": "n"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_35", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -711,8 +711,8 @@
                 "rhs": {"kind": "llvm.param_ref", "name": "n"}
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_36", "stmts": []}
         },
         {
           "kind": "quod.expr_stmt",
@@ -726,7 +726,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.emit_indent",
@@ -736,7 +736,7 @@
         {"name": "depth", "type": {"kind": "llvm.i64"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_39", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -760,7 +760,7 @@
             "lhs": {"kind": "quod.local_ref", "name": "i"},
             "rhs": {"kind": "llvm.param_ref", "name": "depth"}
           },
-          "body": [
+          "body": {"id": "@blk_alloc.json.io_38", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -789,9 +789,9 @@
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
               }
             }
-          ]
+          ]}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.emit_value",
@@ -803,7 +803,7 @@
         {"name": "depth", "type": {"kind": "llvm.i64"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_48", "stmts": [
         {
           "kind": "quod.match",
           "scrutinee": {"kind": "llvm.param_ref", "name": "v"},
@@ -811,7 +811,7 @@
             {
               "variant": "Null",
               "bindings": [],
-              "body": [
+              "body": {"id": "@blk_alloc.json.io_40", "stmts": [
                 {
                   "kind": "quod.expr_stmt",
                   "value": {
@@ -825,16 +825,16 @@
                     ]
                   }
                 }
-              ]
+              ]}
             },
             {
               "variant": "Bool",
               "bindings": ["bx"],
-              "body": [
+              "body": {"id": "@blk_alloc.json.io_43", "stmts": [
                 {
                   "kind": "quod.if",
                   "cond": {"kind": "quod.local_ref", "name": "bx"},
-                  "then_body": [
+                  "then_body": {"id": "@blk_alloc.json.io_41", "stmts": [
                     {
                       "kind": "quod.expr_stmt",
                       "value": {
@@ -848,8 +848,8 @@
                         ]
                       }
                     }
-                  ],
-                  "else_body": [
+                  ]},
+                  "else_body": {"id": "@blk_alloc.json.io_42", "stmts": [
                     {
                       "kind": "quod.expr_stmt",
                       "value": {
@@ -863,14 +863,14 @@
                         ]
                       }
                     }
-                  ]
+                  ]}
                 }
-              ]
+              ]}
             },
             {
               "variant": "Number",
               "bindings": ["nx"],
-              "body": [
+              "body": {"id": "@blk_alloc.json.io_44", "stmts": [
                 {
                   "kind": "quod.expr_stmt",
                   "value": {
@@ -883,12 +883,12 @@
                     ]
                   }
                 }
-              ]
+              ]}
             },
             {
               "variant": "String",
               "bindings": ["sp", "sl"],
-              "body": [
+              "body": {"id": "@blk_alloc.json.io_45", "stmts": [
                 {
                   "kind": "quod.expr_stmt",
                   "value": {
@@ -902,12 +902,12 @@
                     ]
                   }
                 }
-              ]
+              ]}
             },
             {
               "variant": "Array",
               "bindings": ["items"],
-              "body": [
+              "body": {"id": "@blk_alloc.json.io_46", "stmts": [
                 {
                   "kind": "quod.expr_stmt",
                   "value": {
@@ -927,12 +927,12 @@
                     ]
                   }
                 }
-              ]
+              ]}
             },
             {
               "variant": "Object",
               "bindings": ["keys", "vals"],
-              "body": [
+              "body": {"id": "@blk_alloc.json.io_47", "stmts": [
                 {
                   "kind": "quod.expr_stmt",
                   "value": {
@@ -953,11 +953,11 @@
                     ]
                   }
                 }
-              ]
+              ]}
             }
           ]
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.emit_array",
@@ -976,7 +976,7 @@
         {"name": "depth", "type": {"kind": "llvm.i64"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_58", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -1005,7 +1005,7 @@
             "lhs": {"kind": "quod.local_ref", "name": "n"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_49", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -1016,8 +1016,8 @@
               }
             },
             {"kind": "quod.return"}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_50", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -1033,11 +1033,11 @@
             "lhs": {"kind": "quod.local_ref", "name": "i"},
             "rhs": {"kind": "quod.local_ref", "name": "n"}
           },
-          "body": [
+          "body": {"id": "@blk_alloc.json.io_55", "stmts": [
             {
               "kind": "quod.if",
               "cond": {"kind": "llvm.param_ref", "name": "pretty"},
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_51", "stmts": [
                 {
                   "kind": "quod.expr_stmt",
                   "value": {
@@ -1050,8 +1050,8 @@
                     ]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_52", "stmts": []}
             },
             {
               "kind": "quod.let",
@@ -1094,7 +1094,7 @@
                   "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
                 }
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_53", "stmts": [
                 {
                   "kind": "quod.expr_stmt",
                   "value": {
@@ -1104,8 +1104,8 @@
                     "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": ","}]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_54", "stmts": []}
             },
             {
               "kind": "quod.assign",
@@ -1117,12 +1117,12 @@
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.param_ref", "name": "pretty"},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_56", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -1140,8 +1140,8 @@
                 ]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_57", "stmts": []}
         },
         {
           "kind": "quod.expr_stmt",
@@ -1152,7 +1152,7 @@
             "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "]"}]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.emit_object",
@@ -1179,7 +1179,7 @@
         {"name": "depth", "type": {"kind": "llvm.i64"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_70", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -1208,7 +1208,7 @@
             "lhs": {"kind": "quod.local_ref", "name": "n"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_59", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -1219,8 +1219,8 @@
               }
             },
             {"kind": "quod.return"}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_60", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -1236,11 +1236,11 @@
             "lhs": {"kind": "quod.local_ref", "name": "i"},
             "rhs": {"kind": "quod.local_ref", "name": "n"}
           },
-          "body": [
+          "body": {"id": "@blk_alloc.json.io_67", "stmts": [
             {
               "kind": "quod.if",
               "cond": {"kind": "llvm.param_ref", "name": "pretty"},
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_61", "stmts": [
                 {
                   "kind": "quod.expr_stmt",
                   "value": {
@@ -1253,8 +1253,8 @@
                     ]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_62", "stmts": []}
             },
             {
               "kind": "quod.let",
@@ -1296,7 +1296,7 @@
             {
               "kind": "quod.if",
               "cond": {"kind": "llvm.param_ref", "name": "pretty"},
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_63", "stmts": [
                 {
                   "kind": "quod.expr_stmt",
                   "value": {
@@ -1306,8 +1306,8 @@
                     "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": " "}]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_64", "stmts": []}
             },
             {
               "kind": "quod.let",
@@ -1350,7 +1350,7 @@
                   "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
                 }
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_65", "stmts": [
                 {
                   "kind": "quod.expr_stmt",
                   "value": {
@@ -1360,8 +1360,8 @@
                     "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": ","}]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_66", "stmts": []}
             },
             {
               "kind": "quod.assign",
@@ -1373,12 +1373,12 @@
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.param_ref", "name": "pretty"},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_68", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -1396,8 +1396,8 @@
                 ]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_69", "stmts": []}
         },
         {
           "kind": "quod.expr_stmt",
@@ -1408,7 +1408,7 @@
             "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}, {"kind": "quod.char_lit", "value": "}"}]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.write_value_to",
@@ -1424,7 +1424,7 @@
         "name": "core.option.Option",
         "type_args": [{"kind": "llvm.enum", "name": "core.io.IoError"}]
       },
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_71", "stmts": [
         {
           "kind": "quod.let",
           "name": "ctx_ptr",
@@ -1505,7 +1505,7 @@
             "name": "err"
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.pull_byte",
@@ -1514,7 +1514,7 @@
         {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_76", "stmts": [
         {
           "kind": "quod.let",
           "name": "reader_ptr",
@@ -1569,7 +1569,7 @@
             {
               "variant": "Err",
               "bindings": ["_e"],
-              "body": [
+              "body": {"id": "@blk_alloc.json.io_72", "stmts": [
                 {
                   "kind": "quod.store_field",
                   "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
@@ -1586,12 +1586,12 @@
                   "name": "eof",
                   "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}
                 }
-              ]
+              ]}
             },
             {
               "variant": "Ok",
               "bindings": ["n"],
-              "body": [
+              "body": {"id": "@blk_alloc.json.io_75", "stmts": [
                 {
                   "kind": "quod.if",
                   "cond": {
@@ -1600,7 +1600,7 @@
                     "lhs": {"kind": "quod.local_ref", "name": "n"},
                     "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
                   },
-                  "then_body": [
+                  "then_body": {"id": "@blk_alloc.json.io_73", "stmts": [
                     {
                       "kind": "quod.store_field",
                       "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
@@ -1609,8 +1609,8 @@
                       "name": "eof",
                       "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}
                     }
-                  ],
-                  "else_body": [
+                  ]},
+                  "else_body": {"id": "@blk_alloc.json.io_74", "stmts": [
                     {
                       "kind": "quod.let",
                       "name": "byte",
@@ -1637,13 +1637,13 @@
                       "name": "has_peek",
                       "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}
                     }
-                  ]
+                  ]}
                 }
-              ]
+              ]}
             }
           ]
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.peek_byte",
@@ -1652,7 +1652,7 @@
         {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.i8"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_79", "stmts": [
         {
           "kind": "quod.let",
           "name": "has",
@@ -1673,7 +1673,7 @@
             "lhs": {"kind": "quod.local_ref", "name": "has"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 0}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_77", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -1683,8 +1683,8 @@
                 "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_78", "stmts": []}
         },
         {
           "kind": "quod.return_expr",
@@ -1696,7 +1696,7 @@
             "name": "peek"
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.consume_byte",
@@ -1705,7 +1705,7 @@
         {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.i8"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_80", "stmts": [
         {
           "kind": "quod.let",
           "name": "byte",
@@ -1729,7 +1729,7 @@
           "kind": "quod.return_expr",
           "value": {"kind": "quod.local_ref", "name": "byte"}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.skip_whitespace",
@@ -1738,11 +1738,11 @@
         {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_88", "stmts": [
         {
           "kind": "quod.while",
           "cond": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1},
-          "body": [
+          "body": {"id": "@blk_alloc.json.io_87", "stmts": [
             {
               "kind": "quod.let",
               "name": "eof_or_err",
@@ -1768,8 +1768,8 @@
             {
               "kind": "quod.if",
               "cond": {"kind": "quod.local_ref", "name": "eof_or_err"},
-              "then_body": [{"kind": "quod.return"}],
-              "else_body": []
+              "then_body": {"id": "@blk_alloc.json.io_81", "stmts": [{"kind": "quod.return"}]},
+              "else_body": {"id": "@blk_alloc.json.io_82", "stmts": []}
             },
             {
               "kind": "quod.let",
@@ -1797,8 +1797,8 @@
             {
               "kind": "quod.if",
               "cond": {"kind": "quod.local_ref", "name": "eof2"},
-              "then_body": [{"kind": "quod.return"}],
-              "else_body": []
+              "then_body": {"id": "@blk_alloc.json.io_83", "stmts": [{"kind": "quod.return"}]},
+              "else_body": {"id": "@blk_alloc.json.io_84", "stmts": []}
             },
             {
               "kind": "quod.let",
@@ -1846,8 +1846,8 @@
                 "lhs": {"kind": "quod.local_ref", "name": "is_ws"},
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 0}
               },
-              "then_body": [{"kind": "quod.return"}],
-              "else_body": []
+              "then_body": {"id": "@blk_alloc.json.io_85", "stmts": [{"kind": "quod.return"}]},
+              "else_body": {"id": "@blk_alloc.json.io_86", "stmts": []}
             },
             {
               "kind": "quod.expr_stmt",
@@ -1858,9 +1858,9 @@
                 "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}]
               }
             }
-          ]
+          ]}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.expect_byte",
@@ -1870,7 +1870,7 @@
         {"name": "expected", "type": {"kind": "llvm.i8"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_91", "stmts": [
         {
           "kind": "quod.let",
           "name": "ch",
@@ -1906,7 +1906,7 @@
               "rhs": {"kind": "llvm.param_ref", "name": "expected"}
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_89", "stmts": [
             {
               "kind": "quod.store_field",
               "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
@@ -1915,10 +1915,10 @@
               "name": "err",
               "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_90", "stmts": []}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.hex_digit_value",
@@ -1926,7 +1926,7 @@
         {"name": "ch", "type": {"kind": "llvm.i8"}}
       ],
       "return_type": {"kind": "llvm.i8"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_98", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -1934,13 +1934,13 @@
             "lhs": {"kind": "llvm.binop", "op": "sge", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "0"}},
             "rhs": {"kind": "llvm.binop", "op": "sle", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "9"}}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_92", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {"kind": "llvm.binop", "op": "sub", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "0"}}
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_93", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -1949,7 +1949,7 @@
             "lhs": {"kind": "llvm.binop", "op": "sge", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "a"}},
             "rhs": {"kind": "llvm.binop", "op": "sle", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "f"}}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_94", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -1959,8 +1959,8 @@
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 10}
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_95", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -1969,7 +1969,7 @@
             "lhs": {"kind": "llvm.binop", "op": "sge", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "A"}},
             "rhs": {"kind": "llvm.binop", "op": "sle", "lhs": {"kind": "llvm.param_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "F"}}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_96", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -1979,14 +1979,14 @@
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 10}
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_97", "stmts": []}
         },
         {
           "kind": "quod.return_expr",
           "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 255}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.push_utf8_into",
@@ -1995,7 +1995,7 @@
         {"name": "cp", "type": {"kind": "llvm.i32"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_103", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -2004,7 +2004,7 @@
             "lhs": {"kind": "llvm.param_ref", "name": "cp"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 128}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_99", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -2018,8 +2018,8 @@
               }
             },
             {"kind": "quod.return"}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_100", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -2029,7 +2029,7 @@
             "lhs": {"kind": "llvm.param_ref", "name": "cp"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 2048}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_101", "stmts": [
             {
               "kind": "quod.let",
               "name": "b0",
@@ -2077,8 +2077,8 @@
               }
             },
             {"kind": "quod.return"}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_102", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -2154,7 +2154,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.parse_unicode_escape_into",
@@ -2164,7 +2164,7 @@
         {"name": "buf_ptr", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_109", "stmts": [
         {
           "kind": "quod.let",
           "name": "cp",
@@ -2185,7 +2185,7 @@
             "lhs": {"kind": "quod.local_ref", "name": "i"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4}
           },
-          "body": [
+          "body": {"id": "@blk_alloc.json.io_108", "stmts": [
             {
               "kind": "quod.let",
               "name": "ch",
@@ -2212,7 +2212,7 @@
             {
               "kind": "quod.if",
               "cond": {"kind": "quod.local_ref", "name": "eof"},
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_104", "stmts": [
                 {
                   "kind": "quod.store_field",
                   "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
@@ -2222,8 +2222,8 @@
                   "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}
                 },
                 {"kind": "quod.return"}
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_105", "stmts": []}
             },
             {
               "kind": "quod.let",
@@ -2243,7 +2243,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "v"},
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 255}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_106", "stmts": [
                 {
                   "kind": "quod.store_field",
                   "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
@@ -2253,8 +2253,8 @@
                   "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}
                 },
                 {"kind": "quod.return"}
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_107", "stmts": []}
             },
             {
               "kind": "quod.assign",
@@ -2281,7 +2281,7 @@
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.expr_stmt",
@@ -2294,7 +2294,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.parse_escape_into",
@@ -2304,7 +2304,7 @@
         {"name": "buf_ptr", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_132", "stmts": [
         {
           "kind": "quod.let",
           "name": "ch",
@@ -2331,7 +2331,7 @@
         {
           "kind": "quod.if",
           "cond": {"kind": "quod.local_ref", "name": "eof"},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_110", "stmts": [
             {
               "kind": "quod.store_field",
               "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
@@ -2341,8 +2341,8 @@
               "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}
             },
             {"kind": "quod.return"}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_111", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -2359,79 +2359,79 @@
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "\""}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_112", "stmts": [
             {"kind": "quod.assign", "name": "out", "value": {"kind": "quod.char_lit", "value": "\""}},
             {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_113", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "\\"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_114", "stmts": [
             {"kind": "quod.assign", "name": "out", "value": {"kind": "quod.char_lit", "value": "\\"}},
             {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_115", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "/"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_116", "stmts": [
             {"kind": "quod.assign", "name": "out", "value": {"kind": "quod.char_lit", "value": "/"}},
             {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_117", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "b"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_118", "stmts": [
             {"kind": "quod.assign", "name": "out", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 8}},
             {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_119", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "f"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_120", "stmts": [
             {"kind": "quod.assign", "name": "out", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i8"}, "value": 12}},
             {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_121", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "n"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_122", "stmts": [
             {"kind": "quod.assign", "name": "out", "value": {"kind": "quod.char_lit", "value": "\n"}},
             {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_123", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "r"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_124", "stmts": [
             {"kind": "quod.assign", "name": "out", "value": {"kind": "quod.char_lit", "value": "\r"}},
             {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_125", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "t"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_126", "stmts": [
             {"kind": "quod.assign", "name": "out", "value": {"kind": "quod.char_lit", "value": "\t"}},
             {"kind": "quod.assign", "name": "matched", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_127", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "quod.local_ref", "name": "matched"},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_128", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -2445,13 +2445,13 @@
               }
             },
             {"kind": "quod.return"}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_129", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "u"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_130", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -2465,8 +2465,8 @@
               }
             },
             {"kind": "quod.return"}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_131", "stmts": []}
         },
         {
           "kind": "quod.store_field",
@@ -2476,7 +2476,7 @@
           "name": "err",
           "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.parse_string_inner",
@@ -2485,7 +2485,7 @@
         {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.struct", "name": "core.str.String"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_140", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -2527,7 +2527,7 @@
         {
           "kind": "quod.while",
           "cond": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1},
-          "body": [
+          "body": {"id": "@blk_alloc.json.io_139", "stmts": [
             {
               "kind": "quod.let",
               "name": "eof_or_err",
@@ -2553,7 +2553,7 @@
             {
               "kind": "quod.if",
               "cond": {"kind": "quod.local_ref", "name": "eof_or_err"},
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_133", "stmts": [
                 {
                   "kind": "quod.store_field",
                   "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
@@ -2573,8 +2573,8 @@
                     ]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_134", "stmts": []}
             },
             {
               "kind": "quod.let",
@@ -2595,7 +2595,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "ch"},
                 "rhs": {"kind": "quod.char_lit", "value": "\""}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_135", "stmts": [
                 {
                   "kind": "quod.let",
                   "name": "list",
@@ -2625,8 +2625,8 @@
                     ]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_136", "stmts": []}
             },
             {
               "kind": "quod.if",
@@ -2636,7 +2636,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "ch"},
                 "rhs": {"kind": "quod.char_lit", "value": "\\"}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_137", "stmts": [
                 {
                   "kind": "quod.expr_stmt",
                   "value": {
@@ -2649,8 +2649,8 @@
                     ]
                   }
                 }
-              ],
-              "else_body": [
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_138", "stmts": [
                 {
                   "kind": "quod.expr_stmt",
                   "value": {
@@ -2663,11 +2663,11 @@
                     ]
                   }
                 }
-              ]
+              ]}
             }
-          ]
+          ]}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.parse_string",
@@ -2676,7 +2676,7 @@
         {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_141", "stmts": [
         {
           "kind": "quod.let",
           "name": "s",
@@ -2700,7 +2700,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.is_digit",
@@ -2708,7 +2708,7 @@
         {"name": "ch", "type": {"kind": "llvm.i8"}}
       ],
       "return_type": {"kind": "llvm.i1"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_142", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -2727,7 +2727,7 @@
             }
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.parse_number",
@@ -2736,7 +2736,7 @@
         {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_154", "stmts": [
         {
           "kind": "quod.let",
           "name": "negative",
@@ -2762,7 +2762,7 @@
             "lhs": {"kind": "quod.local_ref", "name": "first"},
             "rhs": {"kind": "quod.char_lit", "value": "-"}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_143", "stmts": [
             {
               "kind": "quod.assign",
               "name": "negative",
@@ -2777,8 +2777,8 @@
                 "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_144", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -2795,7 +2795,7 @@
         {
           "kind": "quod.while",
           "cond": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1},
-          "body": [
+          "body": {"id": "@blk_alloc.json.io_153", "stmts": [
             {
               "kind": "quod.let",
               "name": "eof_or_err",
@@ -2832,7 +2832,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "eof_or_err"},
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 0}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_145", "stmts": [
                 {
                   "kind": "quod.assign",
                   "name": "ch",
@@ -2843,8 +2843,8 @@
                     "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_146", "stmts": []}
             },
             {
               "kind": "quod.let",
@@ -2885,7 +2885,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "is_d"},
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 0}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_151", "stmts": [
                 {
                   "kind": "quod.if",
                   "cond": {
@@ -2894,7 +2894,7 @@
                     "lhs": {"kind": "quod.local_ref", "name": "saw_digit"},
                     "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 0}
                   },
-                  "then_body": [
+                  "then_body": {"id": "@blk_alloc.json.io_147", "stmts": [
                     {
                       "kind": "quod.store_field",
                       "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
@@ -2911,13 +2911,13 @@
                         "variant": "Null"
                       }
                     }
-                  ],
-                  "else_body": []
+                  ]},
+                  "else_body": {"id": "@blk_alloc.json.io_148", "stmts": []}
                 },
                 {
                   "kind": "quod.if",
                   "cond": {"kind": "quod.local_ref", "name": "negative"},
-                  "then_body": [
+                  "then_body": {"id": "@blk_alloc.json.io_149", "stmts": [
                     {
                       "kind": "quod.assign",
                       "name": "n",
@@ -2928,8 +2928,8 @@
                         "rhs": {"kind": "quod.local_ref", "name": "n"}
                       }
                     }
-                  ],
-                  "else_body": []
+                  ]},
+                  "else_body": {"id": "@blk_alloc.json.io_150", "stmts": []}
                 },
                 {
                   "kind": "quod.return_expr",
@@ -2942,8 +2942,8 @@
                     ]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_152", "stmts": []}
             },
             {
               "kind": "quod.expr_stmt",
@@ -2984,9 +2984,9 @@
               "name": "saw_digit",
               "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}
             }
-          ]
+          ]}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.parse_literal",
@@ -2997,7 +2997,7 @@
         {"name": "expected_len", "type": {"kind": "llvm.i64"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_156", "stmts": [
         {
           "kind": "quod.let",
           "name": "i",
@@ -3012,7 +3012,7 @@
             "lhs": {"kind": "quod.local_ref", "name": "i"},
             "rhs": {"kind": "llvm.param_ref", "name": "expected_len"}
           },
-          "body": [
+          "body": {"id": "@blk_alloc.json.io_155", "stmts": [
             {
               "kind": "quod.let",
               "name": "want",
@@ -3050,9 +3050,9 @@
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
               }
             }
-          ]
+          ]}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.parse_array",
@@ -3061,7 +3061,7 @@
         {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_166", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -3143,7 +3143,7 @@
               "rhs": {"kind": "quod.char_lit", "value": "]"}
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_157", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -3182,13 +3182,13 @@
                 ]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_158", "stmts": []}
         },
         {
           "kind": "quod.while",
           "cond": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1},
-          "body": [
+          "body": {"id": "@blk_alloc.json.io_165", "stmts": [
             {
               "kind": "quod.let",
               "name": "elem",
@@ -3209,7 +3209,7 @@
                 "type_args": [{"kind": "quod.type_param", "name": "R"}],
                 "name": "err"
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_159", "stmts": [
                 {
                   "kind": "quod.return_expr",
                   "value": {
@@ -3218,8 +3218,8 @@
                     "variant": "Null"
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_160", "stmts": []}
             },
             {
               "kind": "quod.expr_stmt",
@@ -3261,7 +3261,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "sep"},
                 "rhs": {"kind": "quod.char_lit", "value": "]"}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_161", "stmts": [
                 {
                   "kind": "quod.let",
                   "name": "list_done",
@@ -3291,8 +3291,8 @@
                     ]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_162", "stmts": []}
             },
             {
               "kind": "quod.if",
@@ -3302,7 +3302,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "sep"},
                 "rhs": {"kind": "quod.char_lit", "value": ","}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_163", "stmts": [
                 {
                   "kind": "quod.store_field",
                   "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
@@ -3319,8 +3319,8 @@
                     "variant": "Null"
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_164", "stmts": []}
             },
             {
               "kind": "quod.expr_stmt",
@@ -3331,9 +3331,9 @@
                 "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}]
               }
             }
-          ]
+          ]}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.parse_object",
@@ -3342,7 +3342,7 @@
         {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_178", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -3438,7 +3438,7 @@
               "rhs": {"kind": "quod.char_lit", "value": "}"}
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_167", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -3496,13 +3496,13 @@
                 ]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_168", "stmts": []}
         },
         {
           "kind": "quod.while",
           "cond": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1},
-          "body": [
+          "body": {"id": "@blk_alloc.json.io_177", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -3532,7 +3532,7 @@
                 "type_args": [{"kind": "quod.type_param", "name": "R"}],
                 "name": "err"
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_169", "stmts": [
                 {
                   "kind": "quod.return_expr",
                   "value": {
@@ -3541,8 +3541,8 @@
                     "variant": "Null"
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_170", "stmts": []}
             },
             {
               "kind": "quod.expr_stmt",
@@ -3597,7 +3597,7 @@
                 "type_args": [{"kind": "quod.type_param", "name": "R"}],
                 "name": "err"
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_171", "stmts": [
                 {
                   "kind": "quod.return_expr",
                   "value": {
@@ -3606,8 +3606,8 @@
                     "variant": "Null"
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_172", "stmts": []}
             },
             {
               "kind": "quod.expr_stmt",
@@ -3649,7 +3649,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "sep"},
                 "rhs": {"kind": "quod.char_lit", "value": "}"}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_173", "stmts": [
                 {
                   "kind": "quod.let",
                   "name": "k_done",
@@ -3698,8 +3698,8 @@
                     ]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_174", "stmts": []}
             },
             {
               "kind": "quod.if",
@@ -3709,7 +3709,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "sep"},
                 "rhs": {"kind": "quod.char_lit", "value": ","}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.json.io_175", "stmts": [
                 {
                   "kind": "quod.store_field",
                   "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
@@ -3726,12 +3726,12 @@
                     "variant": "Null"
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.json.io_176", "stmts": []}
             }
-          ]
+          ]}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.parse_value",
@@ -3740,7 +3740,7 @@
         {"name": "ctx_ptr", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.enum", "name": "alloc.json.JsonValue"},
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_195", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -3775,7 +3775,7 @@
         {
           "kind": "quod.if",
           "cond": {"kind": "quod.local_ref", "name": "eof_or_err"},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_179", "stmts": [
             {
               "kind": "quod.store_field",
               "ptr": {"kind": "llvm.param_ref", "name": "ctx_ptr"},
@@ -3792,8 +3792,8 @@
                 "variant": "Null"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_180", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -3809,7 +3809,7 @@
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "\""}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_181", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -3819,13 +3819,13 @@
                 "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_182", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "["}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_183", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -3835,13 +3835,13 @@
                 "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_184", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "{"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_185", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -3851,13 +3851,13 @@
                 "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_186", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "n"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_187", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -3872,13 +3872,13 @@
               }
             },
             {"kind": "quod.return_expr", "value": {"kind": "quod.enum_init", "enum": "alloc.json.JsonValue", "variant": "Null"}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_188", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "t"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_189", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -3901,13 +3901,13 @@
                 "fields": [{"name": "b", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}}]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_190", "stmts": []}
         },
         {
           "kind": "quod.if",
           "cond": {"kind": "llvm.binop", "op": "eq", "lhs": {"kind": "quod.local_ref", "name": "ch"}, "rhs": {"kind": "quod.char_lit", "value": "f"}},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_191", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -3930,8 +3930,8 @@
                 "fields": [{"name": "b", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 0}}]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_192", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -3949,7 +3949,7 @@
               "args": [{"kind": "quod.local_ref", "name": "ch"}]
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_193", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -3959,8 +3959,8 @@
                 "args": [{"kind": "llvm.param_ref", "name": "ctx_ptr"}]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_194", "stmts": []}
         },
         {
           "kind": "quod.store_field",
@@ -3978,7 +3978,7 @@
             "variant": "Null"
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.json.io.read_value",
@@ -3992,7 +3992,7 @@
         "name": "core.option.Option",
         "type_args": [{"kind": "llvm.enum", "name": "alloc.json.JsonValue"}]
       },
-      "body": [
+      "body": {"id": "@blk_alloc.json.io_198", "stmts": [
         {
           "kind": "quod.let",
           "name": "ctx_ptr",
@@ -4074,7 +4074,7 @@
         {
           "kind": "quod.if",
           "cond": {"kind": "quod.local_ref", "name": "had_err"},
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.json.io_196", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -4084,8 +4084,8 @@
                 "variant": "None"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.json.io_197", "stmts": []}
         },
         {
           "kind": "quod.return_expr",
@@ -4099,7 +4099,7 @@
             ]
           }
         }
-      ]
+      ]}
     }
   ]
 }

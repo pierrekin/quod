@@ -11,7 +11,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_witness_changes_codegen_3", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -29,7 +29,7 @@
               }
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_witness_changes_codegen_1", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -40,8 +40,8 @@
                 }
               }
             }
-          ],
-          "else_body": [
+          ]},
+          "else_body": {"id": "@blk_witness_changes_codegen_2", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -60,9 +60,9 @@
                 }
               }
             }
-          ]
+          ]}
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }
@@ -77,7 +77,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_witness_changes_codegen_6", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -101,7 +101,7 @@
               }
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_witness_changes_codegen_4", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -112,8 +112,8 @@
                 }
               }
             }
-          ],
-          "else_body": [
+          ]},
+          "else_body": {"id": "@blk_witness_changes_codegen_5", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -127,9 +127,9 @@
                 ]
               }
             }
-          ]
+          ]}
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }

@@ -8,7 +8,7 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": [
+        "body": {"id": "@blk_with_arena_early_return_5", "stmts": [
           {
             "kind": "quod.with_arena",
             "name": "outer",
@@ -19,7 +19,7 @@
               },
               "value": 4096
             },
-            "body": [
+            "body": {"id": "@blk_with_arena_early_return_4", "stmts": [
               {
                 "kind": "quod.let",
                 "name": "_p1",
@@ -54,7 +54,7 @@
                   },
                   "value": 1024
                 },
-                "body": [
+                "body": {"id": "@blk_with_arena_early_return_3", "stmts": [
                   {
                     "kind": "quod.let",
                     "name": "_p2",
@@ -113,7 +113,7 @@
                         "value": 16
                       }
                     },
-                    "then_body": [
+                    "then_body": {"id": "@blk_with_arena_early_return_1", "stmts": [
                       {
                         "kind": "quod.return_expr",
                         "value": {
@@ -124,8 +124,8 @@
                           "value": 0
                         }
                       }
-                    ],
-                    "else_body": [
+                    ]},
+                    "else_body": {"id": "@blk_with_arena_early_return_2", "stmts": [
                       {
                         "kind": "quod.return_expr",
                         "value": {
@@ -136,11 +136,11 @@
                           "value": 1
                         }
                       }
-                    ]
+                    ]}
                   }
-                ]
+                ]}
               }
-            ]
+            ]}
           },
           {
             "kind": "quod.return_expr",
@@ -152,7 +152,7 @@
               "value": 2
             }
           }
-        ],
+        ]},
         "claims": []
       }
     ],

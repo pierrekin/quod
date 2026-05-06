@@ -28,6 +28,8 @@ from quod.model import (
     ReturnInRangeClaim,
     add_claim,
     replace_function,
+
+    Block,
 )
 from quod.providers import ClaimRequest, _z3_qf_lia_prove
 
@@ -46,7 +48,7 @@ def _make_program() -> Program:
         name="f",
         params=(Param(name="x", type=_I32),),
         return_type=_I32,
-        body=(ReturnExpr(value=IntLit(type=_I32, value=5)),),
+        body=Block(stmts=(ReturnExpr(value=IntLit(type=_I32, value=5)),)),
     )
     return Program(functions=(f,))
 
@@ -97,7 +99,7 @@ def test_body_drift_detected(tmp_path: Path) -> None:
     # because the file still corresponds to the *old* body, but the SMT
     # we'd generate from the *current* body is different.
     drifted_fn = fn.model_copy(update={
-        "body": (ReturnExpr(value=IntLit(type=_I32, value=-5)),),
+        "body": Block(stmts=(ReturnExpr(value=IntLit(type=_I32, value=-5)),)),
     })
     drifted_program = replace_function(program, drifted_fn)
 

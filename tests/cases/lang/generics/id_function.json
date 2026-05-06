@@ -21,7 +21,7 @@
           "kind": "quod.type_param",
           "name": "T"
         },
-        "body": [
+        "body": {"id": "@blk_id_function_1", "stmts": [
           {
             "kind": "quod.return_expr",
             "value": {
@@ -29,7 +29,7 @@
               "name": "x"
             }
           }
-        ]
+        ]}
       },
       {
         "name": "main",
@@ -37,7 +37,7 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": [
+        "body": {"id": "@blk_id_function_2", "stmts": [
           {
             "kind": "quod.return_expr",
             "value": {
@@ -59,7 +59,7 @@
               ]
             }
           }
-        ]
+        ]}
       }
     ]
   },

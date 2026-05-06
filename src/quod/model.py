@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Literal, Union
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer, model_validator
 
@@ -608,14 +609,36 @@ class Unreachable(_Node):
     kind: Literal["quod.unreachable"] = "quod.unreachable"
 
 
+def _mint_block_id() -> str:
+    return f"@blk_{uuid4().hex[:12]}"
+
+
+def _mint_function_id() -> str:
+    return f"@fn_{uuid4().hex[:12]}"
+
+
+class Block(_Node):
+    """Identified container for a sequence of statements.
+
+    Endpoint of provenance and equivalence edges across language-family
+    layers (see .scratch/c-ingest). The `id` is opaque, minted at
+    construction time, and persisted in JSON so reloads are deterministic.
+    Step 1 of the C-ingest redesign introduces this primitive without any
+    new semantics; step 2 wires `Program.edges` and `Equivalence` claims
+    that anchor on these IDs.
+    """
+    id: str = Field(default_factory=_mint_block_id)
+    stmts: tuple["Statement", ...] = ()
+
+
 class If(_Node):
     """Two-branch conditional. Branches may both terminate (return), or both
     fall through to the next statement, or mix — a merge block is created
     on demand by the lowering pass."""
     kind: Literal["quod.if"] = "quod.if"
     cond: Expr  # must lower to i1
-    then_body: tuple["Statement", ...]
-    else_body: tuple["Statement", ...]
+    then_body: Block
+    else_body: Block
 
 
 class Let(_Node):
@@ -639,7 +662,7 @@ class While(_Node):
     """Pre-test loop. Evaluates `cond` each iteration; runs `body` if true."""
     kind: Literal["quod.while"] = "quod.while"
     cond: Expr  # must lower to i1
-    body: tuple["Statement", ...]
+    body: Block
 
 
 class For(_Node):
@@ -653,7 +676,7 @@ class For(_Node):
     type: IntType
     lo: Expr
     hi: Expr
-    body: tuple["Statement", ...]
+    body: Block
 
 
 class ExprStmt(_Node):
@@ -727,7 +750,7 @@ class WithArena(_Node):
     kind: Literal["quod.with_arena"] = "quod.with_arena"
     name: str
     capacity: Expr   # must lower to i64
-    body: tuple["Statement", ...]
+    body: Block
 
 
 class MatchArm(_Node):
@@ -746,7 +769,7 @@ class MatchArm(_Node):
     """
     variant: str
     bindings: tuple[str, ...] = ()
-    body: tuple["Statement", ...]
+    body: Block
 
 
 class Match(_Node):
@@ -766,15 +789,24 @@ class Match(_Node):
 
 
 Statement = Annotated[
-    Union[ReturnExpr, Return, Unreachable, If, Let, Assign, While, For, ExprStmt, FieldSet, Store, StoreField, WithArena, Match],
+    Union[
+        ReturnExpr, Return, Unreachable, If, Let, Assign, While, For,
+        ExprStmt, FieldSet, Store, StoreField, WithArena, Match,
+        # Forward-declared `c.*` family extension. CStyleFor is defined
+        # below near the staged-lift section; the union uses a string
+        # forward-ref to keep its definition close to the other family
+        # extensions while still allowing it as a Statement.
+        "CStyleFor",
+    ],
     Field(discriminator="kind"),
 ]
 
 
 def body_always_terminates(stmts) -> bool:
     """Conservative: True only when the last reachable statement is provably
-    a terminator — a `return`, an `unreachable`, or an `if` whose branches
-    both terminate. Used by the C ingest to decide whether a fall-through
+    a terminator — a `return`, an `unreachable`, an `if` whose branches
+    both terminate, or a `match` whose arms (and wildcard, if present)
+    all terminate. Used by the C ingest to decide whether a fall-through
     needs synthesizing, and by the lowering pass to suppress dead trailing
     instructions (e.g. arena drops after a body that never falls through)."""
     if not stmts:
@@ -784,7 +816,9 @@ def body_always_terminates(stmts) -> bool:
         case ReturnExpr() | Return() | Unreachable():
             return True
         case If(then_body=t, else_body=e):
-            return body_always_terminates(t) and body_always_terminates(e)
+            return body_always_terminates(t.stmts) and body_always_terminates(e.stmts)
+        case Match(arms=arms):
+            return all(body_always_terminates(arm.body.stmts) for arm in arms)
     return False
 
 
@@ -827,8 +861,62 @@ class DerivedJustification(_Node):
     note: str | None = None
 
 
+class LiftEquivalence(_Node):
+    """Justifies an A→B (or any layer→layer transcription) equivalence
+    via a pinned proof artifact. `artifact_path` and `artifact_hash`
+    follow the same shape as Z3Justification: the file's bytes hashed at
+    prove time, re-checked at verify time. The inner statement of the
+    proof is `lifted_b ~ source_a over D` for the relevant nodes' IDs.
+    """
+    kind: Literal["lift_equivalence"] = "lift_equivalence"
+    artifact_path: str
+    artifact_hash: str
+    note: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_default_metadata(self, handler, info):
+        data = handler(self)
+        if self.note is None:
+            data.pop("note", None)
+        return data
+
+
+class FamilyLowering(_Node):
+    """Justifies a B→C equivalence by citing a named lowering rule
+    (e.g. `c.for_general`) whose equivalence theorem was proved once,
+    out of band, against the rule itself rather than per program.
+
+    `rule_name` identifies the rule in the family's lowering pass.
+    `artifact_path`/`artifact_hash` optionally pin the rule's proof
+    artifact; when None, the citation is a manual claim that the rule
+    has been proved elsewhere.
+    """
+    kind: Literal["family_lowering"] = "family_lowering"
+    rule_name: str
+    artifact_path: str | None = None
+    artifact_hash: str | None = None
+    note: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_default_metadata(self, handler, info):
+        data = handler(self)
+        if self.artifact_path is None:
+            data.pop("artifact_path", None)
+        if self.artifact_hash is None:
+            data.pop("artifact_hash", None)
+        if self.note is None:
+            data.pop("note", None)
+        return data
+
+
 Justification = Annotated[
-    Union[Z3Justification, ManualJustification, DerivedJustification],
+    Union[
+        Z3Justification,
+        ManualJustification,
+        DerivedJustification,
+        LiftEquivalence,
+        FamilyLowering,
+    ],
     Field(discriminator="kind"),
 ]
 
@@ -964,9 +1052,9 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
                 visit_expr(expr)
             case If(cond=cond, then_body=t_body, else_body=e_body):
                 visit_expr(cond)
-                for x in t_body:
+                for x in t_body.stmts:
                     visit_stmt(x)
-                for x in e_body:
+                for x in e_body.stmts:
                     visit_stmt(x)
             case Let(init=expr) | Assign(value=expr) | FieldSet(value=expr):
                 visit_expr(expr)
@@ -975,26 +1063,26 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
                 visit_expr(v)
             case While(cond=cond, body=body):
                 visit_expr(cond)
-                for x in body:
+                for x in body.stmts:
                     visit_stmt(x)
             case For(lo=lo, hi=hi, body=body):
                 visit_expr(lo)
                 visit_expr(hi)
-                for x in body:
+                for x in body.stmts:
                     visit_stmt(x)
             case WithArena(capacity=cap, body=body):
                 visit_expr(cap)
-                for x in body:
+                for x in body.stmts:
                     visit_stmt(x)
             case Match(scrutinee=scrut, arms=arms):
                 visit_expr(scrut)
                 for arm in arms:
-                    for x in arm.body:
+                    for x in arm.body.stmts:
                         visit_stmt(x)
             case _:
                 pass
 
-    for stmt in fn.body:
+    for stmt in fn.body.stmts:
         visit_stmt(stmt)
     return tuple(seen)
 
@@ -1159,11 +1247,22 @@ class Param(_Node):
 
 
 class Function(_Node):
+    # Stable opaque ID — endpoint of provenance and equivalence edges
+    # across language-family layers (see .scratch/c-ingest). Auto-minted
+    # at construction; persists in JSON so reloads stay deterministic.
+    # Hand-supplied IDs (in JSON) override the default.
+    id: str = Field(default_factory=_mint_function_id)
     name: str
     type_params: tuple[TypeParam, ...] = ()
     params: tuple[Param, ...] = ()
     return_type: ReturnType
-    body: tuple[Statement, ...]
+    # `body` widens to `Block | CScopedBlock` (smart union) to host the
+    # c-family scope wrapper at layer B. Layer C is pure core, so
+    # `lower.py` refuses the wrapper at codegen time; the c-family
+    # lowering pass strips it before producing layer C. Existing
+    # all-core programs are unaffected — Pydantic's smart union picks
+    # `Block` for any body without the wrapper's `kind` field.
+    body: "BlockOrScoped"
     claims: tuple[Claim, ...] = ()
     notes: tuple[str, ...] = ()       # free-form developer/agent intent
 
@@ -1371,7 +1470,8 @@ class ImplDef(_Node):
                 Param(name=p.name, type=type_fn(p.type)) for p in fn.params
             )
             new_return = type_fn(fn.return_type)
-            new_body = tuple(substitute_in_stmt(s, type_fn) for s in fn.body)
+            new_stmts = tuple(substitute_in_stmt(s, type_fn) for s in fn.body.stmts)
+            new_body = fn.body.model_copy(update={"stmts": new_stmts})
             new_methods.append(fn.model_copy(update={
                 "params":      new_params,
                 "return_type": new_return,
@@ -1421,6 +1521,288 @@ class Import(_Node):
         return data
 
 
+class ProvenanceEdge(_Node):
+    """An unkinded provenance edge: "this came from that," nothing more.
+
+    `source` and `target` are stable node IDs (e.g. Function.id or
+    Block.id). All semantic content for what the edge *means* lives in
+    the `Equivalence` claims that anchor on the same IDs — the edge
+    itself only records connectivity. N:M lowerings emit one
+    ProvenanceEdge per (source, target) pair so the graph stays
+    normalized.
+    """
+    kind: Literal["edge.provenance"] = "edge.provenance"
+    source: str
+    target: str
+
+
+class Equivalence(_Node):
+    """Program-level equivalence between two nodes by ID.
+
+    Where ordinary claims live in `fn.claims` and constrain a single
+    function's parameters or return value, an Equivalence is *relational*
+    — it asserts that two nodes (typically across language-family layers,
+    e.g. a layer-A `c.fn` and a layer-B `Function`, or a layer-B Block
+    and a layer-C Block) compute the same value over a domain of inputs.
+
+    The metadata fields (regime/enforcement/justification) mirror the
+    `_Claim` shape so the existing claim plumbing — provers, the verify
+    command, the stored-vs-derived discipline — extends uniformly.
+    `domain` is the predicate over which the equivalence holds; v2 lands
+    with `domain=None` (always-true) and the predicates spike replaces
+    this with a real `PredicateClaim` (see `.scratch/c-ingest`).
+
+    The two endpoints are symmetric — `~` is symmetric — but stored as
+    `(a_node_id, b_node_id)` for stable JSON ordering. The `kind`
+    discriminator stays `"equivalent_to"` to match the design doc's
+    naming even though the program-level form is symmetric; the
+    asymmetric `EquivalentTo(other_node_id)` form (a claim attached to
+    a node that names its counterpart) is sugar over this for future
+    authoring tools.
+    """
+    kind: Literal["equivalent_to"] = "equivalent_to"
+    a_node_id: str
+    b_node_id: str
+    regime: Regime = "axiom"
+    enforcement: Enforcement = "trust"
+    justification: Justification | None = None
+    # `domain` is reserved for the predicates spike. Until then every
+    # equivalence is "true everywhere"; storing None keeps the JSON shape
+    # forward-compatible without forcing a migration.
+    domain: None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_default_metadata(self, handler, info):
+        data = handler(self)
+        if self.regime == "axiom":
+            data.pop("regime", None)
+        if self.enforcement == "trust":
+            data.pop("enforcement", None)
+        if self.justification is None:
+            data.pop("justification", None)
+        if self.domain is None:
+            data.pop("domain", None)
+        return data
+
+
+# ---------- Staged-lift: source-language and family-extension nodes ----------
+#
+# These nodes implement steps 3+ of the C-ingest redesign described in
+# .scratch/c-ingest/00-overview.md. The graph has three layers:
+#
+#   Layer A — source language as authored (here: C). Lives under
+#             `Program.source_units`. Inert at v3 (no validation, no
+#             codegen) — exists so the original program is preserved as
+#             a first-class subtree of the graph.
+#   Layer B — core quod ∪ family extensions (here: `c.*`). The c-family
+#             lowering pass produces this from layer A; `lower.py`
+#             refuses to consume it.
+#   Layer C — pure core quod. What `lower.py` and the proof tooling
+#             operate on.
+#
+# Step 3 lands the *types* without producing any layer-A or layer-B
+# graphs from the existing ingester. Step 4 ports the C ingester to emit
+# layer A + layer B; step 5 implements the B→C lowering rule for
+# `c.for_general`.
+
+
+def _mint_node_id(prefix: str) -> str:
+    """Mint an opaque node ID. Used as a `default_factory` so every new
+    layer-A or c-extension node gets a stable ID at construction. The
+    `prefix` is a short tag indicating the node kind (e.g. "cunit",
+    "cfn", "cfor") — no semantic load, only useful for hand-debugging."""
+    return f"@{prefix}_{uuid4().hex[:12]}"
+
+
+# ----- Layer A: C source-language nodes -----
+#
+# Inert: no validation, no codegen, no semantic checks. Their job is to
+# preserve the original C as a subtree of the program graph so
+# provenance edges to lifted quod nodes have something to point at.
+# The supported subset matches the existing C ingester (int-only, no
+# structs/floats/switch), narrowed further to what `sum.c` exercises.
+
+
+class CType(_Node):
+    """A C type as it appears in source. v3 supports only `int` (sum.c
+    is the worked example). Extends as the supported subset grows."""
+    kind: Literal["c.type"] = "c.type"
+    name: str  # "int" for v3
+
+
+class CIntLit(_Node):
+    kind: Literal["c.lit_int"] = "c.lit_int"
+    value: int
+
+
+class CVarRef(_Node):
+    """A C identifier reference — to a parameter, local, or any in-scope
+    variable. Layer A doesn't distinguish these; the lifter does."""
+    kind: Literal["c.var_ref"] = "c.var_ref"
+    name: str
+
+
+class CBinOp(_Node):
+    """A binary operator in C source — arithmetic, comparison, bitwise,
+    or logical. `op` is the operator's source-form spelling (`+`, `<`,
+    `&&`, etc.). v3 doesn't enumerate; the lifter is responsible for
+    refusing operators outside the supported subset.
+
+    Has its own ID — for-loop conditions and other named expression
+    positions are edge endpoints in the worked example (see
+    `@a.cnd ~ @b.ccond` in `.scratch/c-ingest/00-overview.md`).
+    """
+    kind: Literal["c.binop"] = "c.binop"
+    id: str = Field(default_factory=lambda: _mint_node_id("cbinop"))
+    op: str
+    lhs: "CExpr"
+    rhs: "CExpr"
+
+
+CExpr = Annotated[
+    Union[CIntLit, CVarRef, CBinOp],
+    Field(discriminator="kind"),
+]
+
+
+class CParam(_Node):
+    kind: Literal["c.param"] = "c.param"
+    name: str
+    type: CType
+
+
+class CVarDecl(_Node):
+    """`int s = 0;` or `int i;` — a local variable declaration."""
+    kind: Literal["c.var_decl"] = "c.var_decl"
+    id: str = Field(default_factory=lambda: _mint_node_id("cvardecl"))
+    type: CType
+    name: str
+    init: CExpr | None = None
+
+
+class CAssign(_Node):
+    """`s = s + i;` — assignment to an in-scope variable. The target is
+    a name; v3 doesn't model assignments to fields, indexed locations,
+    or pointer dereferences."""
+    kind: Literal["c.assign"] = "c.assign"
+    id: str = Field(default_factory=lambda: _mint_node_id("cassign"))
+    target: str
+    value: CExpr
+
+
+class CReturn(_Node):
+    """`return s;` or `return;`."""
+    kind: Literal["c.return"] = "c.return"
+    id: str = Field(default_factory=lambda: _mint_node_id("creturn"))
+    value: CExpr | None = None
+
+
+class CFor(_Node):
+    """`for (init; cond; inc) { body }` — the C for loop verbatim. Each
+    of init/cond/inc is independently optional (matching C's three-empty-
+    parts shape); body is a list of layer-A statements.
+    """
+    kind: Literal["c.for"] = "c.for"
+    id: str = Field(default_factory=lambda: _mint_node_id("cfor"))
+    init: "CForInit | None" = None
+    cond: CExpr | None = None
+    inc: "CForInit | None" = None
+    body: tuple["CStmt", ...] = ()
+
+
+# CForInit is the union of statements that may appear in a C for-loop's
+# init or inc slot — a declaration or an assignment. Distinct from CStmt
+# because for-init permits a declaration even outside a block scope; the
+# lifter folds the loop's scope into the layer-B `CStyleFor` envelope.
+CForInit = Annotated[
+    Union[CVarDecl, CAssign],
+    Field(discriminator="kind"),
+]
+
+
+CStmt = Annotated[
+    Union[CVarDecl, CAssign, CReturn, CFor],
+    Field(discriminator="kind"),
+]
+
+
+class CFn(_Node):
+    """A C function definition: `int sum(int n) { ... }`."""
+    kind: Literal["c.fn"] = "c.fn"
+    id: str = Field(default_factory=lambda: _mint_node_id("cfn"))
+    name: str
+    return_type: CType
+    params: tuple[CParam, ...] = ()
+    body: tuple[CStmt, ...] = ()
+
+
+class CUnit(_Node):
+    """A C translation unit — one source file's contents preserved as
+    layer-A nodes. `source_path` is recorded so the graph can be paired
+    back with the original file (and re-ingested if the source changes).
+    """
+    kind: Literal["c_unit"] = "c_unit"
+    id: str = Field(default_factory=lambda: _mint_node_id("cunit"))
+    source_path: str
+    functions: tuple[CFn, ...] = ()
+
+
+# ----- Layer B: c.* extension nodes -----
+#
+# Constructs core quod can't represent on its own. Lowered to core by
+# `lower/c_family.py` (step 5). `lower.py` refuses to consume them
+# directly — the c-family pass must run first.
+
+
+class CScopedBlock(_Node):
+    """C-style block wrapper. `block` is the inner `core.Block` that
+    edges anchor on; the wrapper carries family-specific scope semantics
+    (which decls die at the closing brace). Lowered by c-family lowering
+    to its inner block — the wrapper is discarded by the time `lower.py`
+    sees the program. See `.scratch/c-ingest/00-overview.md` ("Blocks"
+    section).
+
+    `scope_locals` records the names of locals whose scope ends with
+    this block. v3 stores them as a tuple of names; richer scope
+    metadata (types, kill points within the block) accumulates as
+    lowering rules grow.
+    """
+    kind: Literal["c.scoped_block"] = "c.scoped_block"
+    id: str = Field(default_factory=lambda: _mint_node_id("cscope"))
+    block: Block
+    scope_locals: tuple[str, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _drop_default_metadata(self, handler, info):
+        data = handler(self)
+        if not self.scope_locals:
+            data.pop("scope_locals", None)
+        return data
+
+
+# Body slots that may host either a plain `Block` (after c-family
+# lowering, or for non-c-derived programs) or a `CScopedBlock` wrapper
+# (in layer-B programs). Pydantic's smart union picks by structure:
+# Block has no `kind` field; CScopedBlock's `kind` discriminates.
+BlockOrScoped = Union[Block, CScopedBlock]
+
+
+class CStyleFor(_Node):
+    """`for (init; cond; inc) { body }` — the C for loop transcribed
+    into layer B. Distinct from core's `For` (which is bounded
+    iteration over a half-open integer range). The c-family lowering
+    rule transforms `c.for_general` into `Let + While + Assign`; the
+    rule's equivalence theorem is proved once and cited via
+    `FamilyLowering("c.for_general")` justifications.
+    """
+    kind: Literal["c.for_general"] = "c.for_general"
+    id: str = Field(default_factory=lambda: _mint_node_id("cfor_general"))
+    init: "Statement | None" = None
+    cond: "Expr | None" = None  # i1 when present
+    inc: "Statement | None" = None
+    body: BlockOrScoped
+
+
 class _ProgramBase(_Node):
     """Shared shape for Program and InputProgram."""
     constants: tuple[StringConstant, ...] = ()
@@ -1432,6 +1814,32 @@ class _ProgramBase(_Node):
     impls: tuple[ImplDef, ...] = ()
     wirables: tuple[TypeParam, ...] = ()
     imports: tuple[Import, ...] = ()
+    # Provenance edges and equivalence claims live at program level
+    # (rather than on individual functions) because they're relational
+    # — they connect two nodes that can be in different functions or in
+    # different language-family layers. Both default to empty; existing
+    # programs that don't yet carry provenance round-trip unchanged.
+    edges: tuple[ProvenanceEdge, ...] = ()
+    equivalences: tuple[Equivalence, ...] = ()
+    # Layer-A subtree: original source-language programs preserved as
+    # quod nodes (one CUnit per ingested file). Inert — no validation,
+    # no codegen — but addressable by stable IDs so cross-layer
+    # provenance edges can anchor here.
+    source_units: tuple[CUnit, ...] = ()
+    # Structured-form functions: per-language extension-bearing
+    # transcriptions of the source. For C, these contain `CStyleFor`
+    # and other `c.*` family extensions; the c-family lowering pass
+    # (lower/c_family.py) reads these and produces the canonical core
+    # functions in `Program.functions`. Both forms persist on disk so
+    # cross-layer analysis and drift detection (lowering-rule changes)
+    # work without re-ingesting from source. Empty for hand-authored
+    # core programs that didn't go through a source-language ingest.
+    #
+    # The name is deliberately layer-neutral — the data model will
+    # evolve as more language families land, and "structured" captures
+    # the durable property (preserves source-language structure via
+    # extension nodes) without committing to "layer B" terminology.
+    structured_functions: tuple[Function, ...] = ()
 
     @model_serializer(mode="wrap")
     def _drop_empty_collections(self, handler, info):
@@ -1448,6 +1856,14 @@ class _ProgramBase(_Node):
             data.pop("wirables", None)
         if not self.imports:
             data.pop("imports", None)
+        if not self.edges:
+            data.pop("edges", None)
+        if not self.equivalences:
+            data.pop("equivalences", None)
+        if not self.source_units:
+            data.pop("source_units", None)
+        if not self.structured_functions:
+            data.pop("structured_functions", None)
         return data
 
     @field_validator("imports", mode="before")
@@ -1808,6 +2224,10 @@ def _format_type_params(tps: tuple) -> str:
 
 def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
     lines: list[str] = ["program {"]
+    if program.source_units:
+        lines.append("  source_units:")
+        for unit in program.source_units:
+            lines.extend("    " + line for line in _format_c_unit(unit, label=label).splitlines())
     if program.wirables:
         lines.append("  wirables:")
         for w in program.wirables:
@@ -1837,18 +2257,119 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
             sig = ", ".join(sig_parts)
             ret = _format_type(ext.return_type)
             lines.append(f"    {label(ext)}extern {ext.name}({sig}) -> {ret}")
+    if program.structured_functions:
+        lines.append("  structured_functions:")
+        for fn in program.structured_functions:
+            lines.extend("    " + line for line in format_function(fn, label=label).splitlines())
     if program.functions:
         lines.append("  functions:")
         for fn in program.functions:
             lines.extend("    " + line for line in format_function(fn, label=label).splitlines())
+    if program.edges:
+        lines.append("  edges:")
+        for e in program.edges:
+            lines.append(f"    {e.source} -> {e.target}")
+    if program.equivalences:
+        lines.append("  equivalences:")
+        for eq in program.equivalences:
+            lines.append(f"    {eq.a_node_id} ~ {eq.b_node_id}{_format_equivalence_metadata(eq)}")
     if (
         not program.constants and not program.functions
         and not program.externs and not program.structs and not program.enums
-        and not program.imports
+        and not program.imports and not program.edges
+        and not program.equivalences and not program.source_units
+        and not program.structured_functions
     ):
         lines.append("  (empty)")
     lines.append("}")
     return "\n".join(lines)
+
+
+def _format_c_unit(unit: "CUnit", *, label: NodeLabel) -> str:
+    """Render a layer-A C translation unit. Surface form approximates C
+    source so the unit reads naturally in `quod show` output; no
+    semantic processing — just structural pretty-printing."""
+    head = f'{label(unit)}c_unit "{unit.source_path}" {{'
+    lines = [head]
+    for fn in unit.functions:
+        lines.extend("  " + line for line in _format_c_fn(fn, label=label).splitlines())
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def _format_c_fn(fn: "CFn", *, label: NodeLabel) -> str:
+    params = ", ".join(f"{_format_c_type(p.type)} {p.name}" for p in fn.params)
+    head = f"{label(fn)}{_format_c_type(fn.return_type)} {fn.name}({params}) {{"
+    lines = [head]
+    for s in fn.body:
+        lines.append(_format_c_stmt(s, indent=2, label=label))
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def _format_c_type(t: "CType") -> str:
+    return t.name
+
+
+def _format_c_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
+    pad = " " * indent
+    prefix = label(stmt)
+    match stmt:
+        case CVarDecl(type=ty, name=n, init=None):
+            return f"{pad}{prefix}{_format_c_type(ty)} {n};"
+        case CVarDecl(type=ty, name=n, init=init):
+            return f"{pad}{prefix}{_format_c_type(ty)} {n} = {_format_c_expr(init)};"
+        case CAssign(target=t, value=v):
+            return f"{pad}{prefix}{t} = {_format_c_expr(v)};"
+        case CReturn(value=None):
+            return f"{pad}{prefix}return;"
+        case CReturn(value=v):
+            return f"{pad}{prefix}return {_format_c_expr(v)};"
+        case CFor(init=init, cond=cond, inc=inc, body=body):
+            init_s = _format_c_for_part(init) if init is not None else ""
+            cond_s = _format_c_expr(cond) if cond is not None else ""
+            inc_s = _format_c_for_part(inc) if inc is not None else ""
+            head = f"{pad}{prefix}for ({init_s}; {cond_s}; {inc_s}) {{"
+            body_lines = "\n".join(_format_c_stmt(s, indent + 2, label=label) for s in body)
+            return f"{head}\n{body_lines}\n{pad}}}"
+    raise ValueError(f"unhandled c.* statement: {stmt!r}")
+
+
+def _format_c_for_part(s) -> str:
+    """Render a CForInit (CVarDecl or CAssign) inline — no trailing
+    semicolon, since the for-header supplies its own."""
+    match s:
+        case CVarDecl(type=ty, name=n, init=None):
+            return f"{_format_c_type(ty)} {n}"
+        case CVarDecl(type=ty, name=n, init=init):
+            return f"{_format_c_type(ty)} {n} = {_format_c_expr(init)}"
+        case CAssign(target=t, value=v):
+            return f"{t} = {_format_c_expr(v)}"
+    raise ValueError(f"unhandled c.* for-part: {s!r}")
+
+
+def _format_c_expr(e) -> str:
+    match e:
+        case CIntLit(value=v):
+            return str(v)
+        case CVarRef(name=n):
+            return n
+        case CBinOp(op=op, lhs=l, rhs=r):
+            return f"({_format_c_expr(l)} {op} {_format_c_expr(r)})"
+    raise ValueError(f"unhandled c.* expression: {e!r}")
+
+
+def _format_equivalence_metadata(eq: "Equivalence") -> str:
+    """Render the regime/enforcement/justification metadata trailing an
+    equivalence, mirroring `format_claim_metadata` for plain claims."""
+    bits: list[str] = []
+    if eq.regime != "axiom":
+        bits.append(f"regime={eq.regime}")
+    if eq.enforcement != "trust":
+        bits.append(f"enforcement={eq.enforcement}")
+    if eq.justification is not None:
+        bits.append(f"justification={_format_justification(eq.justification)}")
+    return " {" + ", ".join(bits) + "}" if bits else ""
 
 
 def format_struct_def(sd: StructDef) -> str:
@@ -1879,7 +2400,7 @@ def format_function(fn: Function, *, label: NodeLabel = _NO_LABEL) -> str:
     for note in fn.notes:
         lines.append(f"// {note}")
     lines.append(header + " {")
-    for s in fn.body:
+    for s in fn.body.stmts:
         lines.append(_format_stmt(s, indent=2, label=label))
     lines.append("}")
     return "\n".join(lines)
@@ -1967,6 +2488,11 @@ def _format_justification(j: Justification) -> str:
             return f"manual(signed_by={s!r})"
         case DerivedJustification(analysis=a, inputs=i):
             return f"derived({a}, {len(i)} input(s))"
+        case LiftEquivalence(artifact_path=p, artifact_hash=h):
+            return f"lift_equivalence({p}@{h[:12]})"
+        case FamilyLowering(rule_name=r, artifact_hash=h):
+            tail = f"@{h[:12]}" if h else ""
+            return f"family_lowering({r}{tail})"
     raise ValueError(f"unhandled justification: {j!r}")
 
 
@@ -1981,11 +2507,11 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
         case Unreachable():
             return f"{pad}{prefix}unreachable"
         case If(cond=cond, then_body=t_body, else_body=e_body):
-            then_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in t_body)
+            then_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in t_body.stmts)
             head = f"{pad}{prefix}if ({_format_expr(cond)}) {{"
-            if not e_body:
+            if not e_body.stmts:
                 return f"{head}\n{then_lines}\n{pad}}}"
-            else_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in e_body)
+            else_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in e_body.stmts)
             return f"{head}\n{then_lines}\n{pad}}} else {{\n{else_lines}\n{pad}}}"
         case Let(name=n, type=ty, init=init):
             return f"{pad}{prefix}let {n}: {_format_type(ty)} = {_format_expr(init)}"
@@ -1998,10 +2524,10 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
         case StoreField(ptr=p, struct_type=tname, name=fname, value=v):
             return f"{pad}{prefix}{_format_expr(p)}->{tname}.{fname} = {_format_expr(v)}"
         case While(cond=cond, body=body):
-            body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body)
+            body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body.stmts)
             return f"{pad}{prefix}while ({_format_expr(cond)}) {{\n{body_lines}\n{pad}}}"
         case For(var=var, type=ty, lo=lo, hi=hi, body=body):
-            body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body)
+            body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body.stmts)
             return (
                 f"{pad}{prefix}for {var}: {_format_type(ty)} in "
                 f"{_format_expr(lo)}..{_format_expr(hi)} {{\n"
@@ -2010,7 +2536,7 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
         case ExprStmt(value=v):
             return f"{pad}{prefix}{_format_expr(v)}"
         case WithArena(name=n, capacity=cap, body=body):
-            body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body)
+            body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in body.stmts)
             return (
                 f"{pad}{prefix}with_arena {n} = arena_new({_format_expr(cap)}) {{\n"
                 f"{body_lines}\n{pad}}}"
@@ -2025,11 +2551,21 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
                 else:
                     head = f"{arm_pad}{arm.variant} => {{"
                 arm_lines.append(head)
-                for s in arm.body:
+                for s in arm.body.stmts:
                     arm_lines.append(_format_stmt(s, indent + 4, label=label))
                 arm_lines.append(f"{arm_pad}}}")
             arms_text = "\n".join(arm_lines)
             return f"{pad}{prefix}match {_format_expr(scrut)} {{\n{arms_text}\n{pad}}}"
+        case CStyleFor(init=init, cond=cond, inc=inc, body=body):
+            init_s = _format_stmt(init, indent=0, label=label).strip().rstrip(";") if init is not None else ""
+            cond_s = _format_expr(cond) if cond is not None else ""
+            inc_s = _format_stmt(inc, indent=0, label=label).strip().rstrip(";") if inc is not None else ""
+            inner = body if isinstance(body, Block) else body.block
+            body_lines = "\n".join(_format_stmt(s, indent + 2, label=label) for s in inner.stmts)
+            return (
+                f"{pad}{prefix}c.for_general ({init_s}; {cond_s}; {inc_s}) {{\n"
+                f"{body_lines}\n{pad}}}"
+            )
     raise ValueError(f"unhandled stmt: {stmt!r}")
 
 

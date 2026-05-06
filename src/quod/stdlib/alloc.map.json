@@ -40,7 +40,7 @@
         {"name": "initial_cap", "type": {"kind": "llvm.i64"}}
       ],
       "return_type": {"kind": "llvm.i8_ptr"},
-      "body": [
+      "body": {"id": "@blk_alloc.map_5", "stmts": [
         {
           "kind": "quod.let",
           "name": "map_ptr",
@@ -74,10 +74,10 @@
             "lhs": {"kind": "quod.local_ref", "name": "map_ptr"},
             "rhs": {"kind": "quod.null_ptr"}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.map_1", "stmts": [
             {"kind": "quod.return_expr", "value": {"kind": "quod.null_ptr"}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.map_2", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -110,10 +110,10 @@
             "lhs": {"kind": "quod.local_ref", "name": "entries_ptr"},
             "rhs": {"kind": "quod.null_ptr"}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.map_3", "stmts": [
             {"kind": "quod.return_expr", "value": {"kind": "quod.null_ptr"}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.map_4", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -147,7 +147,7 @@
           "kind": "quod.return_expr",
           "value": {"kind": "quod.local_ref", "name": "map_ptr"}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.map.map_new",
@@ -156,7 +156,7 @@
         {"name": "alloc_handle", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.i8_ptr"},
-      "body": [
+      "body": {"id": "@blk_alloc.map_6", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -172,7 +172,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.map.map_len",
@@ -191,7 +191,7 @@
         }
       ],
       "return_type": {"kind": "llvm.i64"},
-      "body": [
+      "body": {"id": "@blk_alloc.map_7", "stmts": [
         {
           "kind": "quod.let",
           "name": "list",
@@ -252,7 +252,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.map.map_is_empty",
@@ -271,7 +271,7 @@
         }
       ],
       "return_type": {"kind": "llvm.i1"},
-      "body": [
+      "body": {"id": "@blk_alloc.map_8", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -291,7 +291,7 @@
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.map.map_get",
@@ -318,7 +318,7 @@
         "name": "core.option.Option",
         "type_args": [{"kind": "quod.type_param", "name": "V"}]
       },
-      "body": [
+      "body": {"id": "@blk_alloc.map_12", "stmts": [
         {
           "kind": "quod.let",
           "name": "list",
@@ -375,7 +375,7 @@
           "type": {"kind": "llvm.i64"},
           "lo": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0},
           "hi": {"kind": "quod.local_ref", "name": "n"},
-          "body": [
+          "body": {"id": "@blk_alloc.map_11", "stmts": [
             {
               "kind": "quod.let",
               "name": "entry",
@@ -422,7 +422,7 @@
                   {"kind": "llvm.param_ref", "name": "k"}
                 ]
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.map_9", "stmts": [
                 {
                   "kind": "quod.return_expr",
                   "value": {
@@ -442,10 +442,10 @@
                     ]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.map_10", "stmts": []}
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return_expr",
@@ -456,7 +456,7 @@
             "variant": "None"
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.map.map_contains_key",
@@ -479,7 +479,7 @@
         {"name": "k", "type": {"kind": "quod.type_param", "name": "K"}}
       ],
       "return_type": {"kind": "llvm.i1"},
-      "body": [
+      "body": {"id": "@blk_alloc.map_15", "stmts": [
         {
           "kind": "quod.match",
           "scrutinee": {
@@ -498,26 +498,26 @@
             {
               "variant": "Some",
               "bindings": ["_v"],
-              "body": [
+              "body": {"id": "@blk_alloc.map_13", "stmts": [
                 {
                   "kind": "quod.return_expr",
                   "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 1}
                 }
-              ]
+              ]}
             },
             {
               "variant": "None",
               "bindings": [],
-              "body": [
+              "body": {"id": "@blk_alloc.map_14", "stmts": [
                 {
                   "kind": "quod.return_expr",
                   "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i1"}, "value": 0}
                 }
-              ]
+              ]}
             }
           ]
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.map.map_insert",
@@ -535,7 +535,7 @@
         "name": "core.option.Option",
         "type_args": [{"kind": "quod.type_param", "name": "V"}]
       },
-      "body": [
+      "body": {"id": "@blk_alloc.map_19", "stmts": [
         {
           "kind": "quod.let",
           "name": "m",
@@ -622,7 +622,7 @@
           "type": {"kind": "llvm.i64"},
           "lo": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0},
           "hi": {"kind": "quod.local_ref", "name": "n"},
-          "body": [
+          "body": {"id": "@blk_alloc.map_18", "stmts": [
             {
               "kind": "quod.let",
               "name": "entry",
@@ -669,7 +669,7 @@
                   {"kind": "llvm.param_ref", "name": "k"}
                 ]
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.map_16", "stmts": [
                 {
                   "kind": "quod.let",
                   "name": "old_v",
@@ -725,10 +725,10 @@
                     ]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.map_17", "stmts": []}
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.expr_stmt",
@@ -771,7 +771,7 @@
             "variant": "None"
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.map.map_remove",
@@ -788,7 +788,7 @@
         "name": "core.option.Option",
         "type_args": [{"kind": "quod.type_param", "name": "V"}]
       },
-      "body": [
+      "body": {"id": "@blk_alloc.map_28", "stmts": [
         {
           "kind": "quod.let",
           "name": "m",
@@ -881,7 +881,7 @@
           "type": {"kind": "llvm.i64"},
           "lo": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0},
           "hi": {"kind": "quod.local_ref", "name": "n"},
-          "body": [
+          "body": {"id": "@blk_alloc.map_24", "stmts": [
             {
               "kind": "quod.if",
               "cond": {
@@ -890,7 +890,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "found_at"},
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.map_22", "stmts": [
                 {
                   "kind": "quod.let",
                   "name": "entry",
@@ -937,19 +937,19 @@
                       {"kind": "llvm.param_ref", "name": "k"}
                     ]
                   },
-                  "then_body": [
+                  "then_body": {"id": "@blk_alloc.map_20", "stmts": [
                     {
                       "kind": "quod.assign",
                       "name": "found_at",
                       "value": {"kind": "quod.local_ref", "name": "i"}
                     }
-                  ],
-                  "else_body": []
+                  ]},
+                  "else_body": {"id": "@blk_alloc.map_21", "stmts": []}
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.map_23", "stmts": []}
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.if",
@@ -959,7 +959,7 @@
             "lhs": {"kind": "quod.local_ref", "name": "found_at"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.map_25", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -969,8 +969,8 @@
                 "variant": "None"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.map_26", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -1021,7 +1021,7 @@
               "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
             }
           },
-          "body": [
+          "body": {"id": "@blk_alloc.map_27", "stmts": [
             {
               "kind": "quod.let",
               "name": "next",
@@ -1089,7 +1089,7 @@
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 1}
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.expr_stmt",
@@ -1136,7 +1136,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.map.map_as_slice",
@@ -1168,7 +1168,7 @@
           }
         ]
       },
-      "body": [
+      "body": {"id": "@blk_alloc.map_29", "stmts": [
         {
           "kind": "quod.let",
           "name": "list",
@@ -1229,7 +1229,7 @@
             ]
           }
         }
-      ]
+      ]}
     }
   ]
 }

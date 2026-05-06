@@ -19,7 +19,7 @@
           {"name": "v", "type": {"kind": "quod.type_param", "name": "T"}}
         ],
         "return_type": {"kind": "llvm.void"},
-        "body": [
+        "body": {"id": "@blk_load_store_field_generic_1", "stmts": [
           {
             "kind": "quod.store_field",
             "ptr": {"kind": "llvm.param_ref", "name": "p"},
@@ -29,7 +29,7 @@
             "value": {"kind": "llvm.param_ref", "name": "v"}
           },
           {"kind": "quod.return"}
-        ]
+        ]}
       },
       {
         "name": "get_box",
@@ -38,7 +38,7 @@
           {"name": "p", "type": {"kind": "llvm.i8_ptr"}}
         ],
         "return_type": {"kind": "quod.type_param", "name": "T"},
-        "body": [
+        "body": {"id": "@blk_load_store_field_generic_2", "stmts": [
           {
             "kind": "quod.return_expr",
             "value": {
@@ -49,13 +49,13 @@
               "name": "value"
             }
           }
-        ]
+        ]}
       },
       {
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_load_store_field_generic_3", "stmts": [
           {
             "kind": "quod.let",
             "name": "a",
@@ -102,7 +102,7 @@
               ]
             }
           }
-        ]
+        ]}
       }
     ]
   },

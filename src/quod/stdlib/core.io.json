@@ -117,7 +117,7 @@
               {"kind": "llvm.enum", "name": "core.io.IoError"}
             ]
           },
-          "body": [
+          "body": {"id": "@blk_core.io_3", "stmts": [
             {
               "kind": "quod.let",
               "name": "buf_ptr",
@@ -176,14 +176,14 @@
                 "lhs": {"kind": "llvm.param_ref", "name": "n"},
                 "rhs": {"kind": "quod.local_ref", "name": "remaining"}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_core.io_1", "stmts": [
                 {
                   "kind": "quod.assign",
                   "name": "take",
                   "value": {"kind": "llvm.param_ref", "name": "n"}
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_core.io_2", "stmts": []}
             },
             {
               "kind": "quod.expr_stmt",
@@ -241,7 +241,7 @@
                 ]
               }
             }
-          ]
+          ]}
         }
       ]
     },
@@ -264,7 +264,7 @@
               {"kind": "llvm.enum", "name": "core.io.IoError"}
             ]
           },
-          "body": [
+          "body": {"id": "@blk_core.io_6", "stmts": [
             {
               "kind": "quod.let",
               "name": "buf_ptr",
@@ -323,14 +323,14 @@
                 "lhs": {"kind": "llvm.param_ref", "name": "n"},
                 "rhs": {"kind": "quod.local_ref", "name": "space_left"}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_core.io_4", "stmts": [
                 {
                   "kind": "quod.assign",
                   "name": "take",
                   "value": {"kind": "llvm.param_ref", "name": "n"}
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_core.io_5", "stmts": []}
             },
             {
               "kind": "quod.expr_stmt",
@@ -388,7 +388,7 @@
                 ]
               }
             }
-          ]
+          ]}
         },
         {
           "name": "flush",
@@ -402,7 +402,7 @@
               {"kind": "llvm.enum", "name": "core.io.IoError"}
             ]
           },
-          "body": [
+          "body": {"id": "@blk_core.io_7", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -414,7 +414,7 @@
                 "variant": "None"
               }
             }
-          ]
+          ]}
         }
       ]
     }

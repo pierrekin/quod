@@ -30,7 +30,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_002_1", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -60,7 +60,7 @@
             }
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i1"
       }
@@ -75,7 +75,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_002_5", "stmts": [
         {
           "kind": "quod.let",
           "name": "a",
@@ -132,7 +132,7 @@
               "name": "limit"
             }
           },
-          "body": [
+          "body": {"id": "@blk_002_4", "stmts": [
             {
               "kind": "quod.if",
               "cond": {
@@ -145,7 +145,7 @@
                   }
                 ]
               },
-              "then_body": [
+              "then_body": {"id": "@blk_002_2", "stmts": [
                 {
                   "kind": "quod.assign",
                   "name": "sum",
@@ -162,8 +162,8 @@
                     }
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_002_3", "stmts": []}
             },
             {
               "kind": "quod.assign",
@@ -197,7 +197,7 @@
                 }
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return_expr",
@@ -206,7 +206,7 @@
             "name": "sum"
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }
@@ -214,7 +214,7 @@
     {
       "name": "main",
       "params": [],
-      "body": [
+      "body": {"id": "@blk_002_6", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -251,7 +251,7 @@
             "value": 0
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }

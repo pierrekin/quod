@@ -22,7 +22,7 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": [
+        "body": {"id": "@blk_alloc_list_smoke_1", "stmts": [
           {
             "kind": "quod.let",
             "name": "a",
@@ -202,7 +202,7 @@
               }
             }
           }
-        ]
+        ]}
       }
     ]
   },

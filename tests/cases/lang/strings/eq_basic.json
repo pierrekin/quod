@@ -42,7 +42,7 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": [
+        "body": {"id": "@blk_eq_basic_1", "stmts": [
           {
             "kind": "quod.let",
             "name": "a",
@@ -148,7 +148,7 @@
               "value": 0
             }
           }
-        ],
+        ]},
         "claims": []
       }
     ]

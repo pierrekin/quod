@@ -20,7 +20,7 @@
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_buf_reader_smoke_3", "stmts": [
           {
             "kind": "quod.let",
             "name": "a",
@@ -119,7 +119,7 @@
               {
                 "variant": "Ok",
                 "bindings": ["_n"],
-                "body": [
+                "body": {"id": "@blk_buf_reader_smoke_1", "stmts": [
                   {
                     "kind": "quod.let",
                     "name": "byte",
@@ -139,21 +139,21 @@
                       "signed": false
                     }
                   }
-                ]
+                ]}
               },
               {
                 "variant": "Err",
                 "bindings": ["_e"],
-                "body": [
+                "body": {"id": "@blk_buf_reader_smoke_2", "stmts": [
                   {
                     "kind": "quod.return_expr",
                     "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}
                   }
-                ]
+                ]}
               }
             ]
           }
-        ]
+        ]}
       }
     ]
   },

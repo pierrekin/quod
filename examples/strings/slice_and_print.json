@@ -45,7 +45,7 @@
       "return_type": {
         "kind": "llvm.i32"
       },
-      "body": [
+      "body": {"id": "@blk_slice_and_print_2", "stmts": [
         {
           "kind": "quod.let",
           "name": "src",
@@ -74,7 +74,7 @@
             },
             "value": 4096
           },
-          "body": [
+          "body": {"id": "@blk_slice_and_print_1", "stmts": [
             {
               "kind": "quod.let",
               "name": "head",
@@ -215,7 +215,7 @@
                 ]
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return_expr",
@@ -227,7 +227,7 @@
             "value": 0
           }
         }
-      ],
+      ]},
       "claims": []
     }
   ]

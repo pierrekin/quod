@@ -28,7 +28,21 @@ from quod.model import (
     BinOp,
     Call,
     CharLit,
+    CAssign,
+    CBinOp,
+    CFn,
+    CFor,
+    CIntLit,
+    CParam,
+    CReturn,
+    CScopedBlock,
+    CStyleFor,
+    CType,
+    CUnit,
+    CVarDecl,
+    CVarRef,
     DerivedJustification,
+    Equivalence,
     EnumDef,
     EnumInit,
     EnumPayloadField,
@@ -41,6 +55,7 @@ from quod.model import (
     FieldInit,
     FieldRead,
     FieldSet,
+    Block,
     For,
     Function,
     I1Type,
@@ -62,6 +77,8 @@ from quod.model import (
     Load,
     LoadField,
     LocalRef,
+    FamilyLowering,
+    LiftEquivalence,
     ManualJustification,
     Match,
     MatchArm,
@@ -71,6 +88,7 @@ from quod.model import (
     NullPtr,
     Param,
     ParamRef,
+    ProvenanceEdge,
     PtrOffset,
     Return,
     ReturnExpr,
@@ -416,16 +434,16 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     },
     "quod.if": {
         "class": If,
-        "summary": "Two-branch conditional. cond must lower to i1. Both branches are required (use [] for an empty branch).",
+        "summary": "Two-branch conditional. cond must lower to i1. Both branches are required (empty branch is `{\"stmts\": []}`).",
         "example": {
             "kind": "quod.if",
             "cond": {"kind": "llvm.binop", "op": "slt",
                      "lhs": {"kind": "llvm.param_ref", "name": "x"},
                      "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}},
-            "then_body": [{"kind": "quod.return_expr",
-                           "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": -1}}],
-            "else_body": [{"kind": "quod.return_expr",
-                           "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}],
+            "then_body": {"stmts": [{"kind": "quod.return_expr",
+                                     "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": -1}}]},
+            "else_body": {"stmts": [{"kind": "quod.return_expr",
+                                     "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}]},
         },
     },
     "quod.let": {
@@ -457,10 +475,10 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "cond": {"kind": "llvm.binop", "op": "slt",
                      "lhs": {"kind": "quod.local_ref", "name": "i"},
                      "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 10}},
-            "body": [{"kind": "quod.assign", "name": "i",
-                      "value": {"kind": "llvm.binop", "op": "add",
-                                "lhs": {"kind": "quod.local_ref", "name": "i"},
-                                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}}],
+            "body": {"stmts": [{"kind": "quod.assign", "name": "i",
+                                "value": {"kind": "llvm.binop", "op": "add",
+                                          "lhs": {"kind": "quod.local_ref", "name": "i"},
+                                          "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}}]},
         },
         "see_also": ["quod.for"],
     },
@@ -471,9 +489,9 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "kind": "quod.for", "var": "i", "type": {"kind": "llvm.i32"},
             "lo": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0},
             "hi": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 10},
-            "body": [{"kind": "quod.expr_stmt",
-                      "value": {"kind": "llvm.call", "function": "putchar",
-                                "args": [{"kind": "quod.local_ref", "name": "i"}]}}],
+            "body": {"stmts": [{"kind": "quod.expr_stmt",
+                                "value": {"kind": "llvm.call", "function": "putchar",
+                                          "args": [{"kind": "quod.local_ref", "name": "i"}]}}]},
         },
         "see_also": ["quod.while"],
     },
@@ -541,12 +559,12 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "example": {
             "kind": "quod.with_arena", "name": "a",
             "capacity": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4096},
-            "body": [
+            "body": {"stmts": [
                 {"kind": "quod.expr_stmt",
                  "value": {"kind": "llvm.call", "function": "mem.arena.alloc",
                            "args": [{"kind": "quod.local_ref", "name": "a"},
                                     {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 64}]}},
-            ],
+            ]},
         },
         "see_also": ["quod.let", "quod.expr_stmt"],
     },
@@ -708,6 +726,65 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "summary": "Re-derived from the program graph each compile (lattice analysis). Skipped by `quod claim verify`.",
         "example": {"kind": "derived"},
     },
+    "lift_equivalence": {
+        "class": LiftEquivalence,
+        "summary": (
+            "Justifies a layer-A → layer-B (transcription) equivalence "
+            "via a pinned proof artifact. Same shape as `z3` — the file's "
+            "bytes hashed at prove time, re-checked at verify time."
+        ),
+        "example": {
+            "kind": "lift_equivalence",
+            "artifact_path": "proofs/sum_lift.smt2",
+            "artifact_hash": "abc123...",
+        },
+    },
+    "family_lowering": {
+        "class": FamilyLowering,
+        "summary": (
+            "Justifies a layer-B → layer-C equivalence by citing a named "
+            "lowering rule (e.g. `c.for_general`) whose theorem was "
+            "proved once, out of band, against the rule itself rather "
+            "than per program. `artifact_path`/`artifact_hash` "
+            "optionally pin the rule's proof."
+        ),
+        "example": {"kind": "family_lowering", "rule_name": "c.for_general"},
+    },
+
+    # ---------- edges + equivalences (program-level relational claims) ----------
+    "edge.provenance": {
+        "class": ProvenanceEdge,
+        "summary": (
+            "An unkinded provenance edge: 'this came from that,' nothing "
+            "more. `source` and `target` are stable node IDs (Function.id, "
+            "Block.id, ...). All semantic content for what the edge means "
+            "lives in the `equivalent_to` claims that anchor on the same "
+            "IDs."
+        ),
+        "example": {"kind": "edge.provenance", "source": "@a.sd", "target": "@b.lets"},
+    },
+    "equivalent_to": {
+        "class": Equivalence,
+        "summary": (
+            "Program-level equivalence between two nodes by ID. "
+            "Relational, where ordinary claims are unary; lives in "
+            "`Program.equivalences`, not in `fn.claims`. Carries the "
+            "regime / enforcement / justification metadata of any other "
+            "claim. `domain` (predicate over which the equivalence "
+            "holds) is reserved for the predicates spike — v2 lands "
+            "with `domain=None` (always-true)."
+        ),
+        "example": {
+            "kind": "equivalent_to",
+            "a_node_id": "@blk_a",
+            "b_node_id": "@blk_b",
+            "regime": "witness",
+            "justification": {
+                "kind": "family_lowering",
+                "rule_name": "c.for_general",
+            },
+        },
+    },
 
     # ---------- program-level (no kind discriminator) ----------
     "StringConstant": {
@@ -740,12 +817,12 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     },
     "Function": {
         "class": Function,
-        "summary": "A user function. params is a list of typed Params; return_type is required; body is a list of statements; claims optional. Entry-point functions may declare params; the synthesized main wrapper parses each argv slot via atoll then trunc/sext's to the param's type (so `quod run -- 42 7` calls entry(42, 7)). An entry called 'main' must be nullary — rename it if you want params.",
+        "summary": "A user function. params is a list of typed Params; return_type is required; body is a `Block` wrapping a list of statements; claims optional. Entry-point functions may declare params; the synthesized main wrapper parses each argv slot via atoll then trunc/sext's to the param's type (so `quod run -- 42 7` calls entry(42, 7)). An entry called 'main' must be nullary — rename it if you want params.",
         "example": {
             "name": "main", "params": [],
             "return_type": {"kind": "llvm.i32"},
-            "body": [{"kind": "quod.return_expr",
-                      "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}}],
+            "body": {"stmts": [{"kind": "quod.return_expr",
+                                "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}}]},
         },
     },
     "Param": {
@@ -812,15 +889,32 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "summary": (
             "One arm of a quod.match. Names a variant, binds its payload "
             "fields to locals (one binding name per field, in declaration "
-            "order), and runs `body`."
+            "order), and runs `body` (a `Block`)."
         ),
         "example": {
             "variant": "Some",
             "bindings": ["v"],
-            "body": [{"kind": "quod.return_expr",
-                      "value": {"kind": "quod.local_ref", "name": "v"}}],
+            "body": {"stmts": [{"kind": "quod.return_expr",
+                                "value": {"kind": "quod.local_ref", "name": "v"}}]},
         },
         "see_also": ["quod.match"],
+    },
+    "Block": {
+        "class": Block,
+        "summary": (
+            "Identified container for a sequence of statements. Used wherever "
+            "a body appears (Function.body, If.then_body / else_body, While.body, "
+            "For.body, WithArena.body, MatchArm.body). The `id` is opaque, "
+            "auto-minted at construction, and persists in JSON so reloads stay "
+            "deterministic. Edges and equivalence claims anchor on Block IDs."
+        ),
+        "example": {
+            "id": "@blk_example",
+            "stmts": [
+                {"kind": "quod.return_expr",
+                 "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}},
+            ],
+        },
     },
 }
 
@@ -836,15 +930,183 @@ _KIND_INFO["quod.match"] = {
         "kind": "quod.match",
         "scrutinee": {"kind": "quod.local_ref", "name": "m"},
         "arms": [
-            {"variant": "None", "bindings": [], "body": [
+            {"variant": "None", "bindings": [], "body": {"stmts": [
                 {"kind": "quod.return_expr",
-                 "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}}]},
-            {"variant": "Some", "bindings": ["v"], "body": [
+                 "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}}]}},
+            {"variant": "Some", "bindings": ["v"], "body": {"stmts": [
                 {"kind": "quod.return_expr",
-                 "value": {"kind": "quod.local_ref", "name": "v"}}]},
+                 "value": {"kind": "quod.local_ref", "name": "v"}}]}},
         ],
     },
     "see_also": ["EnumDef", "quod.enum_init"],
+}
+
+
+# ---------- Layer-A: C source-language nodes ----------
+#
+# Inert structural nodes that preserve the original C as a subtree of
+# the program graph. See `.scratch/c-ingest/00-overview.md`. v3 supports
+# the same int-only, no-structs/floats/switch C subset as the existing
+# ingester, narrowed further to what `sum.c` exercises (the smallest
+# end-to-end slice).
+
+_KIND_INFO["c.type"] = {
+    "class": CType,
+    "summary": "A C type as it appears in source. v3 supports only `int`.",
+    "example": {"kind": "c.type", "name": "int"},
+}
+
+_KIND_INFO["c.lit_int"] = {
+    "class": CIntLit,
+    "summary": "A C integer literal.",
+    "example": {"kind": "c.lit_int", "value": 0},
+}
+
+_KIND_INFO["c.var_ref"] = {
+    "class": CVarRef,
+    "summary": "A C identifier reference (parameter, local, …).",
+    "example": {"kind": "c.var_ref", "name": "i"},
+}
+
+_KIND_INFO["c.binop"] = {
+    "class": CBinOp,
+    "summary": (
+        "A C binary operator. `op` is the source-form spelling "
+        "(`+`, `<`, `&&`, …). The lifter is responsible for refusing "
+        "operators outside the supported subset."
+    ),
+    "example": {
+        "kind": "c.binop", "op": "<",
+        "lhs": {"kind": "c.var_ref", "name": "i"},
+        "rhs": {"kind": "c.var_ref", "name": "n"},
+    },
+}
+
+_KIND_INFO["c.param"] = {
+    "class": CParam,
+    "summary": "A function parameter in C source.",
+    "example": {"kind": "c.param", "name": "n", "type": {"kind": "c.type", "name": "int"}},
+}
+
+_KIND_INFO["c.var_decl"] = {
+    "class": CVarDecl,
+    "summary": "`int s = 0;` — a local variable declaration.",
+    "example": {
+        "kind": "c.var_decl",
+        "type": {"kind": "c.type", "name": "int"},
+        "name": "s",
+        "init": {"kind": "c.lit_int", "value": 0},
+    },
+}
+
+_KIND_INFO["c.assign"] = {
+    "class": CAssign,
+    "summary": (
+        "`s = s + i;` — assignment to an in-scope variable. v3 doesn't "
+        "model field/indexed/dereferenced targets."
+    ),
+    "example": {
+        "kind": "c.assign", "target": "i",
+        "value": {"kind": "c.binop", "op": "+",
+                  "lhs": {"kind": "c.var_ref", "name": "i"},
+                  "rhs": {"kind": "c.lit_int", "value": 1}},
+    },
+}
+
+_KIND_INFO["c.return"] = {
+    "class": CReturn,
+    "summary": "`return s;` or `return;`.",
+    "example": {"kind": "c.return", "value": {"kind": "c.var_ref", "name": "s"}},
+}
+
+_KIND_INFO["c.for"] = {
+    "class": CFor,
+    "summary": (
+        "`for (init; cond; inc) { body }` — the C for loop verbatim. "
+        "Each of init/cond/inc is independently optional."
+    ),
+    "example": {
+        "kind": "c.for",
+        "init": {"kind": "c.var_decl",
+                 "type": {"kind": "c.type", "name": "int"},
+                 "name": "i", "init": {"kind": "c.lit_int", "value": 0}},
+        "cond": {"kind": "c.binop", "op": "<",
+                 "lhs": {"kind": "c.var_ref", "name": "i"},
+                 "rhs": {"kind": "c.var_ref", "name": "n"}},
+        "inc":  {"kind": "c.assign", "target": "i",
+                 "value": {"kind": "c.binop", "op": "+",
+                           "lhs": {"kind": "c.var_ref", "name": "i"},
+                           "rhs": {"kind": "c.lit_int", "value": 1}}},
+        "body": [],
+    },
+}
+
+_KIND_INFO["c.fn"] = {
+    "class": CFn,
+    "summary": "A C function definition: `int sum(int n) { ... }`.",
+    "example": {
+        "kind": "c.fn", "name": "sum",
+        "return_type": {"kind": "c.type", "name": "int"},
+        "params": [{"kind": "c.param", "name": "n",
+                    "type": {"kind": "c.type", "name": "int"}}],
+        "body": [],
+    },
+}
+
+_KIND_INFO["c_unit"] = {
+    "class": CUnit,
+    "summary": (
+        "A C translation unit — one source file's contents preserved as "
+        "layer-A nodes. Lives in `Program.source_units`."
+    ),
+    "example": {"kind": "c_unit", "source_path": "sum.c", "functions": []},
+}
+
+
+# ---------- Layer-B: c.* extension nodes ----------
+
+_KIND_INFO["c.scoped_block"] = {
+    "class": CScopedBlock,
+    "summary": (
+        "C-style block wrapper. `block` is the inner core.Block that "
+        "edges anchor on; the wrapper carries family-specific scope "
+        "semantics (which decls die at the closing brace). Lowered by "
+        "c-family lowering to its inner block — `lower.py` refuses to "
+        "see this wrapper."
+    ),
+    "example": {
+        "kind": "c.scoped_block",
+        "block": {"id": "@blk_for_body", "stmts": []},
+        "scope_locals": ["i"],
+    },
+}
+
+_KIND_INFO["c.for_general"] = {
+    "class": CStyleFor,
+    "summary": (
+        "C-style for loop with arbitrary init/cond/inc — the layer-B "
+        "transcription of `c.for` from layer A. Lowered to "
+        "`Let + While + Assign` by c-family lowering, with the rule "
+        "cited as `FamilyLowering(\"c.for_general\")` in the resulting "
+        "equivalence claim. `lower.py` refuses to consume this — the "
+        "c-family lowering pass must run first."
+    ),
+    "example": {
+        "kind": "c.for_general",
+        "init": {"kind": "quod.let", "name": "i",
+                 "type": {"kind": "llvm.i32"},
+                 "init": {"kind": "llvm.const_int",
+                          "type": {"kind": "llvm.i32"}, "value": 0}},
+        "cond": {"kind": "llvm.binop", "op": "lt",
+                 "lhs": {"kind": "quod.local_ref", "name": "i"},
+                 "rhs": {"kind": "llvm.param_ref", "name": "n"}},
+        "inc": {"kind": "quod.assign", "name": "i",
+                "value": {"kind": "llvm.binop", "op": "add",
+                          "lhs": {"kind": "quod.local_ref", "name": "i"},
+                          "rhs": {"kind": "llvm.const_int",
+                                  "type": {"kind": "llvm.i32"}, "value": 1}}},
+        "body": {"stmts": []},
+    },
 }
 
 
@@ -868,14 +1130,27 @@ _CATEGORIES: dict[str, list[str]] = {
         "llvm.i8_ptr", "llvm.struct", "llvm.enum", "llvm.void",
         "quod.type_param", "quod.self_type",
     ],
-    "claim": ["non_negative", "int_range", "return_in_range"],
-    "justification": ["z3", "manual", "derived"],
+    "claim": ["non_negative", "int_range", "return_in_range", "equivalent_to"],
+    "justification": [
+        "z3", "manual", "derived", "lift_equivalence", "family_lowering",
+    ],
     "program": [
         "StringConstant", "ExternFunction", "Function", "Param",
         "StructDef", "StructField", "FieldInit",
-        "EnumDef", "EnumVariant", "EnumPayloadField", "MatchArm",
+        "EnumDef", "EnumVariant", "EnumPayloadField", "MatchArm", "Block",
     ],
+    "edge": ["edge.provenance"],
     "linkage": ["LibcLinkage", "RuntimeLinkage"],
+    # Layer-A nodes — original C source preserved as quod nodes. See
+    # .scratch/c-ingest/00-overview.md.
+    "source.c": [
+        "c_unit", "c.fn", "c.param", "c.type",
+        "c.var_decl", "c.assign", "c.return", "c.for",
+        "c.binop", "c.lit_int", "c.var_ref",
+    ],
+    # Layer-B `c.*` extensions — constructs core quod can't represent;
+    # lowered to core by lower/c_family.py (step 5).
+    "c": ["c.scoped_block", "c.for_general"],
 }
 
 

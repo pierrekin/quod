@@ -1057,7 +1057,7 @@ def fn_callers(
     program = _load()
     found = False
     for caller in program.functions:
-        for i, stmt in enumerate(caller.body):
+        for i, stmt in enumerate(caller.body.stmts):
             seen: set[str] = set()
             for call in _walk_calls_in_stmt(stmt):
                 if call.function != target:
@@ -1097,7 +1097,7 @@ def fn_data_flow(
         typer.echo(f"error: {fn.name!r} has no parameter {param!r}", err=True)
         raise typer.Exit(1)
     any_read = False
-    for i, stmt in enumerate(fn.body):
+    for i, stmt in enumerate(fn.body.stmts):
         n = _count_paramrefs(stmt, param)
         if n:
             any_read = True

@@ -89,7 +89,7 @@
               {"kind": "llvm.enum", "name": "core.io.IoError"}
             ]
           },
-          "body": [
+          "body": {"id": "@blk_std.io_3", "stmts": [
             {
               "kind": "quod.let",
               "name": "fd",
@@ -134,7 +134,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "rc"},
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_std.io_1", "stmts": [
                 {
                   "kind": "quod.return_expr",
                   "value": {
@@ -163,8 +163,8 @@
                     ]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_std.io_2", "stmts": []}
             },
             {
               "kind": "quod.return_expr",
@@ -189,7 +189,7 @@
                 ]
               }
             }
-          ]
+          ]}
         }
       ]
     },
@@ -212,7 +212,7 @@
               {"kind": "llvm.enum", "name": "core.io.IoError"}
             ]
           },
-          "body": [
+          "body": {"id": "@blk_std.io_6", "stmts": [
             {
               "kind": "quod.let",
               "name": "fd",
@@ -257,7 +257,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "rc"},
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_std.io_4", "stmts": [
                 {
                   "kind": "quod.return_expr",
                   "value": {
@@ -286,8 +286,8 @@
                     ]
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_std.io_5", "stmts": []}
             },
             {
               "kind": "quod.return_expr",
@@ -312,7 +312,7 @@
                 ]
               }
             }
-          ]
+          ]}
         },
         {
           "name": "flush",
@@ -326,7 +326,7 @@
               {"kind": "llvm.enum", "name": "core.io.IoError"}
             ]
           },
-          "body": [
+          "body": {"id": "@blk_std.io_7", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -338,7 +338,7 @@
                 "variant": "None"
               }
             }
-          ]
+          ]}
         }
       ]
     }
@@ -363,7 +363,7 @@
           }
         ]
       },
-      "body": [
+      "body": {"id": "@blk_std.io_10", "stmts": [
         {
           "kind": "quod.let",
           "name": "end_pos",
@@ -412,7 +412,7 @@
               "value": 0
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_std.io_8", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -426,8 +426,8 @@
                 "variant": "None"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_std.io_9", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -482,14 +482,14 @@
             ]
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
       "name": "std.io.errno_get",
       "params": [],
       "return_type": {"kind": "llvm.i32"},
-      "body": [
+      "body": {"id": "@blk_std.io_11", "stmts": [
         {
           "kind": "quod.let",
           "name": "ptr",
@@ -508,7 +508,7 @@
             "type": {"kind": "llvm.i32"}
           }
         }
-      ]
+      ]}
     },
     {
       "name": "std.io.errno_to_io_error",
@@ -516,7 +516,7 @@
         {"name": "e", "type": {"kind": "llvm.i32"}}
       ],
       "return_type": {"kind": "llvm.enum", "name": "core.io.IoError"},
-      "body": [
+      "body": {"id": "@blk_std.io_22", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -525,7 +525,7 @@
             "lhs": {"kind": "llvm.param_ref", "name": "e"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 2}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_std.io_12", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -534,8 +534,8 @@
                 "variant": "NotFound"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_std.io_13", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -545,7 +545,7 @@
             "lhs": {"kind": "llvm.param_ref", "name": "e"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 13}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_std.io_14", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -554,8 +554,8 @@
                 "variant": "PermissionDenied"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_std.io_15", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -565,7 +565,7 @@
             "lhs": {"kind": "llvm.param_ref", "name": "e"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 4}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_std.io_16", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -574,8 +574,8 @@
                 "variant": "Interrupted"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_std.io_17", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -585,7 +585,7 @@
             "lhs": {"kind": "llvm.param_ref", "name": "e"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 17}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_std.io_18", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -594,8 +594,8 @@
                 "variant": "AlreadyExists"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_std.io_19", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -605,7 +605,7 @@
             "lhs": {"kind": "llvm.param_ref", "name": "e"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 11}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_std.io_20", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -614,8 +614,8 @@
                 "variant": "WouldBlock"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_std.io_21", "stmts": []}
         },
         {
           "kind": "quod.return_expr",
@@ -628,13 +628,13 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "std.io.stdin_file",
       "params": [],
       "return_type": {"kind": "llvm.struct", "name": "std.io.File"},
-      "body": [
+      "body": {"id": "@blk_std.io_23", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -645,13 +645,13 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "std.io.stdout_file",
       "params": [],
       "return_type": {"kind": "llvm.struct", "name": "std.io.File"},
-      "body": [
+      "body": {"id": "@blk_std.io_24", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -662,13 +662,13 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "std.io.stderr_file",
       "params": [],
       "return_type": {"kind": "llvm.struct", "name": "std.io.File"},
-      "body": [
+      "body": {"id": "@blk_std.io_25", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -679,7 +679,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "std.io.open_read",
@@ -694,7 +694,7 @@
           {"kind": "llvm.enum", "name": "core.io.IoError"}
         ]
       },
-      "body": [
+      "body": {"id": "@blk_std.io_28", "stmts": [
         {
           "kind": "quod.let",
           "name": "fd",
@@ -716,7 +716,7 @@
             "lhs": {"kind": "quod.local_ref", "name": "fd"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_std.io_26", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -745,8 +745,8 @@
                 ]
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_std.io_27", "stmts": []}
         },
         {
           "kind": "quod.return_expr",
@@ -772,7 +772,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "std.io.file_close",
@@ -780,7 +780,7 @@
         {"name": "file", "type": {"kind": "llvm.struct", "name": "std.io.File"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_std.io_29", "stmts": [
         {
           "kind": "quod.let",
           "name": "_rc",
@@ -798,7 +798,7 @@
           }
         },
         {"kind": "quod.return"}
-      ]
+      ]}
     },
     {
       "name": "std.io.read_file_to_arena",
@@ -826,7 +826,7 @@
           }
         ]
       },
-      "body": [
+      "body": {"id": "@blk_std.io_36", "stmts": [
         {
           "kind": "quod.let",
           "name": "fd",
@@ -868,7 +868,7 @@
               "value": 0
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_std.io_30", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -883,8 +883,8 @@
                 "variant": "None"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_std.io_31", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -919,7 +919,7 @@
             {
               "variant": "None",
               "bindings": [],
-              "body": [
+              "body": {"id": "@blk_std.io_32", "stmts": [
                 {
                   "kind": "quod.let",
                   "name": "_x",
@@ -951,14 +951,14 @@
                     "variant": "None"
                   }
                 }
-              ]
+              ]}
             },
             {
               "variant": "Some",
               "bindings": [
                 "size"
               ],
-              "body": [
+              "body": {"id": "@blk_std.io_35", "stmts": [
                 {
                   "kind": "quod.let",
                   "name": "buf",
@@ -1039,7 +1039,7 @@
                       "value": 0
                     }
                   },
-                  "then_body": [
+                  "then_body": {"id": "@blk_std.io_33", "stmts": [
                     {
                       "kind": "quod.return_expr",
                       "value": {
@@ -1054,8 +1054,8 @@
                         "variant": "None"
                       }
                     }
-                  ],
-                  "else_body": []
+                  ]},
+                  "else_body": {"id": "@blk_std.io_34", "stmts": []}
                 },
                 {
                   "kind": "quod.let",
@@ -1108,11 +1108,11 @@
                     ]
                   }
                 }
-              ]
+              ]}
             }
           ]
         }
-      ],
+      ]},
       "claims": []
     }
   ]

@@ -159,8 +159,12 @@ def substitute_in_stmt(stmt, type_fn: Callable):
     if isinstance(stmt, If):
         return stmt.model_copy(update={
             "cond":      substitute_in_expr(stmt.cond, type_fn),
-            "then_body": tuple(substitute_in_stmt(s, type_fn) for s in stmt.then_body),
-            "else_body": tuple(substitute_in_stmt(s, type_fn) for s in stmt.else_body),
+            "then_body": stmt.then_body.model_copy(update={
+                "stmts": tuple(substitute_in_stmt(s, type_fn) for s in stmt.then_body.stmts),
+            }),
+            "else_body": stmt.else_body.model_copy(update={
+                "stmts": tuple(substitute_in_stmt(s, type_fn) for s in stmt.else_body.stmts),
+            }),
         })
     if isinstance(stmt, Let):
         return stmt.model_copy(update={
@@ -172,13 +176,17 @@ def substitute_in_stmt(stmt, type_fn: Callable):
     if isinstance(stmt, While):
         return stmt.model_copy(update={
             "cond": substitute_in_expr(stmt.cond, type_fn),
-            "body": tuple(substitute_in_stmt(s, type_fn) for s in stmt.body),
+            "body": stmt.body.model_copy(update={
+                "stmts": tuple(substitute_in_stmt(s, type_fn) for s in stmt.body.stmts),
+            }),
         })
     if isinstance(stmt, For):
         return stmt.model_copy(update={
             "lo":   substitute_in_expr(stmt.lo, type_fn),
             "hi":   substitute_in_expr(stmt.hi, type_fn),
-            "body": tuple(substitute_in_stmt(s, type_fn) for s in stmt.body),
+            "body": stmt.body.model_copy(update={
+                "stmts": tuple(substitute_in_stmt(s, type_fn) for s in stmt.body.stmts),
+            }),
         })
     if isinstance(stmt, ExprStmt):
         return stmt.model_copy(update={"value": substitute_in_expr(stmt.value, type_fn)})
@@ -198,12 +206,16 @@ def substitute_in_stmt(stmt, type_fn: Callable):
     if isinstance(stmt, WithArena):
         return stmt.model_copy(update={
             "capacity": substitute_in_expr(stmt.capacity, type_fn),
-            "body":     tuple(substitute_in_stmt(s, type_fn) for s in stmt.body),
+            "body":     stmt.body.model_copy(update={
+                "stmts": tuple(substitute_in_stmt(s, type_fn) for s in stmt.body.stmts),
+            }),
         })
     if isinstance(stmt, Match):
         new_arms = tuple(
             arm.model_copy(update={
-                "body": tuple(substitute_in_stmt(s, type_fn) for s in arm.body),
+                "body": arm.body.model_copy(update={
+                    "stmts": tuple(substitute_in_stmt(s, type_fn) for s in arm.body.stmts),
+                }),
             })
             for arm in stmt.arms
         )

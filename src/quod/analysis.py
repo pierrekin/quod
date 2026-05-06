@@ -58,7 +58,7 @@ def derive_lattice_claims(program: Program) -> dict[str, tuple[Claim, ...]]:
     }
 
     for caller in program.functions:
-        for stmt in caller.body:
+        for stmt in caller.body.stmts:
             for call in _walk_calls_in_stmt(stmt):
                 callee = defined_fns.get(call.function)
                 if callee is None:
@@ -120,9 +120,9 @@ def _walk_calls_in_stmt(stmt) -> Iterator[Call]:
             yield from _walk_calls_in_expr(expr)
         case If(cond=cond, then_body=t_body, else_body=e_body):
             yield from _walk_calls_in_expr(cond)
-            for s in t_body:
+            for s in t_body.stmts:
                 yield from _walk_calls_in_stmt(s)
-            for s in e_body:
+            for s in e_body.stmts:
                 yield from _walk_calls_in_stmt(s)
         case Let(init=expr) | Assign(value=expr) | FieldSet(value=expr):
             yield from _walk_calls_in_expr(expr)
@@ -131,21 +131,21 @@ def _walk_calls_in_stmt(stmt) -> Iterator[Call]:
             yield from _walk_calls_in_expr(v)
         case While(cond=cond, body=body):
             yield from _walk_calls_in_expr(cond)
-            for s in body:
+            for s in body.stmts:
                 yield from _walk_calls_in_stmt(s)
         case For(lo=lo, hi=hi, body=body):
             yield from _walk_calls_in_expr(lo)
             yield from _walk_calls_in_expr(hi)
-            for s in body:
+            for s in body.stmts:
                 yield from _walk_calls_in_stmt(s)
         case WithArena(capacity=cap, body=body):
             yield from _walk_calls_in_expr(cap)
-            for s in body:
+            for s in body.stmts:
                 yield from _walk_calls_in_stmt(s)
         case Match(scrutinee=scrut, arms=arms):
             yield from _walk_calls_in_expr(scrut)
             for arm in arms:
-                for s in arm.body:
+                for s in arm.body.stmts:
                     yield from _walk_calls_in_stmt(s)
 
 

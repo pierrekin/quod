@@ -39,7 +39,7 @@
               {"name": "self", "type": {"kind": "quod.self_type"}}
             ],
             "return_type": {"kind": "quod.type_param", "name": "T"},
-            "body": [
+            "body": {"id": "@blk_generic_impl_with_t_1", "stmts": [
               {
                 "kind": "quod.return_expr",
                 "value": {
@@ -48,7 +48,7 @@
                   "name": "value"
                 }
               }
-            ]
+            ]}
           }
         ]
       }
@@ -58,7 +58,7 @@
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_generic_impl_with_t_2", "stmts": [
           {
             "kind": "quod.let",
             "name": "b",
@@ -92,7 +92,7 @@
               ]
             }
           }
-        ]
+        ]}
       }
     ]
   },

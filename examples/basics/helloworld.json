@@ -9,7 +9,7 @@
     {
       "name": "main",
       "params": [],
-      "body": [
+      "body": {"id": "@blk_helloworld_1", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -33,7 +33,7 @@
             "value": 0
           }
         }
-      ],
+      ]},
       "claims": [],
       "return_type": {
         "kind": "llvm.i32"

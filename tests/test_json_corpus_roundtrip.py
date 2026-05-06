@@ -67,18 +67,18 @@ def _make_program(input_text: str, *, capacity: int) -> Program:
                 "name": "main",
                 "params": [],
                 "return_type": {"kind": "llvm.i32"},
-                "body": [
+                "body": {"stmts": [
                     {
                         "kind": "quod.with_arena",
                         "name": "a",
                         "capacity": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": capacity},
-                        "body": _round_trip_body(),
+                        "body": {"stmts": _round_trip_body()},
                     },
                     {
                         "kind": "quod.return_expr",
                         "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0},
                     },
-                ],
+                ]},
                 "claims": [],
             },
         ],
@@ -114,7 +114,7 @@ def _round_trip_body() -> list[dict]:
             "arms": [
                 {
                     "variant": "Some", "bindings": ["v"],
-                    "body": [
+                    "body": {"stmts": [
                         {
                             "kind": "quod.let", "name": "out",
                             "type": {"kind": "llvm.struct", "name": "core.str.String"},
@@ -145,11 +145,11 @@ def _round_trip_body() -> list[dict]:
                                 "args": [{"kind": "quod.local_ref", "name": "cs"}],
                             },
                         },
-                    ],
+                    ]},
                 },
                 {
                     "variant": "None", "bindings": [],
-                    "body": [
+                    "body": {"stmts": [
                         {
                             "kind": "quod.expr_stmt",
                             "value": {
@@ -157,7 +157,7 @@ def _round_trip_body() -> list[dict]:
                                 "args": [{"kind": "quod.string_ref", "name": ".err"}],
                             },
                         },
-                    ],
+                    ]},
                 },
             ],
         },

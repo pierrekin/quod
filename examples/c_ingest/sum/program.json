@@ -1,0 +1,404 @@
+{
+  "constants": [],
+  "functions": [
+    {
+      "id": "@fn_c_lowered_sum",
+      "name": "sum",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_lowered_sum_3",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "s",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "i",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          {
+            "kind": "quod.while",
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "slt",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "i"
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "n"
+              }
+            },
+            "body": {
+              "id": "@blk_c_lowered_sum_2",
+              "stmts": [
+                {
+                  "kind": "quod.assign",
+                  "name": "s",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "s"
+                    },
+                    "rhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    }
+                  }
+                },
+                {
+                  "kind": "quod.assign",
+                  "name": "i",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 1
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "s"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from sum.c:10"
+      ]
+    }
+  ],
+  "externs": [],
+  "edges": [
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_sum",
+      "target": "@fn_c_sum"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_1",
+      "target": "@blk_c_lowered_sum_1"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_lowered_sum_1",
+      "target": "@blk_c_lowered_sum_2"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_2",
+      "target": "@blk_c_lowered_sum_3"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@fn_c_sum",
+      "target": "@fn_c_lowered_sum"
+    }
+  ],
+  "equivalences": [
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_sum",
+      "b_node_id": "@fn_c_sum",
+      "justification": {
+        "kind": "manual",
+        "signed_by": "quod.ingest.c",
+        "rationale": "structural transcription from C source to layer-B c-like-quod; no semantic decisions in the lift"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@fn_c_sum",
+      "b_node_id": "@fn_c_lowered_sum",
+      "justification": {
+        "kind": "family_lowering",
+        "rule_name": "c.for_general"
+      }
+    }
+  ],
+  "source_units": [
+    {
+      "kind": "c_unit",
+      "id": "@cunit_c_sum",
+      "source_path": "sum.c",
+      "functions": [
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_sum",
+          "name": "sum",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [
+            {
+              "kind": "c.param",
+              "name": "n",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            }
+          ],
+          "body": [
+            {
+              "kind": "c.var_decl",
+              "id": "@cvardecl_0550efb96fe6",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              },
+              "name": "s",
+              "init": {
+                "kind": "c.lit_int",
+                "value": 0
+              }
+            },
+            {
+              "kind": "c.for",
+              "id": "@cfor_cb245dcca4a7",
+              "init": {
+                "kind": "c.var_decl",
+                "id": "@cvardecl_c6f245d968d8",
+                "type": {
+                  "kind": "c.type",
+                  "name": "int"
+                },
+                "name": "i",
+                "init": {
+                  "kind": "c.lit_int",
+                  "value": 0
+                }
+              },
+              "cond": {
+                "kind": "c.binop",
+                "id": "@cbinop_1b8d1fc2f465",
+                "op": "<",
+                "lhs": {
+                  "kind": "c.var_ref",
+                  "name": "i"
+                },
+                "rhs": {
+                  "kind": "c.var_ref",
+                  "name": "n"
+                }
+              },
+              "inc": {
+                "kind": "c.assign",
+                "id": "@cassign_317ccd63ba94",
+                "target": "i",
+                "value": {
+                  "kind": "c.binop",
+                  "id": "@cbinop_f5f31dc9172c",
+                  "op": "+",
+                  "lhs": {
+                    "kind": "c.var_ref",
+                    "name": "i"
+                  },
+                  "rhs": {
+                    "kind": "c.lit_int",
+                    "value": 1
+                  }
+                }
+              },
+              "body": [
+                {
+                  "kind": "c.assign",
+                  "id": "@cassign_b71bbe5ee38b",
+                  "target": "s",
+                  "value": {
+                    "kind": "c.binop",
+                    "id": "@cbinop_11c46f2106db",
+                    "op": "+",
+                    "lhs": {
+                      "kind": "c.var_ref",
+                      "name": "s"
+                    },
+                    "rhs": {
+                      "kind": "c.var_ref",
+                      "name": "i"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "c.return",
+              "id": "@creturn_8942b333232d",
+              "value": {
+                "kind": "c.var_ref",
+                "name": "s"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "structured_functions": [
+    {
+      "id": "@fn_c_sum",
+      "name": "sum",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_2",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "s",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          {
+            "kind": "c.for_general",
+            "id": "@cfor_general_3789131a46d1",
+            "init": {
+              "kind": "quod.let",
+              "name": "i",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "init": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 0
+              }
+            },
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "slt",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "i"
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "n"
+              }
+            },
+            "inc": {
+              "kind": "quod.assign",
+              "name": "i",
+              "value": {
+                "kind": "llvm.binop",
+                "op": "add",
+                "lhs": {
+                  "kind": "quod.local_ref",
+                  "name": "i"
+                },
+                "rhs": {
+                  "kind": "llvm.const_int",
+                  "type": {
+                    "kind": "llvm.i32"
+                  },
+                  "value": 1
+                }
+              }
+            },
+            "body": {
+              "id": "@blk_c_1",
+              "stmts": [
+                {
+                  "kind": "quod.assign",
+                  "name": "s",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "s"
+                    },
+                    "rhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "s"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from sum.c:10"
+      ]
+    }
+  ]
+}

@@ -31,7 +31,7 @@
         "return_type": {
           "kind": "llvm.void"
         },
-        "body": [
+        "body": {"id": "@blk_explicit_and_implicit_return_1", "stmts": [
           {
             "kind": "quod.expr_stmt",
             "value": {
@@ -45,7 +45,7 @@
               ]
             }
           }
-        ],
+        ]},
         "claims": []
       },
       {
@@ -54,7 +54,7 @@
         "return_type": {
           "kind": "llvm.void"
         },
-        "body": [
+        "body": {"id": "@blk_explicit_and_implicit_return_2", "stmts": [
           {
             "kind": "quod.expr_stmt",
             "value": {
@@ -71,7 +71,7 @@
           {
             "kind": "quod.return"
           }
-        ],
+        ]},
         "claims": []
       },
       {
@@ -80,7 +80,7 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": [
+        "body": {"id": "@blk_explicit_and_implicit_return_3", "stmts": [
           {
             "kind": "quod.expr_stmt",
             "value": {
@@ -107,7 +107,7 @@
               "value": 0
             }
           }
-        ],
+        ]},
         "claims": []
       }
     ]

@@ -28,7 +28,7 @@
           "name": "List",
           "type_args": [{"kind": "quod.type_param", "name": "T"}]
         },
-        "body": [
+        "body": {"id": "@blk_list_with_allocator_1", "stmts": [
           {
             "kind": "quod.let",
             "name": "stride",
@@ -67,7 +67,7 @@
               ]
             }
           }
-        ]
+        ]}
       },
       {
         "name": "list_set",
@@ -85,7 +85,7 @@
           {"name": "x", "type": {"kind": "quod.type_param", "name": "T"}}
         ],
         "return_type": {"kind": "llvm.void"},
-        "body": [
+        "body": {"id": "@blk_list_with_allocator_2", "stmts": [
           {
             "kind": "quod.let",
             "name": "stride",
@@ -110,7 +110,7 @@
             "value": {"kind": "llvm.param_ref", "name": "x"}
           },
           {"kind": "quod.return"}
-        ]
+        ]}
       },
       {
         "name": "list_get",
@@ -127,7 +127,7 @@
           {"name": "i", "type": {"kind": "llvm.i64"}}
         ],
         "return_type": {"kind": "quod.type_param", "name": "T"},
-        "body": [
+        "body": {"id": "@blk_list_with_allocator_3", "stmts": [
           {
             "kind": "quod.let",
             "name": "stride",
@@ -154,18 +154,18 @@
               "type": {"kind": "quod.type_param", "name": "T"}
             }
           }
-        ]
+        ]}
       },
       {
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_list_with_allocator_5", "stmts": [
           {
             "kind": "quod.with_arena",
             "name": "a",
             "capacity": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4096},
-            "body": [
+            "body": {"id": "@blk_list_with_allocator_4", "stmts": [
               {
                 "kind": "quod.let",
                 "name": "xs",
@@ -237,13 +237,13 @@
                   }
                 }
               }
-            ]
+            ]}
           },
           {
             "kind": "quod.return_expr",
             "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
           }
-        ]
+        ]}
       }
     ]
   },

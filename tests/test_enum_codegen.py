@@ -64,6 +64,8 @@ from quod.model import (
     TryExpr,
     Widen,
     WithArena,
+
+    Block,
 )
 
 
@@ -117,7 +119,7 @@ def test_scalar_payload_match_in_same_fn():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(
                 name="m",
                 type=EnumType(name="Maybe"),
@@ -131,16 +133,16 @@ def test_scalar_payload_match_in_same_fn():
                 arms=(
                     MatchArm(
                         variant="Some", bindings=("v",),
-                        body=(_print_int_call(LocalRef(name="v")),),
+                        body=Block(stmts=(_print_int_call(LocalRef(name="v")),)),
                     ),
                     MatchArm(
                         variant="None",
-                        body=(_print_int_call(IntLit(type=I64Type(), value=0)),),
+                        body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=0)),)),
                     ),
                 ),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,),
@@ -165,15 +167,15 @@ def test_scalar_payload_round_trip_via_return():
     make = Function(
         name="make",
         return_type=EnumType(name="Maybe"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="Maybe", variant="Some",
             fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=42)),),
-        )),),
+        )),)),
     )
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(
                 name="m", type=EnumType(name="Maybe"),
                 init=Call(function="make"),
@@ -183,16 +185,16 @@ def test_scalar_payload_round_trip_via_return():
                 arms=(
                     MatchArm(
                         variant="Some", bindings=("v",),
-                        body=(_print_int_call(LocalRef(name="v")),),
+                        body=Block(stmts=(_print_int_call(LocalRef(name="v")),)),
                     ),
                     MatchArm(
                         variant="None",
-                        body=(_print_int_call(IntLit(type=I64Type(), value=0)),),
+                        body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=0)),)),
                     ),
                 ),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,),
@@ -216,28 +218,28 @@ def test_multi_scalar_payload_via_return():
     )
     make = Function(
         name="make", return_type=EnumType(name="E"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="E", variant="V",
             fields=(
                 FieldInit(name="x", value=IntLit(type=I64Type(), value=7)),
                 FieldInit(name="y", value=IntLit(type=I64Type(), value=11)),
             ),
-        )),),
+        )),)),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="e", type=EnumType(name="E"), init=Call(function="make")),
             Match(scrutinee=LocalRef(name="e"), arms=(
                 MatchArm(
                     variant="V", bindings=("a", "b"),
-                    body=(_print_int_call(BinOp(
+                    body=Block(stmts=(_print_int_call(BinOp(
                         op="add", lhs=LocalRef(name="a"), rhs=LocalRef(name="b"),
-                    )),),
+                    )),)),
                 ),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(enum_def,),
@@ -259,7 +261,7 @@ def test_struct_payload_via_return():
     ))
     make = Function(
         name="make", return_type=EnumType(name="E"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="E", variant="Wrap",
             fields=(FieldInit(name="p", value=StructInit(
                 type="Pair", fields=(
@@ -267,24 +269,24 @@ def test_struct_payload_via_return():
                     FieldInit(name="y", value=IntLit(type=I64Type(), value=23)),
                 ),
             )),),
-        )),),
+        )),)),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="e", type=EnumType(name="E"), init=Call(function="make")),
             Match(scrutinee=LocalRef(name="e"), arms=(
                 MatchArm(
                     variant="Wrap", bindings=("p",),
-                    body=(_print_int_call(BinOp(
+                    body=Block(stmts=(_print_int_call(BinOp(
                         op="add",
                         lhs=FieldRead(value=LocalRef(name="p"), name="x"),
                         rhs=FieldRead(value=LocalRef(name="p"), name="y"),
-                    )),),
+                    )),)),
                 ),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), structs=(pair,), enums=(enum_def,),
@@ -308,39 +310,39 @@ def test_enum_payload_via_return():
     ))
     make = Function(
         name="make", return_type=EnumType(name="Outer"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="Outer", variant="Wrap",
             fields=(FieldInit(name="inner", value=EnumInit(
                 enum="Inner", variant="Tag1",
                 fields=(FieldInit(name="n", value=IntLit(type=I64Type(), value=99)),),
             )),),
-        )),),
+        )),)),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="o", type=EnumType(name="Outer"), init=Call(function="make")),
             Match(scrutinee=LocalRef(name="o"), arms=(
                 MatchArm(
                     variant="Wrap", bindings=("inner",),
-                    body=(Match(scrutinee=LocalRef(name="inner"), arms=(
+                    body=Block(stmts=(Match(scrutinee=LocalRef(name="inner"), arms=(
                         MatchArm(
                             variant="Tag1", bindings=("n",),
-                            body=(_print_int_call(LocalRef(name="n")),),
+                            body=Block(stmts=(_print_int_call(LocalRef(name="n")),)),
                         ),
                         MatchArm(
                             variant="Tag0",
-                            body=(_print_int_call(IntLit(type=I64Type(), value=-1)),),
+                            body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=-1)),)),
                         ),
-                    )),),
+                    )),)),
                 ),
                 MatchArm(
                     variant="Empty",
-                    body=(_print_int_call(IntLit(type=I64Type(), value=-2)),),
+                    body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=-2)),)),
                 ),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(inner, outer),
@@ -362,35 +364,35 @@ def test_enum_payload_through_chain():
     ))
     make = Function(
         name="make", return_type=EnumType(name="Outer"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="Outer", variant="W",
             fields=(FieldInit(name="i", value=EnumInit(
                 enum="Inner", variant="N",
                 fields=(FieldInit(name="n", value=IntLit(type=I64Type(), value=77)),),
             )),),
-        )),),
+        )),)),
     )
     forward = Function(
         name="forward", return_type=EnumType(name="Outer"),
-        body=(ReturnExpr(value=Call(function="make")),),
+        body=Block(stmts=(ReturnExpr(value=Call(function="make")),)),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="o", type=EnumType(name="Outer"), init=Call(function="forward")),
             Match(scrutinee=LocalRef(name="o"), arms=(
                 MatchArm(
                     variant="W", bindings=("i",),
-                    body=(Match(scrutinee=LocalRef(name="i"), arms=(
+                    body=Block(stmts=(Match(scrutinee=LocalRef(name="i"), arms=(
                         MatchArm(
                             variant="N", bindings=("n",),
-                            body=(_print_int_call(LocalRef(name="n")),),
+                            body=Block(stmts=(_print_int_call(LocalRef(name="n")),)),
                         ),
-                    )),),
+                    )),)),
                 ),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(inner, outer),
@@ -419,7 +421,7 @@ def test_enum_payload_through_arena_memory():
     ))
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="o", type=EnumType(name="Outer"), init=EnumInit(
                 enum="Outer", variant="W",
                 fields=(FieldInit(name="i", value=EnumInit(
@@ -433,27 +435,27 @@ def test_enum_payload_through_arena_memory():
             Match(scrutinee=LocalRef(name="o"), arms=(
                 MatchArm(
                     variant="W", bindings=("i1",),
-                    body=(Match(scrutinee=LocalRef(name="i1"), arms=(
+                    body=Block(stmts=(Match(scrutinee=LocalRef(name="i1"), arms=(
                         MatchArm(
                             variant="N", bindings=("n1",),
-                            body=(_print_int_call(LocalRef(name="n1")),),
+                            body=Block(stmts=(_print_int_call(LocalRef(name="n1")),)),
                         ),
-                    )),),
+                    )),)),
                 ),
             )),
             Match(scrutinee=LocalRef(name="o"), arms=(
                 MatchArm(
                     variant="W", bindings=("i2",),
-                    body=(Match(scrutinee=LocalRef(name="i2"), arms=(
+                    body=Block(stmts=(Match(scrutinee=LocalRef(name="i2"), arms=(
                         MatchArm(
                             variant="N", bindings=("n2",),
-                            body=(_print_int_call(LocalRef(name="n2")),),
+                            body=Block(stmts=(_print_int_call(LocalRef(name="n2")),)),
                         ),
-                    )),),
+                    )),)),
                 ),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(inner, outer),
@@ -495,7 +497,7 @@ def test_json_parser_shape_round_trip():
     # Construct Big::V5 (the widest variant) and wrap in Result::Ok
     make = Function(
         name="make", return_type=EnumType(name="Result"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="Result", variant="Ok",
             fields=(FieldInit(name="value", value=EnumInit(
                 enum="Big", variant="V5",
@@ -505,32 +507,32 @@ def test_json_parser_shape_round_trip():
                     FieldInit(name="c", value=IntLit(type=I64Type(), value=42)),
                 ),
             )),),
-        )),),
+        )),)),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="r", type=EnumType(name="Result"), init=Call(function="make")),
             Match(scrutinee=LocalRef(name="r"), arms=(
                 MatchArm(
                     variant="Ok", bindings=("v",),
-                    body=(Match(scrutinee=LocalRef(name="v"), arms=(
+                    body=Block(stmts=(Match(scrutinee=LocalRef(name="v"), arms=(
                         MatchArm(
                             variant="V5", bindings=("aa", "bb", "cc"),
-                            body=(_print_int_call(LocalRef(name="cc")),),
+                            body=Block(stmts=(_print_int_call(LocalRef(name="cc")),)),
                         ),
                         MatchArm(
-                            variant="_", body=(_print_int_call(IntLit(type=I64Type(), value=-1)),),
+                            variant="_", body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=-1)),)),
                         ),
-                    )),),
+                    )),)),
                 ),
                 MatchArm(
                     variant="Err",
-                    body=(_print_int_call(IntLit(type=I64Type(), value=-2)),),
+                    body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=-2)),)),
                 ),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(big, result),
@@ -554,41 +556,41 @@ def test_enum_of_enum_inside_with_arena():
     ))
     make = Function(
         name="make", return_type=EnumType(name="Outer"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="Outer", variant="W",
             fields=(FieldInit(name="i", value=EnumInit(
                 enum="Inner", variant="N",
                 fields=(FieldInit(name="n", value=IntLit(type=I64Type(), value=88)),),
             )),),
-        )),),
+        )),)),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             WithArena(
                 name="a",
                 capacity=IntLit(type=I64Type(), value=4096),
-                body=(
+                body=Block(stmts=(
                     Let(name="o", type=EnumType(name="Outer"), init=Call(function="make")),
                     Match(scrutinee=LocalRef(name="o"), arms=(
                         MatchArm(
                             variant="W", bindings=("i",),
-                            body=(Match(scrutinee=LocalRef(name="i"), arms=(
+                            body=Block(stmts=(Match(scrutinee=LocalRef(name="i"), arms=(
                                 MatchArm(
                                     variant="N", bindings=("n",),
-                                    body=(_print_int_call(LocalRef(name="n")),),
+                                    body=Block(stmts=(_print_int_call(LocalRef(name="n")),)),
                                 ),
-                            )),),
+                            )),)),
                         ),
                         MatchArm(
                             variant="E",
-                            body=(_print_int_call(IntLit(type=I64Type(), value=-1)),),
+                            body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=-1)),)),
                         ),
                     )),
-                ),
+                )),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(inner, outer),
@@ -612,21 +614,21 @@ def test_enum_of_enum_via_param():
         name="inspect",
         params=(Param(name="o", type=EnumType(name="Outer")),),
         return_type=I64Type(),
-        body=(Match(scrutinee=ParamRef(name="o"), arms=(
+        body=Block(stmts=(Match(scrutinee=ParamRef(name="o"), arms=(
             MatchArm(
                 variant="W", bindings=("i",),
-                body=(Match(scrutinee=LocalRef(name="i"), arms=(
+                body=Block(stmts=(Match(scrutinee=LocalRef(name="i"), arms=(
                     MatchArm(
                         variant="N", bindings=("n",),
-                        body=(ReturnExpr(value=LocalRef(name="n")),),
+                        body=Block(stmts=(ReturnExpr(value=LocalRef(name="n")),)),
                     ),
-                )),),
+                )),)),
             ),
-        )),),
+        )),)),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="o", type=EnumType(name="Outer"), init=EnumInit(
                 enum="Outer", variant="W",
                 fields=(FieldInit(name="i", value=EnumInit(
@@ -636,7 +638,7 @@ def test_enum_of_enum_via_param():
             )),
             _print_int_call(Call(function="inspect", args=(LocalRef(name="o"),))),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(inner, outer),
@@ -661,10 +663,10 @@ def test_enum_round_trip_through_i8_ptr():
     ))
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             WithArena(
                 name="a", capacity=IntLit(type=I64Type(), value=4096),
-                body=(
+                body=Block(stmts=(
                     # Allocate a buffer big enough for one Outer
                     Let(name="buf", type=I8PtrType(), init=Call(
                         function="mem.arena.alloc",
@@ -686,18 +688,18 @@ def test_enum_round_trip_through_i8_ptr():
                     Match(scrutinee=LocalRef(name="loaded"), arms=(
                         MatchArm(
                             variant="W", bindings=("i",),
-                            body=(Match(scrutinee=LocalRef(name="i"), arms=(
+                            body=Block(stmts=(Match(scrutinee=LocalRef(name="i"), arms=(
                                 MatchArm(
                                     variant="N", bindings=("n",),
-                                    body=(_print_int_call(LocalRef(name="n")),),
+                                    body=Block(stmts=(_print_int_call(LocalRef(name="n")),)),
                                 ),
-                            )),),
+                            )),)),
                         ),
                     )),
-                ),
+                )),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,),
@@ -724,14 +726,14 @@ def test_try_happy_path_extracts_payload():
     maybe = _maybe_enum()
     inner_call = Function(
         name="get_some", return_type=EnumType(name="Maybe"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="Maybe", variant="Some",
             fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=42)),),
-        )),),
+        )),)),
     )
     use = Function(
         name="use_it", return_type=EnumType(name="Maybe"),
-        body=(
+        body=Block(stmts=(
             Let(name="v", type=I64Type(), init=TryExpr(value=Call(function="get_some"))),
             ReturnExpr(value=EnumInit(
                 enum="Maybe", variant="Some",
@@ -741,20 +743,20 @@ def test_try_happy_path_extracts_payload():
                     rhs=IntLit(type=I64Type(), value=1),
                 )),),
             )),
-        ),
+        )),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="r", type=EnumType(name="Maybe"), init=Call(function="use_it")),
             Match(scrutinee=LocalRef(name="r"), arms=(
                 MatchArm(variant="Some", bindings=("v",),
-                         body=(_print_int_call(LocalRef(name="v")),)),
+                         body=Block(stmts=(_print_int_call(LocalRef(name="v")),))),
                 MatchArm(variant="None",
-                         body=(_print_int_call(IntLit(type=I64Type(), value=-1)),)),
+                         body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=-1)),))),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(maybe,),
@@ -770,31 +772,31 @@ def test_try_sad_path_propagates():
     maybe = _maybe_enum()
     get_none = Function(
         name="get_none", return_type=EnumType(name="Maybe"),
-        body=(ReturnExpr(value=EnumInit(enum="Maybe", variant="None")),),
+        body=Block(stmts=(ReturnExpr(value=EnumInit(enum="Maybe", variant="None")),)),
     )
     use = Function(
         name="use_it", return_type=EnumType(name="Maybe"),
-        body=(
+        body=Block(stmts=(
             Let(name="v", type=I64Type(), init=TryExpr(value=Call(function="get_none"))),
             # Unreachable — the ? above propagates None back up.
             ReturnExpr(value=EnumInit(
                 enum="Maybe", variant="Some",
                 fields=(FieldInit(name="value", value=LocalRef(name="v")),),
             )),
-        ),
+        )),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="r", type=EnumType(name="Maybe"), init=Call(function="use_it")),
             Match(scrutinee=LocalRef(name="r"), arms=(
                 MatchArm(variant="Some", bindings=("v",),
-                         body=(_print_int_call(LocalRef(name="v")),)),
+                         body=Block(stmts=(_print_int_call(LocalRef(name="v")),))),
                 MatchArm(variant="None",
-                         body=(_print_int_call(IntLit(type=I64Type(), value=-99)),)),
+                         body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=-99)),))),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(maybe,),
@@ -817,41 +819,41 @@ def test_try_on_result_carrying_enum_payload():
     ))
     make_ok = Function(
         name="make_ok", return_type=EnumType(name="R"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="R", variant="Ok",
             fields=(FieldInit(name="value", value=EnumInit(
                 enum="Inner", variant="N",
                 fields=(FieldInit(name="n", value=IntLit(type=I64Type(), value=77)),),
             )),),
-        )),),
+        )),)),
     )
     use = Function(
         name="use_it", return_type=EnumType(name="R"),
-        body=(
+        body=Block(stmts=(
             Let(name="i", type=EnumType(name="Inner"),
                 init=TryExpr(value=Call(function="make_ok"))),
             ReturnExpr(value=EnumInit(
                 enum="R", variant="Ok",
                 fields=(FieldInit(name="value", value=LocalRef(name="i")),),
             )),
-        ),
+        )),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="r", type=EnumType(name="R"), init=Call(function="use_it")),
             Match(scrutinee=LocalRef(name="r"), arms=(
-                MatchArm(variant="Ok", bindings=("v",), body=(
+                MatchArm(variant="Ok", bindings=("v",), body=Block(stmts=(
                     Match(scrutinee=LocalRef(name="v"), arms=(
                         MatchArm(variant="N", bindings=("n",),
-                                 body=(_print_int_call(LocalRef(name="n")),)),
+                                 body=Block(stmts=(_print_int_call(LocalRef(name="n")),))),
                     )),
-                )),
+                ))),
                 MatchArm(variant="Err",
-                         body=(_print_int_call(IntLit(type=I64Type(), value=-1)),)),
+                         body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=-1)),))),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(inner, result),
@@ -871,18 +873,18 @@ def test_try_rejects_ineligible_enum():
     ))
     make = Function(
         name="make", return_type=EnumType(name="Bad"),
-        body=(ReturnExpr(value=EnumInit(enum="Bad", variant="A")),),
+        body=Block(stmts=(ReturnExpr(value=EnumInit(enum="Bad", variant="A")),)),
     )
     use = Function(
         name="use_it", return_type=EnumType(name="Bad"),
-        body=(
+        body=Block(stmts=(
             ExprStmt(value=TryExpr(value=Call(function="make"))),
             ReturnExpr(value=EnumInit(enum="Bad", variant="A")),
-        ),
+        )),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+        body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(bad,),
@@ -901,21 +903,21 @@ def test_try_rejects_mismatched_return_type():
     ))
     make = Function(
         name="make", return_type=EnumType(name="R"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="R", variant="Ok",
             fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=1)),),
-        )),),
+        )),)),
     )
     bad_use = Function(
         name="bad_use", return_type=EnumType(name="Maybe"),
-        body=(
+        body=Block(stmts=(
             Let(name="v", type=I64Type(), init=TryExpr(value=Call(function="make"))),
             ReturnExpr(value=EnumInit(enum="Maybe", variant="None")),
-        ),
+        )),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+        body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(inner, other),
@@ -934,18 +936,18 @@ def test_try_sequential_first_happy_second_sad():
     maybe = _maybe_enum()
     get_some = Function(
         name="get_some", return_type=EnumType(name="Maybe"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="Maybe", variant="Some",
             fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=10)),),
-        )),),
+        )),)),
     )
     get_none = Function(
         name="get_none", return_type=EnumType(name="Maybe"),
-        body=(ReturnExpr(value=EnumInit(enum="Maybe", variant="None")),),
+        body=Block(stmts=(ReturnExpr(value=EnumInit(enum="Maybe", variant="None")),)),
     )
     use = Function(
         name="use_it", return_type=EnumType(name="Maybe"),
-        body=(
+        body=Block(stmts=(
             Let(name="a", type=I64Type(), init=TryExpr(value=Call(function="get_some"))),
             Let(name="b", type=I64Type(), init=TryExpr(value=Call(function="get_none"))),
             # Unreachable — second ? propagates None.
@@ -955,20 +957,20 @@ def test_try_sequential_first_happy_second_sad():
                     op="add", lhs=LocalRef(name="a"), rhs=LocalRef(name="b"),
                 )),),
             )),
-        ),
+        )),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="r", type=EnumType(name="Maybe"), init=Call(function="use_it")),
             Match(scrutinee=LocalRef(name="r"), arms=(
                 MatchArm(variant="Some", bindings=("v",),
-                         body=(_print_int_call(LocalRef(name="v")),)),
+                         body=Block(stmts=(_print_int_call(LocalRef(name="v")),))),
                 MatchArm(variant="None",
-                         body=(_print_int_call(IntLit(type=I64Type(), value=-1)),)),
+                         body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=-1)),))),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(maybe,),
@@ -992,7 +994,7 @@ def test_try_mid_expression_field_read():
     ))
     get_point = Function(
         name="get_point", return_type=EnumType(name="PointResult"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="PointResult", variant="Ok",
             fields=(FieldInit(name="value", value=StructInit(
                 type="Point",
@@ -1001,11 +1003,11 @@ def test_try_mid_expression_field_read():
                     FieldInit(name="y", value=IntLit(type=I64Type(), value=13)),
                 ),
             )),),
-        )),),
+        )),)),
     )
     use = Function(
         name="use_it", return_type=EnumType(name="PointResult"),
-        body=(
+        body=Block(stmts=(
             # expr?.field — no intermediate let for the struct
             Let(name="xval", type=I64Type(),
                 init=FieldRead(value=TryExpr(value=Call(function="get_point")), name="x")),
@@ -1020,14 +1022,14 @@ def test_try_mid_expression_field_read():
                     ),
                 )),),
             )),
-        ),
+        )),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             ExprStmt(value=Call(function="use_it")),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,),
@@ -1046,27 +1048,27 @@ def test_try_as_call_argument():
     maybe = _maybe_enum()
     get_some = Function(
         name="get_some", return_type=EnumType(name="Maybe"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="Maybe", variant="Some",
             fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=55)),),
-        )),),
+        )),)),
     )
     use = Function(
         name="use_it", return_type=EnumType(name="Maybe"),
-        body=(
+        body=Block(stmts=(
             _print_int_call(TryExpr(value=Call(function="get_some"))),
             ReturnExpr(value=EnumInit(
                 enum="Maybe", variant="Some",
                 fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=0)),),
             )),
-        ),
+        )),
     )
     main = Function(
         name="main", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             ExprStmt(value=Call(function="use_it")),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_INT,), externs=(_PRINTF,), enums=(maybe,),

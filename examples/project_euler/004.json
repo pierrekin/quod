@@ -30,7 +30,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_004_2", "stmts": [
         {
           "kind": "quod.let",
           "name": "rev",
@@ -73,7 +73,7 @@
               }
             }
           },
-          "body": [
+          "body": {"id": "@blk_004_1", "stmts": [
             {
               "kind": "quod.assign",
               "name": "rev",
@@ -131,7 +131,7 @@
                 }
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return_expr",
@@ -148,7 +148,7 @@
             }
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i1"
       }
@@ -156,7 +156,7 @@
     {
       "name": "largest_palindrome_product",
       "params": [],
-      "body": [
+      "body": {"id": "@blk_004_7", "stmts": [
         {
           "kind": "quod.let",
           "name": "best",
@@ -191,7 +191,7 @@
               "kind": "llvm.i32"
             }
           },
-          "body": [
+          "body": {"id": "@blk_004_6", "stmts": [
             {
               "kind": "quod.for",
               "var": "j",
@@ -209,7 +209,7 @@
                   "kind": "llvm.i32"
                 }
               },
-              "body": [
+              "body": {"id": "@blk_004_5", "stmts": [
                 {
                   "kind": "quod.let",
                   "name": "p",
@@ -256,7 +256,7 @@
                       ]
                     }
                   },
-                  "then_body": [
+                  "then_body": {"id": "@blk_004_3", "stmts": [
                     {
                       "kind": "quod.assign",
                       "name": "best",
@@ -265,12 +265,12 @@
                         "name": "p"
                       }
                     }
-                  ],
-                  "else_body": []
+                  ]},
+                  "else_body": {"id": "@blk_004_4", "stmts": []}
                 }
-              ]
+              ]}
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return_expr",
@@ -279,7 +279,7 @@
             "name": "best"
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }
@@ -287,7 +287,7 @@
     {
       "name": "main",
       "params": [],
-      "body": [
+      "body": {"id": "@blk_004_8", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -316,7 +316,7 @@
             "value": 0
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }

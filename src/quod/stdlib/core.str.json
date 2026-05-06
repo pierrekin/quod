@@ -43,7 +43,7 @@
       "return_type": {
         "kind": "llvm.i1"
       },
-      "body": [
+      "body": {"id": "@blk_core.str_3", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -66,7 +66,7 @@
               "name": "len"
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_core.str_1", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -77,8 +77,8 @@
                 "value": 0
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_core.str_2", "stmts": []}
         },
         {
           "kind": "quod.return_expr",
@@ -121,7 +121,7 @@
             ]
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -151,7 +151,7 @@
         "kind": "llvm.struct",
         "name": "core.str.String"
       },
-      "body": [
+      "body": {"id": "@blk_core.str_4", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -195,7 +195,7 @@
             ]
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -212,7 +212,7 @@
         "kind": "llvm.struct",
         "name": "core.str.String"
       },
-      "body": [
+      "body": {"id": "@blk_core.str_5", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -242,7 +242,7 @@
             ]
           }
         }
-      ],
+      ]},
       "claims": []
     }
   ]

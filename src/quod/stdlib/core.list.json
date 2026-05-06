@@ -33,7 +33,7 @@
         "name": "core.list.Slice",
         "type_args": [{"kind": "quod.type_param", "name": "T"}]
       },
-      "body": [
+      "body": {"id": "@blk_core.list_1", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -46,7 +46,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.list.slice_len",
@@ -62,7 +62,7 @@
         }
       ],
       "return_type": {"kind": "llvm.usize"},
-      "body": [
+      "body": {"id": "@blk_core.list_2", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -71,7 +71,7 @@
             "name": "len"
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.list.slice_is_empty",
@@ -87,7 +87,7 @@
         }
       ],
       "return_type": {"kind": "llvm.i1"},
-      "body": [
+      "body": {"id": "@blk_core.list_3", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -101,7 +101,7 @@
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.list.slice_get",
@@ -118,7 +118,7 @@
         {"name": "i", "type": {"kind": "llvm.usize"}}
       ],
       "return_type": {"kind": "quod.type_param", "name": "T"},
-      "body": [
+      "body": {"id": "@blk_core.list_4", "stmts": [
         {
           "kind": "quod.let",
           "name": "stride",
@@ -151,7 +151,7 @@
             "type": {"kind": "quod.type_param", "name": "T"}
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.list.slice_get_opt",
@@ -172,7 +172,7 @@
         "name": "core.option.Option",
         "type_args": [{"kind": "quod.type_param", "name": "T"}]
       },
-      "body": [
+      "body": {"id": "@blk_core.list_7", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -185,7 +185,7 @@
               "name": "len"
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_core.list_5", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -195,8 +195,8 @@
                 "variant": "None"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_core.list_6", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -244,7 +244,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.list.slice_first",
@@ -264,7 +264,7 @@
         "name": "core.option.Option",
         "type_args": [{"kind": "quod.type_param", "name": "T"}]
       },
-      "body": [
+      "body": {"id": "@blk_core.list_8", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -277,7 +277,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.list.slice_last",
@@ -297,7 +297,7 @@
         "name": "core.option.Option",
         "type_args": [{"kind": "quod.type_param", "name": "T"}]
       },
-      "body": [
+      "body": {"id": "@blk_core.list_11", "stmts": [
         {
           "kind": "quod.let",
           "name": "n",
@@ -316,7 +316,7 @@
             "lhs": {"kind": "quod.local_ref", "name": "n"},
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_core.list_9", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -326,8 +326,8 @@
                 "variant": "None"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_core.list_10", "stmts": []}
         },
         {
           "kind": "quod.return_expr",
@@ -346,7 +346,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.list.slice_sub",
@@ -368,7 +368,7 @@
         "name": "core.list.Slice",
         "type_args": [{"kind": "quod.type_param", "name": "T"}]
       },
-      "body": [
+      "body": {"id": "@blk_core.list_12", "stmts": [
         {
           "kind": "quod.let",
           "name": "stride",
@@ -419,7 +419,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.list.slice_mut_new",
@@ -433,7 +433,7 @@
         "name": "core.list.SliceMut",
         "type_args": [{"kind": "quod.type_param", "name": "T"}]
       },
-      "body": [
+      "body": {"id": "@blk_core.list_13", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -446,7 +446,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.list.slice_mut_len",
@@ -462,7 +462,7 @@
         }
       ],
       "return_type": {"kind": "llvm.usize"},
-      "body": [
+      "body": {"id": "@blk_core.list_14", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -471,7 +471,7 @@
             "name": "len"
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.list.slice_mut_is_empty",
@@ -487,7 +487,7 @@
         }
       ],
       "return_type": {"kind": "llvm.i1"},
-      "body": [
+      "body": {"id": "@blk_core.list_15", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -501,7 +501,7 @@
             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.list.slice_mut_get",
@@ -518,7 +518,7 @@
         {"name": "i", "type": {"kind": "llvm.usize"}}
       ],
       "return_type": {"kind": "quod.type_param", "name": "T"},
-      "body": [
+      "body": {"id": "@blk_core.list_16", "stmts": [
         {
           "kind": "quod.let",
           "name": "stride",
@@ -551,7 +551,7 @@
             "type": {"kind": "quod.type_param", "name": "T"}
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.list.slice_mut_set",
@@ -569,7 +569,7 @@
         {"name": "x", "type": {"kind": "quod.type_param", "name": "T"}}
       ],
       "return_type": {"kind": "llvm.void"},
-      "body": [
+      "body": {"id": "@blk_core.list_17", "stmts": [
         {
           "kind": "quod.let",
           "name": "stride",
@@ -600,7 +600,7 @@
           "value": {"kind": "llvm.param_ref", "name": "x"}
         },
         {"kind": "quod.return"}
-      ]
+      ]}
     },
     {
       "name": "core.list.slice_mut_as_slice",
@@ -620,7 +620,7 @@
         "name": "core.list.Slice",
         "type_args": [{"kind": "quod.type_param", "name": "T"}]
       },
-      "body": [
+      "body": {"id": "@blk_core.list_18", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -647,7 +647,7 @@
             ]
           }
         }
-      ]
+      ]}
     }
   ]
 }

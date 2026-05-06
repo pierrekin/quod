@@ -1,42 +1,46 @@
 {
   "constants": [
     {
-      "name": ".str.0",
+      "name": ".str.hello.0",
       "value": "hello, world\n"
     }
   ],
   "functions": [
     {
+      "id": "@fn_c_lowered_main",
       "name": "main",
       "params": [],
       "return_type": {
         "kind": "llvm.i32"
       },
-      "body": [
-        {
-          "kind": "quod.expr_stmt",
-          "value": {
-            "kind": "llvm.call",
-            "function": "printf",
-            "args": [
-              {
-                "kind": "quod.string_ref",
-                "name": ".str.0"
-              }
-            ]
+      "body": {
+        "id": "@blk_c_lowered_main_1",
+        "stmts": [
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.hello.0"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
           }
-        },
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.const_int",
-            "type": {
-              "kind": "llvm.i32"
-            },
-            "value": 0
-          }
-        }
-      ],
+        ]
+      },
       "claims": [],
       "notes": [
         "ingested from hello.c:3"
@@ -55,6 +59,71 @@
       "linkage": {
         "kind": "linkage.libc"
       }
+    }
+  ],
+  "edges": [
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_1",
+      "target": "@blk_c_lowered_main_1"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@fn_c_main",
+      "target": "@fn_c_lowered_main"
+    }
+  ],
+  "equivalences": [
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@fn_c_main",
+      "b_node_id": "@fn_c_lowered_main",
+      "justification": {
+        "kind": "family_lowering",
+        "rule_name": "identity"
+      }
+    }
+  ],
+  "structured_functions": [
+    {
+      "id": "@fn_c_main",
+      "name": "main",
+      "params": [],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_1",
+        "stmts": [
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.hello.0"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from hello.c:3"
+      ]
     }
   ]
 }

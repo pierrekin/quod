@@ -10,7 +10,7 @@
           {"name": "n",      "type": {"kind": "llvm.i64"}}
         ],
         "return_type": {"kind": "llvm.i8_ptr"},
-        "body": [
+        "body": {"id": "@blk_allocator_trait_1", "stmts": [
           {
             "kind": "quod.return_expr",
             "value": {
@@ -24,18 +24,18 @@
               ]
             }
           }
-        ]
+        ]}
       },
       {
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_allocator_trait_3", "stmts": [
           {
             "kind": "quod.with_arena",
             "name": "a",
             "capacity": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4096},
-            "body": [
+            "body": {"id": "@blk_allocator_trait_2", "stmts": [
               {
                 "kind": "quod.let",
                 "name": "buf",
@@ -63,13 +63,13 @@
                   "type": {"kind": "llvm.i32"}
                 }
               }
-            ]
+            ]}
           },
           {
             "kind": "quod.return_expr",
             "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
           }
-        ]
+        ]}
       }
     ]
   },

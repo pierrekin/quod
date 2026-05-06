@@ -14,7 +14,7 @@
       "return_type": {
         "kind": "llvm.i32"
       },
-      "body": [
+      "body": {"id": "@blk_proven_return_3", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -32,7 +32,7 @@
               "value": 0
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_proven_return_1", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -43,8 +43,8 @@
                 "value": -1
               }
             }
-          ],
-          "else_body": [
+          ]},
+          "else_body": {"id": "@blk_proven_return_2", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -63,9 +63,9 @@
                 }
               }
             }
-          ]
+          ]}
         }
-      ],
+      ]},
       "claims": [
         {
           "regime": "witness",

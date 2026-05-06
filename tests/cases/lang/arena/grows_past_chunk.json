@@ -8,7 +8,7 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": [
+        "body": {"id": "@blk_grows_past_chunk_3", "stmts": [
           {
             "kind": "quod.let",
             "name": "a",
@@ -124,7 +124,7 @@
                 "value": 1040
               }
             },
-            "then_body": [
+            "then_body": {"id": "@blk_grows_past_chunk_1", "stmts": [
               {
                 "kind": "quod.return_expr",
                 "value": {
@@ -135,8 +135,8 @@
                   "value": 0
                 }
               }
-            ],
-            "else_body": [
+            ]},
+            "else_body": {"id": "@blk_grows_past_chunk_2", "stmts": [
               {
                 "kind": "quod.return_expr",
                 "value": {
@@ -147,9 +147,9 @@
                   "value": 1
                 }
               }
-            ]
+            ]}
           }
-        ],
+        ]},
         "claims": []
       }
     ],

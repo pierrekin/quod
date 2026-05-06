@@ -403,11 +403,11 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
                 *_expr_spans(c),
                 Span(") {", "punct"),
             ))
-            for s in tb:
+            for s in tb.stmts:
                 yield from _stmt_lines(s, indent + 2)
-            if eb:
+            if eb.stmts:
                 yield Line(None, indent, (Span("} else {", "punct"),))
-                for s in eb:
+                for s in eb.stmts:
                     yield from _stmt_lines(s, indent + 2)
             yield Line(None, indent, (Span("}", "punct"),))
         case Let(name=n, type=ty, init=init):
@@ -452,7 +452,7 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
                 *_expr_spans(c),
                 Span(") {", "punct"),
             ))
-            for s in body:
+            for s in body.stmts:
                 yield from _stmt_lines(s, indent + 2)
             yield Line(None, indent, (Span("}", "punct"),))
         case For(var=v, type=ty, lo=lo, hi=hi, body=body):
@@ -466,7 +466,7 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
                 *_expr_spans(hi),
                 Span(" {", "punct"),
             ))
-            for s in body:
+            for s in body.stmts:
                 yield from _stmt_lines(s, indent + 2)
             yield Line(None, indent, (Span("}", "punct"),))
         case ExprStmt(value=v):
@@ -480,7 +480,7 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
                 *_expr_spans(cap),
                 Span(") {", "punct"),
             ))
-            for s in body:
+            for s in body.stmts:
                 yield from _stmt_lines(s, indent + 2)
             yield Line(None, indent, (Span("}", "punct"),))
         case Match(scrutinee=scrut, arms=arms):
@@ -501,7 +501,7 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
                 head.extend((Span(" ", "ws"), Span("=>", "op"),
                              Span(" {", "punct")))
                 yield Line(None, indent + 2, tuple(head))
-                for s in arm.body:
+                for s in arm.body.stmts:
                     yield from _stmt_lines(s, indent + 4)
                 yield Line(None, indent + 2, (Span("}", "punct"),))
             yield Line(None, indent, (Span("}", "punct"),))
@@ -673,7 +673,7 @@ def format_function_lines(fn: Function, indent: int = 0) -> Iterator[Line]:
         yield Line(None, indent, (Span(f"// {note}", "comment"),))
     header = (*function_signature_spans(fn), Span(" {", "punct"))
     yield Line(fn, indent, header, meta=_function_meta(fn))
-    for s in fn.body:
+    for s in fn.body.stmts:
         yield from _stmt_lines(s, indent + 2)
     yield Line(None, indent, (Span("}", "punct"),))
 

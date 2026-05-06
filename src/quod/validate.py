@@ -298,7 +298,7 @@ def _check_function(ctx: _Ctx, fn: Function) -> None:
     _collect_locals(ctx, fn.body)
 
     # Main walk: check each statement against the populated scope.
-    for stmt in fn.body:
+    for stmt in fn.body.stmts:
         _check_stmt(ctx, stmt)
 
     # Reset (paranoid hygiene; callers should always set these afresh).
@@ -312,8 +312,8 @@ def _collect_locals(ctx: _Ctx, body) -> None:
     """Walk every Let/For in the body, populating `ctx.locals`.
     Emits LOCAL_DECLARED_TWICE / LOCAL_SHADOWS_PARAM / FOR_VAR_CONFLICT
     when a name conflicts. Match-arm bindings are NOT collected here —
-    they're scoped to their arm body."""
-    for s in body:
+    they're scoped to their arm body. `body` is a `Block`."""
+    for s in body.stmts:
         match s:
             case Let(name=name, type=ty):
                 _declare_local(ctx, name, ty, kind="let")
@@ -437,22 +437,22 @@ def _check_stmt(ctx: _Ctx, stmt) -> None:
                          f"of struct {tname!r}")
         case If(cond=cond, then_body=t_body, else_body=e_body):
             _check_expr(ctx, cond)
-            for s in t_body:
+            for s in t_body.stmts:
                 _check_stmt(ctx, s)
-            for s in e_body:
+            for s in e_body.stmts:
                 _check_stmt(ctx, s)
         case While(cond=cond, body=body):
             _check_expr(ctx, cond)
-            for s in body:
+            for s in body.stmts:
                 _check_stmt(ctx, s)
         case For(lo=lo, hi=hi, body=body):
             _check_expr(ctx, lo)
             _check_expr(ctx, hi)
-            for s in body:
+            for s in body.stmts:
                 _check_stmt(ctx, s)
         case WithArena(capacity=cap, body=body):
             _check_expr(ctx, cap)
-            for s in body:
+            for s in body.stmts:
                 _check_stmt(ctx, s)
         case Match():
             _check_match(ctx, stmt)
@@ -507,7 +507,7 @@ def _check_match(ctx: _Ctx, m: Match) -> None:
 
         ctx.arm_bindings.append(arm_scope)
         try:
-            for s in arm.body:
+            for s in arm.body.stmts:
                 _check_stmt(ctx, s)
         finally:
             ctx.arm_bindings.pop()

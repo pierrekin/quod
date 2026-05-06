@@ -46,7 +46,7 @@ def test_wire_substitutes_wirables_in_function_signatures():
     # No TypeParamRef("A") should remain in the body — A was substituted
     # to mem.arena.Arena. Walk via model_dump and assert the dispatch
     # type for at least one trait_call is the substituted Arena.
-    body_dump = json.dumps([s.model_dump(mode="json") for s in list_new.body])
+    body_dump = json.dumps([s.model_dump(mode="json") for s in list_new.body.stmts])
     assert '"name": "A"' not in body_dump.replace('"name": "alloc"', ""), \
         "wirable A should have been substituted everywhere in the body"
     assert "mem.arena.Arena" in body_dump, \

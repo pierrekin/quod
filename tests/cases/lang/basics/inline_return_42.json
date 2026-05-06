@@ -5,7 +5,7 @@
       {
         "name": "main",
         "params": [],
-        "body": [
+        "body": {"id": "@blk_inline_return_42_1", "stmts": [
           {
             "kind": "quod.return_expr",
             "value": {
@@ -16,7 +16,7 @@
               "value": 42
             }
           }
-        ],
+        ]},
         "claims": [],
         "return_type": {
           "kind": "llvm.i32"

@@ -23,7 +23,7 @@
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_json_roundtrip_number_9", "stmts": [
           {
             "kind": "quod.let",
             "name": "a",
@@ -171,7 +171,7 @@
               {
                 "variant": "Some",
                 "bindings": ["v_out"],
-                "body": [
+                "body": {"id": "@blk_json_roundtrip_number_7", "stmts": [
                   {
                     "kind": "quod.match",
                     "scrutinee": {"kind": "quod.local_ref", "name": "v_out"},
@@ -179,7 +179,7 @@
                       {
                         "variant": "Number",
                         "bindings": ["n"],
-                        "body": [
+                        "body": {"id": "@blk_json_roundtrip_number_1", "stmts": [
                           {
                             "kind": "quod.return_expr",
                             "value": {
@@ -188,21 +188,21 @@
                               "target": {"kind": "llvm.i32"}
                             }
                           }
-                        ]
+                        ]}
                       },
-                      {"variant": "Null", "bindings": [], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}]},
-                      {"variant": "Bool", "bindings": ["_b"], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 2}}]},
-                      {"variant": "String", "bindings": ["_p", "_l"], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 3}}]},
-                      {"variant": "Array", "bindings": ["_i"], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 4}}]},
-                      {"variant": "Object", "bindings": ["_k", "_v"], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 5}}]}
+                      {"variant": "Null", "bindings": [], "body": {"id": "@blk_json_roundtrip_number_2", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}]}},
+                      {"variant": "Bool", "bindings": ["_b"], "body": {"id": "@blk_json_roundtrip_number_3", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 2}}]}},
+                      {"variant": "String", "bindings": ["_p", "_l"], "body": {"id": "@blk_json_roundtrip_number_4", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 3}}]}},
+                      {"variant": "Array", "bindings": ["_i"], "body": {"id": "@blk_json_roundtrip_number_5", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 4}}]}},
+                      {"variant": "Object", "bindings": ["_k", "_v"], "body": {"id": "@blk_json_roundtrip_number_6", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 5}}]}}
                     ]
                   }
-                ]
+                ]}
               },
-              {"variant": "None", "bindings": [], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 99}}]}
+              {"variant": "None", "bindings": [], "body": {"id": "@blk_json_roundtrip_number_8", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 99}}]}}
             ]
           }
-        ]
+        ]}
       }
     ]
   },

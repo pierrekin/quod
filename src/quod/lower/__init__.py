@@ -25,6 +25,7 @@ from quod.validate import validate_or_raise
 from quod.model import (
     Assign,
     BinOp,
+    Block,
     Call,
     EnumDef,
     EnumInit,
@@ -637,7 +638,7 @@ def _lower_short_circuit(builder: ir.IRBuilder, lhs, rhs, *, kind: str, lower) -
 
 
 def _collect_local_bindings(
-    stmts,
+    body,
     struct_tys: dict[str, "ir.IdentifiedStructType"],
     enum_tys: dict[str, "ir.IdentifiedStructType"],
     enum_defs: dict[str, EnumDef],
@@ -647,12 +648,13 @@ def _collect_local_bindings(
     the top of the function's entry block, the canonical mem2reg layout:
     `alloca` lives in entry; `store` happens at the binding point. Names must
     be unique within the function (no shadowing — match arms with the same
-    binding name across arms collide too; rename them differently for now)."""
+    binding name across arms collide too; rename them differently for now).
+    `body` is a `Block`."""
     out: list[tuple[str, ir.Type]] = []
     seen: set[str] = set()
 
-    def visit(body) -> None:
-        for s in body:
+    def visit(blk) -> None:
+        for s in blk.stmts:
             match s:
                 case Let(name=name, type=ty):
                     assert name not in seen, (
@@ -683,7 +685,7 @@ def _collect_local_bindings(
                     # any nested Let / For / etc.
                     for arm in arms:
                         visit(arm.body)
-    visit(stmts)
+    visit(body)
     return out
 
 
@@ -716,7 +718,7 @@ def _lower_stmt(
         )
 
     def lower_body(body):
-        for s in body:
+        for s in body.stmts:
             _lower_stmt(
                 builder, s, llvm_fn=llvm_fn, params=params, locals_=locals_,
                 entry_bb=entry_bb, constants=constants, module=module,
@@ -830,7 +832,7 @@ def _lower_stmt(
                 return merge_bb
 
             builder.position_at_end(then_bb)
-            for s in then_body:
+            for s in then_body.stmts:
                 _lower_stmt(
                     builder, s, llvm_fn=llvm_fn, params=params, locals_=locals_,
                     entry_bb=entry_bb, constants=constants, module=module,
@@ -843,7 +845,7 @@ def _lower_stmt(
                 builder.branch(ensure_merge())
 
             builder.position_at_end(else_bb)
-            for s in else_body:
+            for s in else_body.stmts:
                 _lower_stmt(
                     builder, s, llvm_fn=llvm_fn, params=params, locals_=locals_,
                     entry_bb=entry_bb, constants=constants, module=module,
@@ -952,7 +954,7 @@ def _lower_stmt(
                 return end_bb
 
             def lower_arm_body(arm_obj):
-                for s in arm_obj.body:
+                for s in arm_obj.body.stmts:
                     _lower_stmt(
                         builder, s, llvm_fn=llvm_fn, params=params, locals_=locals_,
                         entry_bb=entry_bb, constants=constants, module=module,
@@ -1002,6 +1004,15 @@ def _lower_stmt(
             if end_bb is not None:
                 builder.position_at_end(end_bb)
             return
+    # `c.*` extension nodes (CStyleFor, etc.) reach lower.py only when a
+    # layer-B program slipped past the c-family lowering pass. Surface a
+    # readable error pointing at the right place to fix it.
+    if getattr(stmt, "kind", None) and str(stmt.kind).startswith("c."):
+        raise ValueError(
+            f"lower.py refuses {stmt.kind!r}: layer C must be pure core "
+            f"quod. Run the c-family lowering pass (lower/c_family.py, "
+            f"step 5 of the C-ingest redesign) before lower.py."
+        )
     raise ValueError(f"unhandled stmt: {stmt!r}")
 
 
@@ -1138,6 +1149,16 @@ def _lower_function_body(
     enum_defs: dict[str, EnumDef],
     enum_tys: dict[str, "ir.IdentifiedStructType"],
 ) -> None:
+    # lower.py operates on layer C only. Family wrappers and family-
+    # extension statements must be stripped/lowered by the c-family
+    # lowering pass first; refuse here rather than crash deep in the
+    # statement walker. See .scratch/c-ingest/00-overview.md.
+    if not isinstance(fn.body, Block):
+        raise ValueError(
+            f"function {fn.name!r} body is wrapped in {type(fn.body).__name__!r} — "
+            f"layer C must be pure core. Run the c-family lowering pass "
+            f"(lower/c_family.py, step 5) before lower.py."
+        )
     llvm_fn = module.globals[fn.name]
     for arg, p in zip(llvm_fn.args, fn.params):
         arg.name = p.name
@@ -1164,7 +1185,7 @@ def _lower_function_body(
     for claim in entry_claims:
         _lower_claim(builder, claim, params, llvm_fn, module, overrides=overrides)
 
-    for stmt in fn.body:
+    for stmt in fn.body.stmts:
         _lower_stmt(
             builder, stmt,
             llvm_fn=llvm_fn, params=params, locals_=locals_, entry_bb=entry_bb,
@@ -1217,7 +1238,7 @@ def _desugar_with_arena(program: Program) -> Program:
     if not has_block:
         return program
 
-    from .model import Import
+    from quod.model import Import
     if not any(imp.module == _ARENA_MODULE for imp in program.imports):
         program = program.model_copy(update={
             "imports": program.imports + (Import(module=_ARENA_MODULE),),
@@ -1229,13 +1250,14 @@ def _desugar_with_arena(program: Program) -> Program:
         # Per-function counter for `__arena_retval_N` locals introduced
         # by hoisting return-expr values across an arena drop.
         next_id = [0]
-        new_body = _desugar_stmts(fn.body, fn.return_type, next_id)
+        new_stmts = _desugar_stmts(fn.body.stmts, fn.return_type, next_id)
+        new_body = fn.body.model_copy(update={"stmts": new_stmts})
         new_functions.append(fn.model_copy(update={"body": new_body}))
     return program.model_copy(update={"functions": tuple(new_functions)})
 
 
 def _function_uses_with_arena(fn: Function) -> bool:
-    return any(_stmt_contains_with_arena(s) for s in fn.body)
+    return any(_stmt_contains_with_arena(s) for s in fn.body.stmts)
 
 
 def _stmt_contains_with_arena(s) -> bool:
@@ -1243,9 +1265,9 @@ def _stmt_contains_with_arena(s) -> bool:
         case WithArena():
             return True
         case If(then_body=t, else_body=e):
-            return any(_stmt_contains_with_arena(x) for x in (*t, *e))
+            return any(_stmt_contains_with_arena(x) for x in (*t.stmts, *e.stmts))
         case While(body=b) | For(body=b):
-            return any(_stmt_contains_with_arena(x) for x in b)
+            return any(_stmt_contains_with_arena(x) for x in b.stmts)
     return False
 
 
@@ -1254,7 +1276,7 @@ def _desugar_stmts(stmts, return_type, next_id) -> tuple:
     for s in stmts:
         match s:
             case WithArena(name=name, capacity=cap, body=body):
-                inner = _desugar_stmts(body, return_type, next_id)
+                inner = _desugar_stmts(body.stmts, return_type, next_id)
                 drop_stmt = ExprStmt(value=Call(
                     function=_ARENA_DROP, args=(LocalRef(name=name),),
                 ))
@@ -1276,16 +1298,24 @@ def _desugar_stmts(stmts, return_type, next_id) -> tuple:
                 out.append(drop_stmt)
             case If(then_body=t, else_body=e):
                 out.append(s.model_copy(update={
-                    "then_body": _desugar_stmts(t, return_type, next_id),
-                    "else_body": _desugar_stmts(e, return_type, next_id),
+                    "then_body": t.model_copy(update={
+                        "stmts": _desugar_stmts(t.stmts, return_type, next_id),
+                    }),
+                    "else_body": e.model_copy(update={
+                        "stmts": _desugar_stmts(e.stmts, return_type, next_id),
+                    }),
                 }))
             case While(body=b):
                 out.append(s.model_copy(update={
-                    "body": _desugar_stmts(b, return_type, next_id),
+                    "body": b.model_copy(update={
+                        "stmts": _desugar_stmts(b.stmts, return_type, next_id),
+                    }),
                 }))
             case For(body=b):
                 out.append(s.model_copy(update={
-                    "body": _desugar_stmts(b, return_type, next_id),
+                    "body": b.model_copy(update={
+                        "stmts": _desugar_stmts(b.stmts, return_type, next_id),
+                    }),
                 }))
             case _:
                 out.append(s)
@@ -1324,17 +1354,37 @@ def _prepend_drop_before_returns(stmts, drop_stmt, return_type, next_id) -> tupl
                 out.append(s)
             case If(then_body=t, else_body=e):
                 out.append(s.model_copy(update={
-                    "then_body": _prepend_drop_before_returns(t, drop_stmt, return_type, next_id),
-                    "else_body": _prepend_drop_before_returns(e, drop_stmt, return_type, next_id),
+                    "then_body": t.model_copy(update={
+                        "stmts": _prepend_drop_before_returns(t.stmts, drop_stmt, return_type, next_id),
+                    }),
+                    "else_body": e.model_copy(update={
+                        "stmts": _prepend_drop_before_returns(e.stmts, drop_stmt, return_type, next_id),
+                    }),
                 }))
             case While(body=b):
                 out.append(s.model_copy(update={
-                    "body": _prepend_drop_before_returns(b, drop_stmt, return_type, next_id),
+                    "body": b.model_copy(update={
+                        "stmts": _prepend_drop_before_returns(b.stmts, drop_stmt, return_type, next_id),
+                    }),
                 }))
             case For(body=b):
                 out.append(s.model_copy(update={
-                    "body": _prepend_drop_before_returns(b, drop_stmt, return_type, next_id),
+                    "body": b.model_copy(update={
+                        "stmts": _prepend_drop_before_returns(b.stmts, drop_stmt, return_type, next_id),
+                    }),
                 }))
+            case Match(arms=arms):
+                new_arms = tuple(
+                    arm.model_copy(update={
+                        "body": arm.body.model_copy(update={
+                            "stmts": _prepend_drop_before_returns(
+                                arm.body.stmts, drop_stmt, return_type, next_id,
+                            ),
+                        }),
+                    })
+                    for arm in arms
+                )
+                out.append(s.model_copy(update={"arms": new_arms}))
             case _:
                 out.append(s)
     return tuple(out)
@@ -1621,6 +1671,35 @@ def has_function(program: Program, name: str) -> bool:
     return any(fn.name == name for fn in program.functions)
 
 
+def _refuse_non_core_layer(program: Program) -> None:
+    """Refuse layer-B (`c.*` extension) constructs at the build entry
+    point. lower.py and its supporting validators (validate.py,
+    monomorphize.py, …) operate on layer C — pure core quod. The
+    c-family lowering pass strips wrappers and rewrites extension
+    statements before this point; if any survive, surface a clear error
+    naming the offending kind so the fix is obvious.
+
+    See `.scratch/c-ingest/00-overview.md` for the layer model.
+    """
+    for fn in program.functions:
+        if not isinstance(fn.body, Block):
+            raise ValueError(
+                f"function {fn.name!r}: body is wrapped in "
+                f"{type(fn.body).__name__!r} — layer C must be pure core. "
+                f"Run the c-family lowering pass (lower/c_family.py, "
+                f"step 5 of the C-ingest redesign) before building."
+            )
+        for stmt in fn.body.stmts:
+            kind = getattr(stmt, "kind", None)
+            if kind and str(kind).startswith("c."):
+                raise ValueError(
+                    f"function {fn.name!r}: statement {kind!r} is a "
+                    f"`c.*` family extension — layer C must be pure core. "
+                    f"Run the c-family lowering pass (lower/c_family.py, "
+                    f"step 5 of the C-ingest redesign) before building."
+                )
+
+
 def prepare_program(
     program: Program,
     *,
@@ -1647,6 +1726,8 @@ def prepare_program(
     succeeds, the program is semantically valid; build failures from
     here on are LLVM/linker concerns, not language correctness.
     """
+    _refuse_non_core_layer(program)
+
     if "alloc" in disabled_tiers:
         for fn in program.functions:
             if _function_uses_with_arena(fn):
@@ -1658,7 +1739,7 @@ def prepare_program(
     program = resolve_imports(program, disabled_tiers=disabled_tiers)
     validate_or_raise(program)
 
-    from .monomorphize import monomorphize as _monomorphize
+    from quod.monomorphize import monomorphize as _monomorphize
     program = _monomorphize(program)
     validate_or_raise(program)
 

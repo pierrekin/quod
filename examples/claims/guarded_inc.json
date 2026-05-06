@@ -11,7 +11,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_guarded_inc_3", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -29,7 +29,7 @@
               }
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_guarded_inc_1", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -40,8 +40,8 @@
                 }
               }
             }
-          ],
-          "else_body": [
+          ]},
+          "else_body": {"id": "@blk_guarded_inc_2", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -60,9 +60,9 @@
                 }
               }
             }
-          ]
+          ]}
         }
-      ],
+      ]},
       "claims": [
         {
           "kind": "non_negative",

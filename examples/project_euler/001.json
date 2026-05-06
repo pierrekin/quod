@@ -36,7 +36,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_001_1", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -63,7 +63,7 @@
             }
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i1"
       }
@@ -71,7 +71,7 @@
     {
       "name": "main",
       "params": [],
-      "body": [
+      "body": {"id": "@blk_001_5", "stmts": [
         {
           "kind": "quod.let",
           "name": "sum",
@@ -106,7 +106,7 @@
               "kind": "llvm.i32"
             }
           },
-          "body": [
+          "body": {"id": "@blk_001_4", "stmts": [
             {
               "kind": "quod.if",
               "cond": {
@@ -146,7 +146,7 @@
                   ]
                 }
               },
-              "then_body": [
+              "then_body": {"id": "@blk_001_2", "stmts": [
                 {
                   "kind": "quod.assign",
                   "name": "sum",
@@ -163,10 +163,10 @@
                     }
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_001_3", "stmts": []}
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.expr_stmt",
@@ -195,7 +195,7 @@
             "value": 0
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }

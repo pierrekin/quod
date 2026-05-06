@@ -30,7 +30,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_007_10", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -48,7 +48,7 @@
               }
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_007_1", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -59,8 +59,8 @@
                 }
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_007_2", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -79,7 +79,7 @@
               }
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_007_3", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -90,8 +90,8 @@
                 }
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_007_4", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -121,7 +121,7 @@
               }
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_007_5", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -132,8 +132,8 @@
                 }
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_007_6", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -171,7 +171,7 @@
               "name": "n"
             }
           },
-          "body": [
+          "body": {"id": "@blk_007_9", "stmts": [
             {
               "kind": "quod.if",
               "cond": {
@@ -197,7 +197,7 @@
                   }
                 }
               },
-              "then_body": [
+              "then_body": {"id": "@blk_007_7", "stmts": [
                 {
                   "kind": "quod.return_expr",
                   "value": {
@@ -208,8 +208,8 @@
                     }
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_007_8", "stmts": []}
             },
             {
               "kind": "quod.assign",
@@ -230,7 +230,7 @@
                 }
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return_expr",
@@ -242,7 +242,7 @@
             }
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i1"
       }
@@ -257,7 +257,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_007_14", "stmts": [
         {
           "kind": "quod.let",
           "name": "count",
@@ -300,7 +300,7 @@
               "name": "k"
             }
           },
-          "body": [
+          "body": {"id": "@blk_007_13", "stmts": [
             {
               "kind": "quod.assign",
               "name": "candidate",
@@ -332,7 +332,7 @@
                   }
                 ]
               },
-              "then_body": [
+              "then_body": {"id": "@blk_007_11", "stmts": [
                 {
                   "kind": "quod.assign",
                   "name": "count",
@@ -352,10 +352,10 @@
                     }
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_007_12", "stmts": []}
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return_expr",
@@ -364,7 +364,7 @@
             "name": "candidate"
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }
@@ -372,7 +372,7 @@
     {
       "name": "main",
       "params": [],
-      "body": [
+      "body": {"id": "@blk_007_15", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -409,7 +409,7 @@
             "value": 0
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }

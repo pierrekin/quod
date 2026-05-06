@@ -9,7 +9,7 @@
         { "name": "b", "type": { "kind": "llvm.i32" } }
       ],
       "return_type": { "kind": "llvm.i32" },
-      "body": [
+      "body": {"id": "@blk_after_1", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -19,7 +19,7 @@
             "rhs": { "kind": "llvm.param_ref", "name": "b" }
           }
         }
-      ],
+      ]},
       "claims": []
     }
   ]

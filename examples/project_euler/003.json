@@ -30,7 +30,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_003_4", "stmts": [
         {
           "kind": "quod.let",
           "name": "n",
@@ -78,7 +78,7 @@
               "name": "n"
             }
           },
-          "body": [
+          "body": {"id": "@blk_003_3", "stmts": [
             {
               "kind": "quod.if",
               "cond": {
@@ -104,7 +104,7 @@
                   }
                 }
               },
-              "then_body": [
+              "then_body": {"id": "@blk_003_1", "stmts": [
                 {
                   "kind": "quod.assign",
                   "name": "n",
@@ -121,8 +121,8 @@
                     }
                   }
                 }
-              ],
-              "else_body": [
+              ]},
+              "else_body": {"id": "@blk_003_2", "stmts": [
                 {
                   "kind": "quod.assign",
                   "name": "factor",
@@ -142,9 +142,9 @@
                     }
                   }
                 }
-              ]
+              ]}
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return_expr",
@@ -153,7 +153,7 @@
             "name": "n"
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i64"
       }
@@ -161,7 +161,7 @@
     {
       "name": "main",
       "params": [],
-      "body": [
+      "body": {"id": "@blk_003_5", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -198,7 +198,7 @@
             "value": 0
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }

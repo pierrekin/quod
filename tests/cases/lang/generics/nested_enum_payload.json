@@ -20,7 +20,7 @@
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_nested_enum_payload_4", "stmts": [
           {
             "kind": "quod.let",
             "name": "o",
@@ -51,20 +51,20 @@
               {
                 "variant": "Wrap",
                 "bindings": ["i"],
-                "body": [
+                "body": {"id": "@blk_nested_enum_payload_3", "stmts": [
                   {
                     "kind": "quod.match",
                     "scrutinee": {"kind": "quod.local_ref", "name": "i"},
                     "arms": [
-                      {"variant": "A", "bindings": [], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}]},
-                      {"variant": "B", "bindings": ["x"], "body": [{"kind": "quod.return_expr", "value": {"kind": "quod.local_ref", "name": "x"}}]}
+                      {"variant": "A", "bindings": [], "body": {"id": "@blk_nested_enum_payload_1", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}]}},
+                      {"variant": "B", "bindings": ["x"], "body": {"id": "@blk_nested_enum_payload_2", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "quod.local_ref", "name": "x"}}]}}
                     ]
                   }
-                ]
+                ]}
               }
             ]
           }
-        ]
+        ]}
       }
     ]
   },

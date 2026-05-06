@@ -1,14 +1,36 @@
-"""C source → quod Program (v1: int-typed subset).
+"""C source → quod Program (staged-lift v3).
 
-Walks a libclang AST and emits quod model nodes. The supported subset is
-deliberately narrow: int-only types, arithmetic / comparison / boolean
-binops, if / while / return, calls between ingested functions, locals via
-plain int declarations. Anything outside the subset raises IngestError
-with the offending source location.
+Walks a libclang AST once and emits **two parallel subtrees**:
 
-Macros / #include / #ifdef are handled by clang's preprocessor before we
-see the AST — we ingest one build configuration of the source. We filter
-cursors by source file so headers don't pollute the program.
+  - Layer A (`Program.source_units`): the original C preserved as quod
+    nodes (`CUnit`, `CFn`, `CFor`, `CVarDecl`, …). Inert — no codegen,
+    no validation — but addressable by stable IDs so future analyses
+    can reach the source-form.
+  - Layer B (`Program.functions`): the c-like-quod transcription. Mostly
+    core nodes, with `c.*` family extensions where core can't represent
+    a construct (e.g. C `for` becomes `CStyleFor`).
+
+The two subtrees are paired by `ProvenanceEdge`s and `Equivalence`
+claims (see `Program.edges`, `Program.equivalences`). At step 4 we emit
+function-level edges with `regime=axiom` — the auto-checker for
+transcription faithfulness is future work; the equivalence claim today
+is the ingester's promise that the lift is structural.
+
+Step 5 implements the c-family lowering pass (`lower/c_family.py`) that
+strips `c.*` extensions to produce layer C. Until then a Program
+containing `CStyleFor` cannot be lowered to LLVM IR — `lower.py`
+refuses with a clear error.
+
+The supported C subset stays deliberately narrow: int-only types,
+arithmetic / comparison / boolean binops, if / while / for / return,
+calls between ingested functions, locals via plain int declarations.
+For-loops require all four slots populated (`for (init; cond; inc) body`)
+in v3; sparse forms refuse. Anything outside raises IngestError with
+the offending source location.
+
+Macros / #include / #ifdef are handled by clang's preprocessor before
+we see the AST — we ingest one build configuration of the source. We
+filter cursors by source file so headers don't pollute the program.
 """
 
 from __future__ import annotations
@@ -23,7 +45,24 @@ import clang.cindex as cx
 from quod.model import (
     Assign,
     BinOp,
+    Block,
     Call,
+    CAssign,
+    CBinOp,
+    CExpr,
+    CFn,
+    CFor,
+    CForInit,
+    CIntLit,
+    CParam,
+    CReturn,
+    CStmt,
+    CStyleFor,
+    CType,
+    CUnit,
+    CVarDecl,
+    CVarRef,
+    Equivalence,
     ExprStmt,
     Expr,
     ExternFunction,
@@ -36,9 +75,11 @@ from quod.model import (
     LibcLinkage,
     Let,
     LocalRef,
+    ManualJustification,
     Param,
     ParamRef,
     Program,
+    ProvenanceEdge,
     PtrOffset,
     ReturnExpr,
     ShortCircuitAnd,
@@ -206,6 +247,21 @@ class _ProgramState:
         # which collides on merge into a single program.json. Convention:
         # CLI threads in the source path's sanitized stem.
         self._string_prefix = string_prefix
+        # Sequential counter for Block IDs so two ingests of the same C
+        # source produce identical output. Block IDs are inert today
+        # (no edges yet) but determinism makes test fixtures pinnable.
+        self._block_counter = 0
+
+    def mint_block_id(self) -> str:
+        self._block_counter += 1
+        return f"@blk_c_{self._block_counter}"
+
+    def mint_function_id(self, name: str) -> str:
+        # Function IDs are stable across re-ingest of the same source by
+        # using the C function's spelling. C linkers reject duplicate
+        # symbols across the same translation unit, so the spelling is
+        # already unique per ingest.
+        return f"@fn_c_{name}"
 
     def intern_string(self, value: str) -> StringRef:
         if value in self._string_by_value:
@@ -425,8 +481,14 @@ class _FunctionTranslator:
                 # then return 1 else return 0.
                 return If(
                     cond=value,
-                    then_body=(ReturnExpr(value=IntLit(type=_I32, value=1)),),
-                    else_body=(ReturnExpr(value=IntLit(type=_I32, value=0)),),
+                    then_body=Block(
+                        id=self._state.mint_block_id(),
+                        stmts=(ReturnExpr(value=IntLit(type=_I32, value=1)),),
+                    ),
+                    else_body=Block(
+                        id=self._state.mint_block_id(),
+                        stmts=(ReturnExpr(value=IntLit(type=_I32, value=0)),),
+                    ),
                 )
             return ReturnExpr(value=value)
 
@@ -436,7 +498,10 @@ class _FunctionTranslator:
                 raise _refuse(c, f"if-stmt with {len(children)} children")
             cond = self.expr(children[0])
             then_body = self._block(children[1])
-            else_body = self._block(children[2]) if len(children) == 3 else ()
+            else_body = (
+                self._block(children[2]) if len(children) == 3
+                else Block(id=self._state.mint_block_id())
+            )
             return If(cond=cond, then_body=then_body, else_body=else_body)
 
         if k == cx.CursorKind.WHILE_STMT:
@@ -446,6 +511,34 @@ class _FunctionTranslator:
             cond = self.expr(children[0])
             body = self._block(children[1])
             return While(cond=cond, body=body)
+
+        if k == cx.CursorKind.FOR_STMT:
+            # Layer B: emit `c.for_general` (CStyleFor). The c-family
+            # lowering pass (step 5) rewrites this to `Let + While +
+            # Assign`; until then `lower.py` refuses to consume it.
+            #
+            # libclang exposes FOR_STMT children in source order with
+            # missing slots simply omitted from the children list. v3
+            # supports only the all-four-slots case `for (init; cond;
+            # inc) body` (sum.c uses this); sparse forms refuse so the
+            # supported subset stays a single, clearly-defined shape.
+            children = list(c.get_children())
+            if len(children) != 4:
+                raise _refuse(
+                    c,
+                    f"for-stmt with {len(children)} children — v3 only "
+                    f"supports fully-populated `for (init; cond; inc) body`. "
+                    f"Sparse forms (`for (;;)`, `for (init;;)`, etc.) refuse "
+                    f"until the supported subset grows."
+                )
+            init_cursor, cond_cursor, inc_cursor, body_cursor = children
+            init_stmt = self.stmt(init_cursor)
+            cond_expr = self.expr(cond_cursor)
+            inc_stmt = self.stmt(inc_cursor)
+            body = self._block(body_cursor)
+            return CStyleFor(
+                init=init_stmt, cond=cond_expr, inc=inc_stmt, body=body,
+            )
 
         if k == cx.CursorKind.DECL_STMT:
             children = list(c.get_children())
@@ -482,12 +575,16 @@ class _FunctionTranslator:
 
         raise _refuse(c, f"unsupported statement kind: {k.name}")
 
-    def _block(self, cursor: cx.Cursor) -> tuple[Statement, ...]:
+    def _block(self, cursor: cx.Cursor) -> Block:
+        block_id = self._state.mint_block_id()
         if cursor.kind == cx.CursorKind.COMPOUND_STMT:
-            return tuple(self.stmt(s) for s in cursor.get_children())
+            return Block(
+                id=block_id,
+                stmts=tuple(self.stmt(s) for s in cursor.get_children()),
+            )
         # Single-statement bodies (e.g. `if (c) return 0;`) are valid C and
         # libclang exposes them as the statement directly.
-        return (self.stmt(cursor),)
+        return Block(id=block_id, stmts=(self.stmt(cursor),))
 
     def _maybe_pointer_add(
         self, c: cx.Cursor, children: list[cx.Cursor],
@@ -576,6 +673,179 @@ class _FunctionTranslator:
         return Widen(value=self.expr(cursor), target=_I64, signed=True)
 
 
+# ---------- Layer-A translation ----------
+#
+# A second walk over the same libclang AST that produces the c-source
+# subtree (`Program.source_units`). Mostly mirrors the layer-B walker;
+# splits out into its own class to keep concerns clean — layer A is
+# inert structural data, layer B is the c-like-quod transcription that
+# eventually lowers to LLVM.
+#
+# The two walkers share the libclang AST as the source of truth; every
+# layer-A node is paired with a layer-B node by being produced from the
+# same FUNCTION_DECL cursor (function-level pairing in v3 — finer-grained
+# pairing is future work as edges grow per-statement).
+
+
+class _LayerATranslator:
+    """Walks a function body and returns the layer-A subtree.
+
+    Pure mechanical transcription: no semantic decisions, no widening,
+    no synthesized fall-through. The supported C subset matches the
+    layer-B translator's; unsupported constructs raise `IngestError`
+    with the original source location.
+    """
+
+    def expr(self, cursor: cx.Cursor) -> CExpr:
+        c = _unwrap(cursor)
+        k = c.kind
+        if k == cx.CursorKind.INTEGER_LITERAL:
+            tokens = [t.spelling for t in c.get_tokens()]
+            if not tokens:
+                raise _refuse(c, "integer literal with no tokens")
+            return CIntLit(value=int(tokens[0], 0))
+        if k == cx.CursorKind.DECL_REF_EXPR:
+            return CVarRef(name=c.spelling)
+        if k == cx.CursorKind.BINARY_OPERATOR:
+            tok = _binop_token(c)
+            children = list(c.get_children())
+            return CBinOp(
+                op=tok,
+                lhs=self.expr(children[0]),
+                rhs=self.expr(children[1]),
+            )
+        if k == cx.CursorKind.UNARY_OPERATOR:
+            children = list(c.get_children())
+            if len(children) != 1:
+                raise _refuse(c, "unary operator with non-1 children")
+            tokens = [t.spelling for t in c.get_tokens()]
+            if not tokens:
+                raise _refuse(c, "unary operator with no tokens")
+            op = tokens[0]
+            inner = self.expr(children[0])
+            # Layer A: preserve unary minus / plus as-is. v3 treats `-x`
+            # as `0 - x` (mirrors the layer-B fold) so we don't need a
+            # CUnaryOp node yet; the lifter will add one if needed.
+            if op == "-":
+                if isinstance(inner, CIntLit):
+                    return CIntLit(value=-inner.value)
+                return CBinOp(op="-", lhs=CIntLit(value=0), rhs=inner)
+            if op == "+":
+                return inner
+            raise _refuse(c, f"layer A: unsupported unary operator {op!r}")
+        raise _refuse(c, f"layer A: unsupported expression kind: {k.name}")
+
+    def stmt(self, cursor: cx.Cursor) -> CStmt:
+        c = cursor
+        k = c.kind
+
+        if k == cx.CursorKind.RETURN_STMT:
+            children = list(c.get_children())
+            if not children:
+                # Layer A preserves `return;` faithfully.
+                return CReturn(value=None)
+            return CReturn(value=self.expr(children[0]))
+
+        if k == cx.CursorKind.DECL_STMT:
+            children = list(c.get_children())
+            if len(children) != 1:
+                raise _refuse(c, "layer A: multi-declarator declarations not supported")
+            decl = children[0]
+            if decl.kind != cx.CursorKind.VAR_DECL:
+                raise _refuse(decl, f"layer A: only var declarations supported, got {decl.kind.name}")
+            init_children = list(decl.get_children())
+            init = self.expr(init_children[-1]) if init_children else None
+            return CVarDecl(
+                type=_c_source_type(decl, decl.type),
+                name=decl.spelling,
+                init=init,
+            )
+
+        if k == cx.CursorKind.BINARY_OPERATOR:
+            # Bare assignment as a statement: `x = expr;`.
+            tokens = [t.spelling for t in c.get_tokens()]
+            if "=" in tokens and "==" not in tokens:
+                children = list(c.get_children())
+                lhs = _unwrap(children[0])
+                if lhs.kind != cx.CursorKind.DECL_REF_EXPR:
+                    raise _refuse(lhs, "layer A: only simple `name = expr` assignment supported")
+                return CAssign(target=lhs.spelling, value=self.expr(children[1]))
+            raise _refuse(c, "layer A: bare expression-as-statement only supported for assignments")
+
+        if k == cx.CursorKind.FOR_STMT:
+            children = list(c.get_children())
+            if len(children) != 4:
+                raise _refuse(
+                    c,
+                    f"layer A: for-stmt with {len(children)} children — v3 "
+                    f"only supports fully-populated `for (init; cond; inc) body`."
+                )
+            init_cursor, cond_cursor, inc_cursor, body_cursor = children
+            return CFor(
+                init=self._for_init(init_cursor),
+                cond=self.expr(cond_cursor),
+                inc=self._for_init(inc_cursor),
+                body=tuple(self.stmt(s) for s in self._compound_children(body_cursor)),
+            )
+
+        raise _refuse(c, f"layer A: unsupported statement kind: {k.name}")
+
+    def _for_init(self, cursor: cx.Cursor) -> CForInit:
+        """Translate a for-loop init or inc slot into a CForInit
+        (CVarDecl or CAssign). Mirrors the layer-B path; the validation
+        is shared because the C grammar is the same."""
+        s = self.stmt(cursor)
+        if isinstance(s, (CVarDecl, CAssign)):
+            return s
+        raise _refuse(cursor, f"layer A: for init/inc must be a decl or assignment, got {type(s).__name__}")
+
+    def _compound_children(self, cursor: cx.Cursor) -> list[cx.Cursor]:
+        """A for-loop body may be a `{ ... }` block or a single statement;
+        normalize to a list of child statements."""
+        if cursor.kind == cx.CursorKind.COMPOUND_STMT:
+            return list(cursor.get_children())
+        return [cursor]
+
+
+def _c_source_type(cursor: cx.Cursor, t: cx.Type) -> CType:
+    """Map a clang Type to a layer-A `CType`. v3 supports only `int`
+    (sum.c is the worked example); broaden as the supported subset
+    grows. Kept narrow so the layer-A surface stays a clear contract."""
+    canon = t.get_canonical()
+    if canon.kind == cx.TypeKind.INT:
+        return CType(name="int")
+    raise _refuse(cursor, f"layer A: unsupported type {t.spelling!r} (only `int` in v3)")
+
+
+def _translate_function_layer_a(
+    cursor: cx.Cursor, source_path: Path,
+) -> CFn:
+    """Build the layer-A `CFn` for one C function definition. ID is
+    derived from the spelling so it's stable across re-ingest of the
+    same source — the same convention the layer-B Function uses, with a
+    distinct `@cfn_c_*` prefix so the two are addressable separately."""
+    if not _is_int_type(cursor.result_type):
+        raise _refuse(cursor, f"layer A: only `int`-returning functions are supported, got {cursor.result_type.spelling!r}")
+    params: list[CParam] = []
+    body_cursor: cx.Cursor | None = None
+    for child in cursor.get_children():
+        if child.kind == cx.CursorKind.PARM_DECL:
+            params.append(CParam(name=child.spelling, type=_c_source_type(child, child.type)))
+        elif child.kind == cx.CursorKind.COMPOUND_STMT:
+            body_cursor = child
+    if body_cursor is None:
+        raise _refuse(cursor, "layer A: function has no body")
+    translator = _LayerATranslator()
+    body = tuple(translator.stmt(s) for s in body_cursor.get_children())
+    return CFn(
+        id=f"@cfn_c_{cursor.spelling}",
+        name=cursor.spelling,
+        return_type=CType(name="int"),
+        params=tuple(params),
+        body=body,
+    )
+
+
 def _translate_function(
     cursor: cx.Cursor, source_path: Path, state: _ProgramState,
 ) -> Function:
@@ -609,10 +879,11 @@ def _translate_function(
 
     note = f"ingested from {source_path.name}:{cursor.location.line}"
     return Function(
+        id=state.mint_function_id(cursor.spelling),
         name=cursor.spelling,
         params=tuple(params),
         return_type=_I32,
-        body=body,
+        body=Block(id=state.mint_block_id(), stmts=body),
         notes=(note,),
     )
 
@@ -690,6 +961,7 @@ def ingest_c(
         string_prefix = _default_string_prefix(path)
     state = _ProgramState(string_prefix=string_prefix)
     functions: list[Function] = []
+    fn_cursors: list[cx.Cursor] = []
     defined_names: set[str] = set()
 
     for cursor in tu.cursor.get_children():
@@ -701,17 +973,85 @@ def ingest_c(
         if not cursor.is_definition():
             continue
         functions.append(_translate_function(cursor, path, state))
+        fn_cursors.append(cursor)
         defined_names.add(cursor.spelling)
 
     # Drop externs that turned out to be locally defined functions (e.g. a
     # call to one ingested function from another doesn't need an extern).
     externs = tuple(e for name, e in state.externs.items() if name not in defined_names)
 
-    return Program(
-        constants=tuple(state.constants),
-        functions=tuple(functions),
-        externs=externs,
-    )
+    # Layer-A pass — best-effort. The layer-A translator covers a narrower
+    # C subset than layer B (step 4 is focused on sum.c; broader layer-A
+    # coverage grows in subsequent steps). If translation fails for any
+    # function in the file, we emit no layer-A subtree for the whole file
+    # — all-or-nothing keeps the corpus less surprising than partial
+    # source_units. Layer B is unaffected; the file still compiles via
+    # the existing path.
+    cfns: list[CFn] = []
+    layer_a_failed = False
+    for cursor in fn_cursors:
+        try:
+            cfns.append(_translate_function_layer_a(cursor, path))
+        except IngestError:
+            layer_a_failed = True
+            break
+
+    # Layer-B Functions go into `structured_functions` (the
+    # extension-bearing transcription); the canonical core form lives
+    # in `Program.functions`, populated next by the c-family lowering
+    # pass. lower.py's contract is unchanged — it consumes the
+    # canonical form only.
+    if layer_a_failed or not cfns:
+        program = Program(
+            constants=tuple(state.constants),
+            structured_functions=tuple(functions),
+            externs=externs,
+        )
+    else:
+        a_to_b_edges = tuple(
+            ProvenanceEdge(source=cfn.id, target=fn.id)
+            for cfn, fn in zip(cfns, functions)
+        )
+        # Function-level A→B Equivalence claims mark the transcription.
+        # v5's regime is `axiom` with a manual justification (the
+        # ingester promises a structural lift); the auto-checker that
+        # bumps to `witness` with a `LiftEquivalence` artifact is the
+        # predicates spike's downstream payoff.
+        a_to_b_equivalences = tuple(
+            Equivalence(
+                a_node_id=cfn.id,
+                b_node_id=fn.id,
+                justification=ManualJustification(
+                    signed_by="quod.ingest.c",
+                    rationale=(
+                        "structural transcription from C source to layer-B "
+                        "c-like-quod; no semantic decisions in the lift"
+                    ),
+                ),
+            )
+            for cfn, fn in zip(cfns, functions)
+        )
+        source_units = (CUnit(
+            id=f"@cunit_c_{_default_string_prefix(path)}",
+            source_path=path.name,
+            functions=tuple(cfns),
+        ),)
+        program = Program(
+            constants=tuple(state.constants),
+            structured_functions=tuple(functions),
+            externs=externs,
+            source_units=source_units,
+            edges=a_to_b_edges,
+            equivalences=a_to_b_equivalences,
+        )
+
+    # Run the c-family lowering pass to populate `Program.functions`
+    # (layer C, lowerable). This adds B→C ProvenanceEdges and
+    # FamilyLowering Equivalence claims to the program. Imported here
+    # to avoid the import cycle between quod.lower (which depends on
+    # quod.model at module import time) and quod.ingest.c.
+    from quod.lower.c_family import lower_c_family
+    return lower_c_family(program)
 
 
 def _parse_translation_unit(path: Path, *, language: str, clang_args: tuple[str, ...]) -> cx.TranslationUnit:

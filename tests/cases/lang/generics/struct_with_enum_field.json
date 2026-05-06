@@ -24,7 +24,7 @@
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_struct_with_enum_field_3", "stmts": [
           {
             "kind": "quod.let",
             "name": "a",
@@ -93,11 +93,11 @@
             "kind": "quod.match",
             "scrutinee": {"kind": "quod.local_ref", "name": "inner_val"},
             "arms": [
-              {"variant": "A", "bindings": [], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}]},
+              {"variant": "A", "bindings": [], "body": {"id": "@blk_struct_with_enum_field_1", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}]}},
               {
                 "variant": "B",
                 "bindings": ["x"],
-                "body": [
+                "body": {"id": "@blk_struct_with_enum_field_2", "stmts": [
                   {
                     "kind": "quod.return_expr",
                     "value": {
@@ -107,11 +107,11 @@
                       "rhs": {"kind": "quod.local_ref", "name": "x"}
                     }
                   }
-                ]
+                ]}
               }
             ]
           }
-        ]
+        ]}
       }
     ]
   },

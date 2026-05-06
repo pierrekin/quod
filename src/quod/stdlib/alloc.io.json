@@ -44,7 +44,7 @@
         {"name": "cap", "type": {"kind": "llvm.usize"}}
       ],
       "return_type": {"kind": "llvm.i8_ptr"},
-      "body": [
+      "body": {"id": "@blk_alloc.io_5", "stmts": [
         {
           "kind": "quod.let",
           "name": "br_ptr",
@@ -75,10 +75,10 @@
             "lhs": {"kind": "quod.local_ref", "name": "br_ptr"},
             "rhs": {"kind": "quod.null_ptr"}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.io_1", "stmts": [
             {"kind": "quod.return_expr", "value": {"kind": "quod.null_ptr"}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.io_2", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -108,10 +108,10 @@
             "lhs": {"kind": "quod.local_ref", "name": "buf"},
             "rhs": {"kind": "quod.null_ptr"}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.io_3", "stmts": [
             {"kind": "quod.return_expr", "value": {"kind": "quod.null_ptr"}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.io_4", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -144,7 +144,7 @@
           "kind": "quod.return_expr",
           "value": {"kind": "quod.local_ref", "name": "br_ptr"}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.io.buf_reader_new",
@@ -154,7 +154,7 @@
         {"name": "inner", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.i8_ptr"},
-      "body": [
+      "body": {"id": "@blk_alloc.io_6", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -168,7 +168,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.io.buf_writer_with_capacity",
@@ -179,7 +179,7 @@
         {"name": "cap", "type": {"kind": "llvm.usize"}}
       ],
       "return_type": {"kind": "llvm.i8_ptr"},
-      "body": [
+      "body": {"id": "@blk_alloc.io_11", "stmts": [
         {
           "kind": "quod.let",
           "name": "bw_ptr",
@@ -210,10 +210,10 @@
             "lhs": {"kind": "quod.local_ref", "name": "bw_ptr"},
             "rhs": {"kind": "quod.null_ptr"}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.io_7", "stmts": [
             {"kind": "quod.return_expr", "value": {"kind": "quod.null_ptr"}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.io_8", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -243,10 +243,10 @@
             "lhs": {"kind": "quod.local_ref", "name": "buf"},
             "rhs": {"kind": "quod.null_ptr"}
           },
-          "then_body": [
+          "then_body": {"id": "@blk_alloc.io_9", "stmts": [
             {"kind": "quod.return_expr", "value": {"kind": "quod.null_ptr"}}
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_alloc.io_10", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -278,7 +278,7 @@
           "kind": "quod.return_expr",
           "value": {"kind": "quod.local_ref", "name": "bw_ptr"}
         }
-      ]
+      ]}
     },
     {
       "name": "alloc.io.buf_writer_new",
@@ -288,7 +288,7 @@
         {"name": "inner", "type": {"kind": "llvm.i8_ptr"}}
       ],
       "return_type": {"kind": "llvm.i8_ptr"},
-      "body": [
+      "body": {"id": "@blk_alloc.io_12", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -302,7 +302,7 @@
             ]
           }
         }
-      ]
+      ]}
     }
   ],
   "impls": [
@@ -330,7 +330,7 @@
               {"kind": "llvm.enum", "name": "core.io.IoError"}
             ]
           },
-          "body": [
+          "body": {"id": "@blk_alloc.io_21", "stmts": [
             {
               "kind": "quod.let",
               "name": "br0",
@@ -365,7 +365,7 @@
                   "name": "filled"
                 }
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.io_17", "stmts": [
                 {
                   "kind": "quod.let",
                   "name": "rc",
@@ -408,7 +408,7 @@
                     {
                       "variant": "Err",
                       "bindings": ["e"],
-                      "body": [
+                      "body": {"id": "@blk_alloc.io_13", "stmts": [
                         {
                           "kind": "quod.return_expr",
                           "value": {
@@ -424,12 +424,12 @@
                             ]
                           }
                         }
-                      ]
+                      ]}
                     },
                     {
                       "variant": "Ok",
                       "bindings": ["n_read"],
-                      "body": [
+                      "body": {"id": "@blk_alloc.io_16", "stmts": [
                         {
                           "kind": "quod.if",
                           "cond": {
@@ -438,7 +438,7 @@
                             "lhs": {"kind": "quod.local_ref", "name": "n_read"},
                             "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
                           },
-                          "then_body": [
+                          "then_body": {"id": "@blk_alloc.io_14", "stmts": [
                             {
                               "kind": "quod.return_expr",
                               "value": {
@@ -454,8 +454,8 @@
                                 ]
                               }
                             }
-                          ],
-                          "else_body": []
+                          ]},
+                          "else_body": {"id": "@blk_alloc.io_15", "stmts": []}
                         },
                         {
                           "kind": "quod.store_field",
@@ -473,12 +473,12 @@
                           "name": "filled",
                           "value": {"kind": "quod.local_ref", "name": "n_read"}
                         }
-                      ]
+                      ]}
                     }
                   ]
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.io_18", "stmts": []}
             },
             {
               "kind": "quod.let",
@@ -531,14 +531,14 @@
                 "lhs": {"kind": "llvm.param_ref", "name": "n"},
                 "rhs": {"kind": "quod.local_ref", "name": "available"}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.io_19", "stmts": [
                 {
                   "kind": "quod.assign",
                   "name": "take",
                   "value": {"kind": "llvm.param_ref", "name": "n"}
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.io_20", "stmts": []}
             },
             {
               "kind": "quod.expr_stmt",
@@ -602,7 +602,7 @@
                 ]
               }
             }
-          ]
+          ]}
         }
       ]
     },
@@ -630,7 +630,7 @@
               {"kind": "llvm.enum", "name": "core.io.IoError"}
             ]
           },
-          "body": [
+          "body": {"id": "@blk_alloc.io_28", "stmts": [
             {
               "kind": "quod.let",
               "name": "bw0",
@@ -668,7 +668,7 @@
                 "lhs": {"kind": "quod.local_ref", "name": "space"},
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.io_24", "stmts": [
                 {
                   "kind": "quod.let",
                   "name": "rc_flush",
@@ -699,7 +699,7 @@
                     {
                       "variant": "Err",
                       "bindings": ["e"],
-                      "body": [
+                      "body": {"id": "@blk_alloc.io_22", "stmts": [
                         {
                           "kind": "quod.return_expr",
                           "value": {
@@ -715,12 +715,12 @@
                             ]
                           }
                         }
-                      ]
+                      ]}
                     },
                     {
                       "variant": "Ok",
                       "bindings": ["_n_written"],
-                      "body": [
+                      "body": {"id": "@blk_alloc.io_23", "stmts": [
                         {
                           "kind": "quod.store_field",
                           "ptr": {"kind": "llvm.param_ref", "name": "handle"},
@@ -729,12 +729,12 @@
                           "name": "pos",
                           "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
                         }
-                      ]
+                      ]}
                     }
                   ]
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.io_25", "stmts": []}
             },
             {
               "kind": "quod.let",
@@ -779,14 +779,14 @@
                 "lhs": {"kind": "llvm.param_ref", "name": "n"},
                 "rhs": {"kind": "quod.local_ref", "name": "space_now"}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.io_26", "stmts": [
                 {
                   "kind": "quod.assign",
                   "name": "take",
                   "value": {"kind": "llvm.param_ref", "name": "n"}
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.io_27", "stmts": []}
             },
             {
               "kind": "quod.expr_stmt",
@@ -842,7 +842,7 @@
                 ]
               }
             }
-          ]
+          ]}
         },
         {
           "name": "flush",
@@ -856,7 +856,7 @@
               {"kind": "llvm.enum", "name": "core.io.IoError"}
             ]
           },
-          "body": [
+          "body": {"id": "@blk_alloc.io_33", "stmts": [
             {
               "kind": "quod.let",
               "name": "bw",
@@ -883,7 +883,7 @@
                 "lhs": {"kind": "quod.field", "value": {"kind": "quod.local_ref", "name": "bw"}, "name": "pos"},
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}
               },
-              "then_body": [
+              "then_body": {"id": "@blk_alloc.io_29", "stmts": [
                 {
                   "kind": "quod.return_expr",
                   "value": {
@@ -895,8 +895,8 @@
                     "variant": "None"
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_alloc.io_30", "stmts": []}
             },
             {
               "kind": "quod.let",
@@ -928,7 +928,7 @@
                 {
                   "variant": "Err",
                   "bindings": ["e"],
-                  "body": [
+                  "body": {"id": "@blk_alloc.io_31", "stmts": [
                     {
                       "kind": "quod.return_expr",
                       "value": {
@@ -943,12 +943,12 @@
                         ]
                       }
                     }
-                  ]
+                  ]}
                 },
                 {
                   "variant": "Ok",
                   "bindings": ["_n_written"],
-                  "body": [
+                  "body": {"id": "@blk_alloc.io_32", "stmts": [
                     {
                       "kind": "quod.store_field",
                       "ptr": {"kind": "llvm.param_ref", "name": "handle"},
@@ -968,11 +968,11 @@
                         "variant": "None"
                       }
                     }
-                  ]
+                  ]}
                 }
               ]
             }
-          ]
+          ]}
         }
       ]
     }

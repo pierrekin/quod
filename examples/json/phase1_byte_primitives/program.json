@@ -23,7 +23,7 @@
       "return_type": {
         "kind": "llvm.i8"
       },
-      "body": [
+      "body": {"id": "@blk_program_1", "stmts": [
         {
           "kind": "quod.let",
           "name": "parser",
@@ -71,7 +71,7 @@
             }
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -87,7 +87,7 @@
       "return_type": {
         "kind": "llvm.i1"
       },
-      "body": [
+      "body": {"id": "@blk_program_2", "stmts": [
         {
           "kind": "quod.let",
           "name": "parser",
@@ -130,7 +130,7 @@
             }
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -146,7 +146,7 @@
       "return_type": {
         "kind": "llvm.i8"
       },
-      "body": [
+      "body": {"id": "@blk_program_3", "stmts": [
         {
           "kind": "quod.let",
           "name": "parser",
@@ -240,7 +240,7 @@
             "name": "byte"
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -262,7 +262,7 @@
       "return_type": {
         "kind": "llvm.i1"
       },
-      "body": [
+      "body": {"id": "@blk_program_6", "stmts": [
         {
           "kind": "quod.let",
           "name": "parser",
@@ -328,7 +328,7 @@
               "name": "byte"
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_program_4", "stmts": [
             {
               "kind": "quod.field_set",
               "local": "parser",
@@ -374,8 +374,8 @@
                 "value": 1
               }
             }
-          ],
-          "else_body": [
+          ]},
+          "else_body": {"id": "@blk_program_5", "stmts": [
             {
               "kind": "quod.field_set",
               "local": "parser",
@@ -409,9 +409,9 @@
                 "value": 0
               }
             }
-          ]
+          ]}
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -420,7 +420,7 @@
       "return_type": {
         "kind": "llvm.i32"
       },
-      "body": [
+      "body": {"id": "@blk_program_8", "stmts": [
         {
           "kind": "quod.with_arena",
           "name": "a",
@@ -431,7 +431,7 @@
             },
             "value": 256
           },
-          "body": [
+          "body": {"id": "@blk_program_7", "stmts": [
             {
               "kind": "quod.let",
               "name": "pmem",
@@ -672,7 +672,7 @@
                 ]
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return_expr",
@@ -684,7 +684,7 @@
             "value": 0
           }
         }
-      ],
+      ]},
       "claims": []
     }
   ],

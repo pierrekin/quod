@@ -20,7 +20,7 @@
       "return_type": {
         "kind": "llvm.i64"
       },
-      "body": [
+      "body": {"id": "@blk_mem.arena_1", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -63,7 +63,7 @@
             }
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -79,7 +79,7 @@
       "return_type": {
         "kind": "llvm.i8_ptr"
       },
-      "body": [
+      "body": {"id": "@blk_mem.arena_6", "stmts": [
         {
           "kind": "quod.let",
           "name": "cap",
@@ -121,7 +121,7 @@
               "value": 16
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_mem.arena_2", "stmts": [
             {
               "kind": "quod.assign",
               "name": "cap",
@@ -133,8 +133,8 @@
                 "value": 16
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_mem.arena_3", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -188,15 +188,15 @@
               "kind": "quod.null_ptr"
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_mem.arena_4", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
                 "kind": "quod.null_ptr"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_mem.arena_5", "stmts": []}
         },
         {
           "kind": "quod.store_field",
@@ -246,7 +246,7 @@
             "name": "c"
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -262,7 +262,7 @@
       "return_type": {
         "kind": "llvm.i8_ptr"
       },
-      "body": [
+      "body": {"id": "@blk_mem.arena_13", "stmts": [
         {
           "kind": "quod.let",
           "name": "a",
@@ -296,15 +296,15 @@
               "kind": "quod.null_ptr"
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_mem.arena_7", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
                 "kind": "quod.null_ptr"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_mem.arena_8", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -334,7 +334,7 @@
               "value": 1
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_mem.arena_9", "stmts": [
             {
               "kind": "quod.assign",
               "name": "cap",
@@ -346,8 +346,8 @@
                 "value": 4096
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_mem.arena_10", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -379,7 +379,7 @@
               "kind": "quod.null_ptr"
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_mem.arena_11", "stmts": [
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -399,8 +399,8 @@
                 "kind": "quod.null_ptr"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_mem.arena_12", "stmts": []}
         },
         {
           "kind": "quod.store_field",
@@ -451,7 +451,7 @@
             "name": "a"
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -473,7 +473,7 @@
       "return_type": {
         "kind": "llvm.i8_ptr"
       },
-      "body": [
+      "body": {"id": "@blk_mem.arena_26", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -487,15 +487,15 @@
               "kind": "quod.null_ptr"
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_mem.arena_14", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
                 "kind": "quod.null_ptr"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_mem.arena_15", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -514,15 +514,15 @@
               "value": 0
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_mem.arena_16", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
                 "kind": "quod.null_ptr"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_mem.arena_17", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -552,7 +552,7 @@
               "value": 1
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_mem.arena_18", "stmts": [
             {
               "kind": "quod.assign",
               "name": "request",
@@ -564,8 +564,8 @@
                 "value": 1
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_mem.arena_19", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -661,7 +661,7 @@
               "name": "cap"
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_mem.arena_24", "stmts": [
             {
               "kind": "quod.let",
               "name": "chunk_cap",
@@ -692,7 +692,7 @@
                   "name": "chunk_cap"
                 }
               },
-              "then_body": [
+              "then_body": {"id": "@blk_mem.arena_20", "stmts": [
                 {
                   "kind": "quod.assign",
                   "name": "chunk_cap",
@@ -701,8 +701,8 @@
                     "name": "need"
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_mem.arena_21", "stmts": []}
             },
             {
               "kind": "quod.let",
@@ -734,15 +734,15 @@
                   "kind": "quod.null_ptr"
                 }
               },
-              "then_body": [
+              "then_body": {"id": "@blk_mem.arena_22", "stmts": [
                 {
                   "kind": "quod.return_expr",
                   "value": {
                     "kind": "quod.null_ptr"
                   }
                 }
-              ],
-              "else_body": []
+              ]},
+              "else_body": {"id": "@blk_mem.arena_23", "stmts": []}
             },
             {
               "kind": "quod.store_field",
@@ -789,8 +789,8 @@
                 "value": 0
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_mem.arena_25", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -900,7 +900,7 @@
             "name": "p"
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -916,7 +916,7 @@
       "return_type": {
         "kind": "llvm.void"
       },
-      "body": [
+      "body": {"id": "@blk_mem.arena_30", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -930,12 +930,12 @@
               "kind": "quod.null_ptr"
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_mem.arena_27", "stmts": [
             {
               "kind": "quod.return"
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_mem.arena_28", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -966,7 +966,7 @@
               "kind": "quod.null_ptr"
             }
           },
-          "body": [
+          "body": {"id": "@blk_mem.arena_29", "stmts": [
             {
               "kind": "quod.let",
               "name": "prev",
@@ -1004,7 +1004,7 @@
                 "name": "prev"
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.expr_stmt",
@@ -1022,7 +1022,7 @@
         {
           "kind": "quod.return"
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -1038,7 +1038,7 @@
       "return_type": {
         "kind": "llvm.i64"
       },
-      "body": [
+      "body": {"id": "@blk_mem.arena_33", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -1052,7 +1052,7 @@
               "kind": "quod.null_ptr"
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_mem.arena_31", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -1063,8 +1063,8 @@
                 "value": 0
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_mem.arena_32", "stmts": []}
         },
         {
           "kind": "quod.return_expr",
@@ -1078,7 +1078,7 @@
             "name": "total_used"
           }
         }
-      ],
+      ]},
       "claims": []
     }
   ],
@@ -1210,7 +1210,7 @@
           "return_type": {
             "kind": "llvm.i8_ptr"
           },
-          "body": [
+          "body": {"id": "@blk_mem.arena_34", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -1228,7 +1228,7 @@
                 ]
               }
             }
-          ]
+          ]}
         }
       ]
     }

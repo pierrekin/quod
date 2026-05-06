@@ -67,7 +67,7 @@
       "return_type": {
         "kind": "llvm.i32"
       },
-      "body": [
+      "body": {"id": "@blk_program_4", "stmts": [
         {
           "kind": "quod.with_arena",
           "name": "a",
@@ -78,7 +78,7 @@
             },
             "value": 8192
           },
-          "body": [
+          "body": {"id": "@blk_program_3", "stmts": [
             {
               "kind": "quod.let",
               "name": "input",
@@ -149,7 +149,7 @@
                   "bindings": [
                     "v"
                   ],
-                  "body": [
+                  "body": {"id": "@blk_program_1", "stmts": [
                     {
                       "kind": "quod.let",
                       "name": "out",
@@ -213,12 +213,12 @@
                         ]
                       }
                     }
-                  ]
+                  ]}
                 },
                 {
                   "variant": "None",
                   "bindings": [],
-                  "body": [
+                  "body": {"id": "@blk_program_2", "stmts": [
                     {
                       "kind": "quod.expr_stmt",
                       "value": {
@@ -232,11 +232,11 @@
                         ]
                       }
                     }
-                  ]
+                  ]}
                 }
               ]
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return_expr",
@@ -248,7 +248,7 @@
             "value": 0
           }
         }
-      ],
+      ]},
       "claims": []
     }
   ]

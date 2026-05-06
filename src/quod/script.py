@@ -77,6 +77,7 @@ from typing import Optional
 from quod.model import (
     Assign,
     BinOp,
+    Block,
     CharLit,
     Call,
     EnumInit,
@@ -426,7 +427,7 @@ class Parser:
             name=name,
             params=tuple(params),
             return_type=ret_ty,
-            body=tuple(body),
+            body=Block(stmts=tuple(body)),
         )
 
     def _param(self) -> Param:
@@ -541,7 +542,11 @@ class Parser:
         if self.at("KW", "else"):
             self.eat()
             else_body = self._block()
-        return If(cond=cond, then_body=tuple(then_body), else_body=tuple(else_body))
+        return If(
+            cond=cond,
+            then_body=Block(stmts=tuple(then_body)),
+            else_body=Block(stmts=tuple(else_body)),
+        )
 
     def _while(self) -> While:
         self.expect("KW", "while")
@@ -549,7 +554,7 @@ class Parser:
         cond = self._cond_expr()
         self.expect("OP", ")")
         body = self._block()
-        return While(cond=cond, body=tuple(body))
+        return While(cond=cond, body=Block(stmts=tuple(body)))
 
     def _for(self) -> For:
         self.expect("KW", "for")
@@ -566,7 +571,7 @@ class Parser:
         self.expect("OP", "..")
         hi = self._cond_expr()
         body = self._block()
-        return For(var=var, type=ty, lo=lo, hi=hi, body=tuple(body))
+        return For(var=var, type=ty, lo=lo, hi=hi, body=Block(stmts=tuple(body)))
 
     def _cond_expr(self):
         """Expression with struct-init disabled, so a trailing `{` always
@@ -632,7 +637,7 @@ class Parser:
                 body = self._block()
                 self.consume_terminator()
                 arms.append(MatchArm(
-                    variant="_", bindings=(), body=tuple(body),
+                    variant="_", bindings=(), body=Block(stmts=tuple(body)),
                 ))
                 continue
             variant = self.expect("IDENT").value
@@ -649,7 +654,7 @@ class Parser:
             body = self._block()
             self.consume_terminator()
             arms.append(MatchArm(
-                variant=variant, bindings=tuple(bindings), body=tuple(body),
+                variant=variant, bindings=tuple(bindings), body=Block(stmts=tuple(body)),
             ))
         self.expect("OP", "}")
         return Match(scrutinee=scrut, arms=tuple(arms))
@@ -663,7 +668,7 @@ class Parser:
         cap = self._expr()
         self.expect("OP", ")")
         body = self._block()
-        return WithArena(name=name, capacity=cap, body=tuple(body))
+        return WithArena(name=name, capacity=cap, body=Block(stmts=tuple(body)))
 
     # -- expressions (Pratt-ish via precedence climbing) --
 

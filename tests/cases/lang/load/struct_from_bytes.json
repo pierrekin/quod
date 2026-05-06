@@ -50,7 +50,7 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": [
+        "body": {"id": "@blk_struct_from_bytes_1", "stmts": [
           {
             "kind": "quod.let",
             "name": "s",
@@ -101,7 +101,7 @@
               "value": 0
             }
           }
-        ],
+        ]},
         "claims": []
       }
     ]

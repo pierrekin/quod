@@ -99,7 +99,7 @@
           }
         ]
       },
-      "body": [
+      "body": {"id": "@blk_program_1", "stmts": [
         {
           "kind": "quod.let",
           "name": "funcs",
@@ -215,7 +215,7 @@
             ]
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -239,7 +239,7 @@
           }
         ]
       },
-      "body": [
+      "body": {"id": "@blk_program_2", "stmts": [
         {
           "kind": "quod.let",
           "name": "consts",
@@ -355,7 +355,7 @@
             ]
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -364,7 +364,7 @@
       "return_type": {
         "kind": "llvm.i32"
       },
-      "body": [
+      "body": {"id": "@blk_program_16", "stmts": [
         {
           "kind": "quod.with_arena",
           "name": "a",
@@ -375,7 +375,7 @@
             },
             "value": 1048576
           },
-          "body": [
+          "body": {"id": "@blk_program_15", "stmts": [
             {
               "kind": "quod.let",
               "name": "read_result",
@@ -414,7 +414,7 @@
                 {
                   "variant": "None",
                   "bindings": [],
-                  "body": [
+                  "body": {"id": "@blk_program_3", "stmts": [
                     {
                       "kind": "quod.expr_stmt",
                       "value": {
@@ -428,14 +428,14 @@
                         ]
                       }
                     }
-                  ]
+                  ]}
                 },
                 {
                   "variant": "Some",
                   "bindings": [
                     "text"
                   ],
-                  "body": [
+                  "body": {"id": "@blk_program_14", "stmts": [
                     {
                       "kind": "quod.let",
                       "name": "pr",
@@ -486,7 +486,7 @@
                         {
                           "variant": "None",
                           "bindings": [],
-                          "body": [
+                          "body": {"id": "@blk_program_4", "stmts": [
                             {
                               "kind": "quod.expr_stmt",
                               "value": {
@@ -500,14 +500,14 @@
                                 ]
                               }
                             }
-                          ]
+                          ]}
                         },
                         {
                           "variant": "Some",
                           "bindings": [
                             "prog"
                           ],
-                          "body": [
+                          "body": {"id": "@blk_program_13", "stmts": [
                             {
                               "kind": "quod.match",
                               "scrutinee": {
@@ -524,7 +524,7 @@
                                 {
                                   "variant": "None",
                                   "bindings": [],
-                                  "body": [
+                                  "body": {"id": "@blk_program_5", "stmts": [
                                     {
                                       "kind": "quod.expr_stmt",
                                       "value": {
@@ -538,14 +538,14 @@
                                         ]
                                       }
                                     }
-                                  ]
+                                  ]}
                                 },
                                 {
                                   "variant": "Some",
                                   "bindings": [
                                     "name"
                                   ],
-                                  "body": [
+                                  "body": {"id": "@blk_program_8", "stmts": [
                                     {
                                       "kind": "quod.match",
                                       "scrutinee": {
@@ -559,7 +559,7 @@
                                             "p",
                                             "l"
                                           ],
-                                          "body": [
+                                          "body": {"id": "@blk_program_6", "stmts": [
                                             {
                                               "kind": "quod.expr_stmt",
                                               "value": {
@@ -588,12 +588,12 @@
                                                 ]
                                               }
                                             }
-                                          ]
+                                          ]}
                                         },
                                         {
                                           "variant": "_",
                                           "bindings": [],
-                                          "body": [
+                                          "body": {"id": "@blk_program_7", "stmts": [
                                             {
                                               "kind": "quod.expr_stmt",
                                               "value": {
@@ -607,11 +607,11 @@
                                                 ]
                                               }
                                             }
-                                          ]
+                                          ]}
                                         }
                                       ]
                                     }
-                                  ]
+                                  ]}
                                 }
                               ]
                             },
@@ -631,7 +631,7 @@
                                 {
                                   "variant": "None",
                                   "bindings": [],
-                                  "body": [
+                                  "body": {"id": "@blk_program_9", "stmts": [
                                     {
                                       "kind": "quod.expr_stmt",
                                       "value": {
@@ -645,14 +645,14 @@
                                         ]
                                       }
                                     }
-                                  ]
+                                  ]}
                                 },
                                 {
                                   "variant": "Some",
                                   "bindings": [
                                     "val"
                                   ],
-                                  "body": [
+                                  "body": {"id": "@blk_program_12", "stmts": [
                                     {
                                       "kind": "quod.match",
                                       "scrutinee": {
@@ -666,7 +666,7 @@
                                             "p",
                                             "l"
                                           ],
-                                          "body": [
+                                          "body": {"id": "@blk_program_10", "stmts": [
                                             {
                                               "kind": "quod.expr_stmt",
                                               "value": {
@@ -695,12 +695,12 @@
                                                 ]
                                               }
                                             }
-                                          ]
+                                          ]}
                                         },
                                         {
                                           "variant": "_",
                                           "bindings": [],
-                                          "body": [
+                                          "body": {"id": "@blk_program_11", "stmts": [
                                             {
                                               "kind": "quod.expr_stmt",
                                               "value": {
@@ -714,23 +714,23 @@
                                                 ]
                                               }
                                             }
-                                          ]
+                                          ]}
                                         }
                                       ]
                                     }
-                                  ]
+                                  ]}
                                 }
                               ]
                             }
-                          ]
+                          ]}
                         }
                       ]
                     }
-                  ]
+                  ]}
                 }
               ]
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return_expr",
@@ -742,7 +742,7 @@
             "value": 0
           }
         }
-      ],
+      ]},
       "claims": []
     }
   ],

@@ -30,7 +30,7 @@
       "return_type": {
         "kind": "llvm.i32"
       },
-      "body": [
+      "body": {"id": "@blk_with_arena_scratch_2", "stmts": [
         {
           "kind": "quod.with_arena",
           "name": "a",
@@ -41,7 +41,7 @@
             },
             "value": 4096
           },
-          "body": [
+          "body": {"id": "@blk_with_arena_scratch_1", "stmts": [
             {
               "kind": "quod.let",
               "name": "_p1",
@@ -150,7 +150,7 @@
                 ]
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.expr_stmt",
@@ -175,7 +175,7 @@
             "value": 0
           }
         }
-      ],
+      ]},
       "claims": []
     }
   ],

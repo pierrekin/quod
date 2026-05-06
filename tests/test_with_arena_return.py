@@ -42,10 +42,10 @@ def _arena_return_program() -> Program:
         "functions": [{
             "name": "main", "params": [],
             "return_type": {"kind": "llvm.i32"},
-            "body": [
+            "body": {"stmts": [
                 {"kind": "quod.with_arena", "name": "a",
                  "capacity": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4096},
-                 "body": [
+                 "body": {"stmts": [
                     {"kind": "quod.let", "name": "buf", "type": {"kind": "llvm.i8_ptr"},
                      "init": {"kind": "llvm.call", "function": "mem.arena.alloc",
                               "args": [
@@ -59,11 +59,11 @@ def _arena_return_program() -> Program:
                      "value": {"kind": "quod.load",
                                "ptr": {"kind": "quod.local_ref", "name": "buf"},
                                "type": {"kind": "llvm.i32"}}},
-                 ]},
+                 ]}},
                 {"kind": "quod.return_expr",
                  "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 99}},
             ]
-        }]
+        }}]
     }))
 
 

@@ -41,6 +41,8 @@ from quod.model import (
     U32Type,
     U64Type,
     Widen,
+
+    Block,
 )
 from quod.runtime import runtime_archive_path
 
@@ -111,13 +113,13 @@ def _make_bswap_program(width: int, value: int) -> Program:
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_u(Call(
                 function=fn_name,
                 args=(IntLit(type=u_type, value=value),),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     return Program(
         imports=(Import(module="core.num"),),
@@ -152,7 +154,7 @@ def _roundtrip_be_program(width: int, value: int) -> Program:
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_u(Call(
                 function=f"core.num.from_be_u{width}",
                 args=(Call(
@@ -161,7 +163,7 @@ def _roundtrip_be_program(width: int, value: int) -> Program:
                 ),),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     return Program(
         imports=(Import(module="core.num"),),
@@ -193,13 +195,13 @@ def test_to_le_u32_identity_on_x86_64():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_u(Call(
                 function="core.num.to_le_u32",
                 args=(IntLit(type=U32Type(), value=0x11223344),),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.num"),),
@@ -215,13 +217,13 @@ def test_from_le_u64_identity_on_x86_64():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_u(Call(
                 function="core.num.from_le_u64",
                 args=(IntLit(type=U64Type(), value=0xAABBCCDDEEFF0011),),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.num"),),
@@ -241,7 +243,7 @@ def test_narrow_i64_to_i32_in_range():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_lld(Widen(
                 value=Call(
                     function="core.num.narrow_i64_to_i32",
@@ -257,7 +259,7 @@ def test_narrow_i64_to_i32_in_range():
                 target=I64Type(), signed=True,
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.num"),),
@@ -273,13 +275,13 @@ def test_narrow_u64_to_u32_in_range():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_u(Call(
                 function="core.num.narrow_u64_to_u32",
                 args=(IntLit(type=U64Type(), value=0xDEADBEEF),),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.num"),),
@@ -299,13 +301,13 @@ def test_i64_to_u64_nonnegative_bit_preserved():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_llu(Call(
                 function="core.num.i64_to_u64",
                 args=(IntLit(type=I64Type(), value=val),),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.num"),),
@@ -324,13 +326,13 @@ def test_u64_to_i64_max_in_range():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_lld(Call(
                 function="core.num.u64_to_i64",
                 args=(IntLit(type=U64Type(), value=val),),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.num"),),

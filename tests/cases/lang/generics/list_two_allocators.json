@@ -70,7 +70,7 @@
             }
           ]
         },
-        "body": [
+        "body": {"id": "@blk_list_two_allocators_1", "stmts": [
           {
             "kind": "quod.let",
             "name": "stride",
@@ -158,7 +158,7 @@
               ]
             }
           }
-        ]
+        ]}
       },
       {
         "name": "list_set",
@@ -198,7 +198,7 @@
         "return_type": {
           "kind": "llvm.void"
         },
-        "body": [
+        "body": {"id": "@blk_list_two_allocators_2", "stmts": [
           {
             "kind": "quod.let",
             "name": "stride",
@@ -246,7 +246,7 @@
           {
             "kind": "quod.return"
           }
-        ]
+        ]}
       },
       {
         "name": "list_get",
@@ -280,7 +280,7 @@
           "kind": "quod.type_param",
           "name": "T"
         },
-        "body": [
+        "body": {"id": "@blk_list_two_allocators_3", "stmts": [
           {
             "kind": "quod.let",
             "name": "stride",
@@ -328,7 +328,7 @@
               }
             }
           }
-        ]
+        ]}
       },
       {
         "name": "main",
@@ -336,7 +336,7 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": [
+        "body": {"id": "@blk_list_two_allocators_5", "stmts": [
           {
             "kind": "quod.with_arena",
             "name": "arena_handle",
@@ -347,7 +347,7 @@
               },
               "value": 4096
             },
-            "body": [
+            "body": {"id": "@blk_list_two_allocators_4", "stmts": [
               {
                 "kind": "quod.let",
                 "name": "ar_xs",
@@ -756,7 +756,7 @@
                   }
                 }
               }
-            ]
+            ]}
           },
           {
             "kind": "quod.return_expr",
@@ -768,7 +768,7 @@
               "value": 0
             }
           }
-        ]
+        ]}
       }
     ]
   },

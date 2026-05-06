@@ -29,7 +29,7 @@
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_json_writer_array_3", "stmts": [
           {
             "kind": "quod.let",
             "name": "a",
@@ -182,8 +182,8 @@
             "kind": "quod.match",
             "scrutinee": {"kind": "quod.local_ref", "name": "rc"},
             "arms": [
-              {"variant": "None", "bindings": [], "body": []},
-              {"variant": "Some", "bindings": ["_e"], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 99}}]}
+              {"variant": "None", "bindings": [], "body": {"id": "@blk_json_writer_array_1", "stmts": []}},
+              {"variant": "Some", "bindings": ["_e"], "body": {"id": "@blk_json_writer_array_2", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 99}}]}}
             ]
           },
           {
@@ -215,7 +215,7 @@
               "signed": false
             }
           }
-        ]
+        ]}
       }
     ]
   },

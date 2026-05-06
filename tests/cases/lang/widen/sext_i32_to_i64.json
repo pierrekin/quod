@@ -27,7 +27,7 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": [
+        "body": {"id": "@blk_sext_i32_to_i64_1", "stmts": [
           {
             "kind": "quod.let",
             "name": "x",
@@ -86,7 +86,7 @@
               "value": 0
             }
           }
-        ],
+        ]},
         "claims": []
       }
     ]

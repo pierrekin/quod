@@ -196,8 +196,8 @@ def _stmts_to_return_smt(stmts, state: _SmtState) -> str:
             case If(cond=cond, then_body=t, else_body=e):
                 return (
                     f"(ite {_expr_to_smt(cond, state)} "
-                    f"{_stmts_to_return_smt(list(t), state)} "
-                    f"{_stmts_to_return_smt(list(e), state)})"
+                    f"{_stmts_to_return_smt(list(t.stmts), state)} "
+                    f"{_stmts_to_return_smt(list(e.stmts), state)})"
                 )
             case ExprStmt():
                 continue  # side effect only; doesn't influence return value
@@ -231,7 +231,7 @@ def function_return_term(fn: Function, *, program: Program | None = None) -> tup
     cross-procedural reasoning (calls become unconstrained).
     """
     state = _SmtState(fn_return_claims=_build_fn_return_claims_index(program))
-    term = _stmts_to_return_smt(list(fn.body), state)
+    term = _stmts_to_return_smt(list(fn.body.stmts), state)
     return term, state
 
 

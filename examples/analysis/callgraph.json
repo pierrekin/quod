@@ -11,7 +11,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_callgraph_1", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -19,7 +19,7 @@
             "name": "x"
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }
@@ -34,7 +34,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_callgraph_2", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -59,7 +59,7 @@
             }
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }
@@ -67,7 +67,7 @@
     {
       "name": "main",
       "params": [],
-      "body": [
+      "body": {"id": "@blk_callgraph_5", "stmts": [
         {
           "kind": "quod.if",
           "cond": {
@@ -94,7 +94,7 @@
               }
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_callgraph_3", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -128,8 +128,8 @@
                 }
               }
             }
-          ],
-          "else_body": [
+          ]},
+          "else_body": {"id": "@blk_callgraph_4", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -140,9 +140,9 @@
                 "value": 0
               }
             }
-          ]
+          ]}
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }
@@ -157,7 +157,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_callgraph_6", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -171,7 +171,7 @@
             ]
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }

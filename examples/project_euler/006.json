@@ -30,7 +30,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_006_2", "stmts": [
         {
           "kind": "quod.let",
           "name": "r",
@@ -73,7 +73,7 @@
               }
             }
           },
-          "body": [
+          "body": {"id": "@blk_006_1", "stmts": [
             {
               "kind": "quod.assign",
               "name": "r",
@@ -98,7 +98,7 @@
                 }
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return_expr",
@@ -107,7 +107,7 @@
             "name": "r"
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }
@@ -122,7 +122,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_006_4", "stmts": [
         {
           "kind": "quod.let",
           "name": "s",
@@ -165,7 +165,7 @@
               }
             }
           },
-          "body": [
+          "body": {"id": "@blk_006_3", "stmts": [
             {
               "kind": "quod.assign",
               "name": "s",
@@ -182,7 +182,7 @@
                 }
               }
             }
-          ]
+          ]}
         },
         {
           "kind": "quod.return_expr",
@@ -199,7 +199,7 @@
             }
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }
@@ -207,7 +207,7 @@
     {
       "name": "main",
       "params": [],
-      "body": [
+      "body": {"id": "@blk_006_5", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -261,7 +261,7 @@
             "value": 0
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }

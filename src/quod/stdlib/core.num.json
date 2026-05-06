@@ -57,7 +57,7 @@
       "return_type": {
         "kind": "llvm.u16"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_1", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -71,7 +71,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.bswap_u32",
@@ -86,7 +86,7 @@
       "return_type": {
         "kind": "llvm.u32"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_2", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -100,7 +100,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.bswap_u64",
@@ -115,7 +115,7 @@
       "return_type": {
         "kind": "llvm.u64"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_3", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -129,7 +129,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.to_le_u16",
@@ -144,7 +144,7 @@
       "return_type": {
         "kind": "llvm.u16"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_4", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -152,7 +152,7 @@
             "name": "x"
           }
         }
-      ],
+      ]},
       "notes": [
         "Identity on the only target (x86_64, little-endian). Revisit if quod ever targets a big-endian host."
       ]
@@ -170,7 +170,7 @@
       "return_type": {
         "kind": "llvm.u32"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_5", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -178,7 +178,7 @@
             "name": "x"
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.to_le_u64",
@@ -193,7 +193,7 @@
       "return_type": {
         "kind": "llvm.u64"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_6", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -201,7 +201,7 @@
             "name": "x"
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.from_le_u16",
@@ -216,7 +216,7 @@
       "return_type": {
         "kind": "llvm.u16"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_7", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -224,7 +224,7 @@
             "name": "x"
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.from_le_u32",
@@ -239,7 +239,7 @@
       "return_type": {
         "kind": "llvm.u32"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_8", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -247,7 +247,7 @@
             "name": "x"
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.from_le_u64",
@@ -262,7 +262,7 @@
       "return_type": {
         "kind": "llvm.u64"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_9", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -270,7 +270,7 @@
             "name": "x"
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.to_be_u16",
@@ -285,7 +285,7 @@
       "return_type": {
         "kind": "llvm.u16"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_10", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -299,7 +299,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.to_be_u32",
@@ -314,7 +314,7 @@
       "return_type": {
         "kind": "llvm.u32"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_11", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -328,7 +328,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.to_be_u64",
@@ -343,7 +343,7 @@
       "return_type": {
         "kind": "llvm.u64"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_12", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -357,7 +357,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.from_be_u16",
@@ -372,7 +372,7 @@
       "return_type": {
         "kind": "llvm.u16"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_13", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -386,7 +386,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.from_be_u32",
@@ -401,7 +401,7 @@
       "return_type": {
         "kind": "llvm.u32"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_14", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -415,7 +415,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.from_be_u64",
@@ -430,7 +430,7 @@
       "return_type": {
         "kind": "llvm.u64"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_15", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -444,7 +444,7 @@
             ]
           }
         }
-      ]
+      ]}
     },
     {
       "name": "core.num.narrow_i64_to_i32",
@@ -459,7 +459,7 @@
       "return_type": {
         "kind": "llvm.i32"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_16", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -474,7 +474,7 @@
             "signed": true
           }
         }
-      ],
+      ]},
       "claims": [
         {
           "kind": "int_range",
@@ -497,7 +497,7 @@
       "return_type": {
         "kind": "llvm.u32"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_17", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -512,7 +512,7 @@
             "signed": false
           }
         }
-      ],
+      ]},
       "claims": [
         {
           "kind": "int_range",
@@ -538,7 +538,7 @@
       "return_type": {
         "kind": "llvm.u64"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_18", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -553,7 +553,7 @@
             "signed": false
           }
         }
-      ],
+      ]},
       "claims": [
         {
           "kind": "non_negative",
@@ -577,7 +577,7 @@
       "return_type": {
         "kind": "llvm.i64"
       },
-      "body": [
+      "body": {"id": "@blk_core.num_19", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -592,7 +592,7 @@
             "signed": false
           }
         }
-      ],
+      ]},
       "claims": [
         {
           "kind": "int_range",

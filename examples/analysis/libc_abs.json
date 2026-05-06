@@ -20,7 +20,7 @@
           }
         }
       ],
-      "body": [
+      "body": {"id": "@blk_libc_abs_1", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -34,7 +34,7 @@
             ]
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }
@@ -42,7 +42,7 @@
     {
       "name": "main",
       "params": [],
-      "body": [
+      "body": {"id": "@blk_libc_abs_2", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -59,7 +59,7 @@
             ]
           }
         }
-      ],
+      ]},
       "return_type": {
         "kind": "llvm.i32"
       }

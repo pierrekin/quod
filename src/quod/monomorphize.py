@@ -309,8 +309,12 @@ def _walk_types_in_stmt(stmt, fn):
     if isinstance(stmt, If):
         return stmt.model_copy(update={
             "cond":      _walk_types_in_expr(stmt.cond, fn),
-            "then_body": tuple(_walk_types_in_stmt(s, fn) for s in stmt.then_body),
-            "else_body": tuple(_walk_types_in_stmt(s, fn) for s in stmt.else_body),
+            "then_body": stmt.then_body.model_copy(update={
+                "stmts": tuple(_walk_types_in_stmt(s, fn) for s in stmt.then_body.stmts),
+            }),
+            "else_body": stmt.else_body.model_copy(update={
+                "stmts": tuple(_walk_types_in_stmt(s, fn) for s in stmt.else_body.stmts),
+            }),
         })
     if isinstance(stmt, Let):
         return stmt.model_copy(update={
@@ -324,13 +328,17 @@ def _walk_types_in_stmt(stmt, fn):
     if isinstance(stmt, While):
         return stmt.model_copy(update={
             "cond": _walk_types_in_expr(stmt.cond, fn),
-            "body": tuple(_walk_types_in_stmt(s, fn) for s in stmt.body),
+            "body": stmt.body.model_copy(update={
+                "stmts": tuple(_walk_types_in_stmt(s, fn) for s in stmt.body.stmts),
+            }),
         })
     if isinstance(stmt, For):
         return stmt.model_copy(update={
             "lo":   _walk_types_in_expr(stmt.lo, fn),
             "hi":   _walk_types_in_expr(stmt.hi, fn),
-            "body": tuple(_walk_types_in_stmt(s, fn) for s in stmt.body),
+            "body": stmt.body.model_copy(update={
+                "stmts": tuple(_walk_types_in_stmt(s, fn) for s in stmt.body.stmts),
+            }),
         })
     if isinstance(stmt, ExprStmt):
         return stmt.model_copy(update={
@@ -361,12 +369,16 @@ def _walk_types_in_stmt(stmt, fn):
     if isinstance(stmt, WithArena):
         return stmt.model_copy(update={
             "capacity": _walk_types_in_expr(stmt.capacity, fn),
-            "body":     tuple(_walk_types_in_stmt(s, fn) for s in stmt.body),
+            "body":     stmt.body.model_copy(update={
+                "stmts": tuple(_walk_types_in_stmt(s, fn) for s in stmt.body.stmts),
+            }),
         })
     if isinstance(stmt, Match):
         new_arms = tuple(
             arm.model_copy(update={
-                "body": tuple(_walk_types_in_stmt(s, fn) for s in arm.body),
+                "body": arm.body.model_copy(update={
+                    "stmts": tuple(_walk_types_in_stmt(s, fn) for s in arm.body.stmts),
+                }),
             })
             for arm in stmt.arms
         )
@@ -489,9 +501,9 @@ def _collect_in_stmt(stmt, sink: set):
         return
     elif isinstance(stmt, If):
         _collect_in_expr(stmt.cond, sink)
-        for s in stmt.then_body:
+        for s in stmt.then_body.stmts:
             _collect_in_stmt(s, sink)
-        for s in stmt.else_body:
+        for s in stmt.else_body.stmts:
             _collect_in_stmt(s, sink)
     elif isinstance(stmt, Let):
         _collect_instantiations(stmt.type, sink)
@@ -500,12 +512,12 @@ def _collect_in_stmt(stmt, sink: set):
         _collect_in_expr(stmt.value, sink)
     elif isinstance(stmt, While):
         _collect_in_expr(stmt.cond, sink)
-        for s in stmt.body:
+        for s in stmt.body.stmts:
             _collect_in_stmt(s, sink)
     elif isinstance(stmt, For):
         _collect_in_expr(stmt.lo, sink)
         _collect_in_expr(stmt.hi, sink)
-        for s in stmt.body:
+        for s in stmt.body.stmts:
             _collect_in_stmt(s, sink)
     elif isinstance(stmt, ExprStmt):
         _collect_in_expr(stmt.value, sink)
@@ -519,12 +531,12 @@ def _collect_in_stmt(stmt, sink: set):
         _collect_in_expr(stmt.value, sink)
     elif isinstance(stmt, WithArena):
         _collect_in_expr(stmt.capacity, sink)
-        for s in stmt.body:
+        for s in stmt.body.stmts:
             _collect_in_stmt(s, sink)
     elif isinstance(stmt, Match):
         _collect_in_expr(stmt.scrutinee, sink)
         for arm in stmt.arms:
-            for s in arm.body:
+            for s in arm.body.stmts:
                 _collect_in_stmt(s, sink)
     else:
         raise AssertionError(f"unhandled stmt in collect: {type(stmt).__name__}")
@@ -661,8 +673,9 @@ def _instantiate_generic_impl(g_impl: ImplDef, args: tuple, impl_index, out_fns)
             Param(name=p.name, type=type_fn(p.type)) for p in method.params
         )
         new_return = type_fn(method.return_type)
-        new_body = tuple(_walk_types_in_stmt(s, _rewrite_type)
-                         for s in tuple(_substitute_type_in_method_body(method.body, sub)))
+        new_stmts = tuple(_walk_types_in_stmt(s, _rewrite_type)
+                          for s in _substitute_type_in_method_body(method.body, sub))
+        new_body = method.body.model_copy(update={"stmts": new_stmts})
         method_mangled = f"{concrete_target}::{method.name}"
         # (a) impl-index entry: original trait-method name on the inner Function.
         impl_methods_for_index.append(method.model_copy(update={
@@ -687,9 +700,10 @@ def _instantiate_generic_impl(g_impl: ImplDef, args: tuple, impl_index, out_fns)
 
 def _substitute_type_in_method_body(body, sub):
     """Substitute TypeParamRefs in a method body using the shared
-    traversal walker. Returns the substituted body tuple (with nested
-    type_args still un-mangled — caller mangles in a second pass)."""
-    return tuple(_substitute_in_stmt(s, sub) for s in body)
+    traversal walker. Returns the substituted statement tuple (with
+    nested type_args still un-mangled — caller mangles in a second
+    pass). Takes a Block; returns a stmts tuple."""
+    return tuple(_substitute_in_stmt(s, sub) for s in body.stmts)
 
 
 def _resolve_trait_call(expr: TraitCall, impl_index) -> Call:
@@ -795,8 +809,12 @@ def _resolve_trait_calls_in_stmt(stmt, impl_index):
     if isinstance(stmt, If):
         return stmt.model_copy(update={
             "cond":      _resolve_trait_calls_in_expr(stmt.cond, impl_index),
-            "then_body": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.then_body),
-            "else_body": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.else_body),
+            "then_body": stmt.then_body.model_copy(update={
+                "stmts": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.then_body.stmts),
+            }),
+            "else_body": stmt.else_body.model_copy(update={
+                "stmts": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.else_body.stmts),
+            }),
         })
     if isinstance(stmt, Let):
         return stmt.model_copy(update={
@@ -809,13 +827,17 @@ def _resolve_trait_calls_in_stmt(stmt, impl_index):
     if isinstance(stmt, While):
         return stmt.model_copy(update={
             "cond": _resolve_trait_calls_in_expr(stmt.cond, impl_index),
-            "body": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.body),
+            "body": stmt.body.model_copy(update={
+                "stmts": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.body.stmts),
+            }),
         })
     if isinstance(stmt, For):
         return stmt.model_copy(update={
             "lo":   _resolve_trait_calls_in_expr(stmt.lo, impl_index),
             "hi":   _resolve_trait_calls_in_expr(stmt.hi, impl_index),
-            "body": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.body),
+            "body": stmt.body.model_copy(update={
+                "stmts": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.body.stmts),
+            }),
         })
     if isinstance(stmt, ExprStmt):
         return stmt.model_copy(update={
@@ -838,14 +860,18 @@ def _resolve_trait_calls_in_stmt(stmt, impl_index):
     if isinstance(stmt, WithArena):
         return stmt.model_copy(update={
             "capacity": _resolve_trait_calls_in_expr(stmt.capacity, impl_index),
-            "body":     tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.body),
+            "body":     stmt.body.model_copy(update={
+                "stmts": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.body.stmts),
+            }),
         })
     if isinstance(stmt, Match):
         return stmt.model_copy(update={
             "scrutinee": _resolve_trait_calls_in_expr(stmt.scrutinee, impl_index),
             "arms": tuple(
                 arm.model_copy(update={
-                    "body": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in arm.body),
+                    "body": arm.body.model_copy(update={
+                        "stmts": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in arm.body.stmts),
+                    }),
                 })
                 for arm in stmt.arms
             ),
@@ -916,7 +942,7 @@ def monomorphize(program: Program) -> Program:
         _collect_instantiations(fn.return_type, seeds)
         for p in fn.params:
             _collect_instantiations(p.type, seeds)
-        for stmt in fn.body:
+        for stmt in fn.body.stmts:
             _collect_in_stmt(stmt, seeds)
     for ext in program.externs:
         _collect_instantiations(ext.return_type, seeds)
@@ -1022,7 +1048,7 @@ def monomorphize(program: Program) -> Program:
             sub_params = tuple(
                 Param(name=p.name, type=_substitute_type(p.type, sub)) for p in fn.params
             )
-            sub_body = tuple(_substitute_in_stmt(s, sub) for s in fn.body)
+            sub_body = tuple(_substitute_in_stmt(s, sub) for s in fn.body.stmts)
             # Discover instantiations from substituted (still has type_args).
             fresh: set[tuple[str, tuple]] = set()
             _collect_instantiations(sub_return, fresh)
@@ -1043,7 +1069,7 @@ def monomorphize(program: Program) -> Program:
                 "type_params": (),
                 "params":      rewritten_params,
                 "return_type": rewritten_return,
-                "body":        rewritten_body,
+                "body":        fn.body.model_copy(update={"stmts": rewritten_body}),
                 # Claims propagate as-is — they reference parameter names,
                 # which are unchanged. If a claim references a type-param-typed
                 # parameter, the claim's semantics travel with the
@@ -1088,7 +1114,9 @@ def monomorphize(program: Program) -> Program:
             "params": tuple(
                 Param(name=p.name, type=_rewrite_type(p.type)) for p in fn.params
             ),
-            "body": tuple(_walk_types_in_stmt(s, _rewrite_type) for s in fn.body),
+            "body": fn.body.model_copy(update={
+                "stmts": tuple(_walk_types_in_stmt(s, _rewrite_type) for s in fn.body.stmts),
+            }),
         })
         for fn in program.functions
         if not fn.type_params
@@ -1110,7 +1138,9 @@ def monomorphize(program: Program) -> Program:
     # rather than silently passing through to the lowerer.
     new_functions = tuple(
         fn.model_copy(update={
-            "body": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in fn.body),
+            "body": fn.body.model_copy(update={
+                "stmts": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in fn.body.stmts),
+            }),
         })
         for fn in new_functions
     )

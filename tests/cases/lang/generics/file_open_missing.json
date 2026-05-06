@@ -13,7 +13,7 @@
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_file_open_missing_3", "stmts": [
           {
             "kind": "quod.match",
             "scrutinee": {
@@ -27,26 +27,26 @@
               {
                 "variant": "Ok",
                 "bindings": ["_f"],
-                "body": [
+                "body": {"id": "@blk_file_open_missing_1", "stmts": [
                   {
                     "kind": "quod.return_expr",
                     "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}
                   }
-                ]
+                ]}
               },
               {
                 "variant": "Err",
                 "bindings": ["_e"],
-                "body": [
+                "body": {"id": "@blk_file_open_missing_2", "stmts": [
                   {
                     "kind": "quod.return_expr",
                     "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42}
                   }
-                ]
+                ]}
               }
             ]
           }
-        ]
+        ]}
       }
     ]
   },

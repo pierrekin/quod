@@ -51,7 +51,7 @@ def find_function_ref(program: Program, ref: str) -> Function:
 
 def find_statement_index(fn: Function, ref: str) -> int:
     """Return the index of the statement in fn.body matching `ref` (hash prefix)."""
-    matches = [(i, s) for i, s in enumerate(fn.body) if node_hash(s).startswith(ref)]
+    matches = [(i, s) for i, s in enumerate(fn.body.stmts) if node_hash(s).startswith(ref)]
     if not matches:
         raise KeyError(f"no statement in {fn.name!r} matches hash prefix {ref!r}")
     if len({node_hash(s) for _, s in matches}) > 1:
@@ -288,7 +288,7 @@ def add_statement_in_function(
     where: str,                   # "end" | "before" | "after" | "start"
     anchor_ref: str | None = None,
 ) -> Program:
-    body = list(function.body)
+    body = list(function.body.stmts)
     match where:
         case "end":
             body.append(new_stmt)
@@ -302,7 +302,8 @@ def add_statement_in_function(
             body.insert(find_statement_index(function, anchor_ref) + 1, new_stmt)
         case _:
             raise ValueError(f"unknown anchor mode {where!r}")
-    new_fn = function.model_copy(update={"body": tuple(body)})
+    new_body = function.body.model_copy(update={"stmts": tuple(body)})
+    new_fn = function.model_copy(update={"body": new_body})
     return replace_function(program, new_fn)
 
 
@@ -313,8 +314,9 @@ def remove_statement_in_function(
 ) -> Program:
     """Remove the statement matching `hash_prefix` from the function body."""
     idx = find_statement_index(function, hash_prefix)
-    body = function.body[:idx] + function.body[idx + 1:]
-    new_fn = function.model_copy(update={"body": body})
+    new_stmts = function.body.stmts[:idx] + function.body.stmts[idx + 1:]
+    new_body = function.body.model_copy(update={"stmts": new_stmts})
+    new_fn = function.model_copy(update={"body": new_body})
     return replace_function(program, new_fn)
 
 

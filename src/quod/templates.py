@@ -2,6 +2,7 @@
 
 from quod.model import (
     BinOp,
+    Block,
     Call,
     ExprStmt,
     ExternFunction,
@@ -30,10 +31,10 @@ HELLO_WORLD = Program(
         Function(
             name="main",
             return_type=_I32,
-            body=(
+            body=Block(stmts=(
                 ExprStmt(value=Call(function="puts", args=(StringRef(name=".str.greeting"),))),
                 ReturnExpr(value=IntLit(type=_I32, value=0)),
-            ),
+            )),
         ),
     ),
 )
@@ -48,15 +49,15 @@ GUARDED_INC = Program(
             name="f",
             params=(Param(name="x", type=_I32),),
             return_type=_I32,
-            body=(
+            body=Block(stmts=(
                 If(
                     cond=BinOp(
                         op="slt",
                         lhs=ParamRef(name="x"),
                         rhs=IntLit(type=_I32, value=0),
                     ),
-                    then_body=(ReturnExpr(value=IntLit(type=_I32, value=-1)),),
-                    else_body=(
+                    then_body=Block(stmts=(ReturnExpr(value=IntLit(type=_I32, value=-1)),)),
+                    else_body=Block(stmts=(
                         ReturnExpr(
                             value=BinOp(
                                 op="add",
@@ -64,9 +65,9 @@ GUARDED_INC = Program(
                                 rhs=IntLit(type=_I32, value=1),
                             ),
                         ),
-                    ),
+                    )),
                 ),
-            ),
+            )),
         ),
     ),
 )

@@ -27,7 +27,7 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": [
+        "body": {"id": "@blk_trunc_i64_to_i32_1", "stmts": [
           {
             "kind": "quod.let",
             "name": "wide",
@@ -86,7 +86,7 @@
               "value": 0
             }
           }
-        ],
+        ]},
         "claims": []
       }
     ]

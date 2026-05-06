@@ -50,7 +50,7 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": [
+        "body": {"id": "@blk_struct_round_trip_2", "stmts": [
           {
             "kind": "quod.with_arena",
             "name": "a",
@@ -61,7 +61,7 @@
               },
               "value": 64
             },
-            "body": [
+            "body": {"id": "@blk_struct_round_trip_1", "stmts": [
               {
                 "kind": "quod.let",
                 "name": "buf",
@@ -188,7 +188,7 @@
                   ]
                 }
               }
-            ]
+            ]}
           },
           {
             "kind": "quod.return_expr",
@@ -200,7 +200,7 @@
               "value": 0
             }
           }
-        ],
+        ]},
         "claims": []
       }
     ],

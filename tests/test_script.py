@@ -112,7 +112,7 @@ def test_function_signature_typed_params_and_struct_return():
 def test_function_void_return_with_bare_return():
     fn = parse_function("fn yo(p: i8*) -> void { return }")
     assert isinstance(fn.return_type, VoidType)
-    assert isinstance(fn.body[0], Return)
+    assert isinstance(fn.body.stmts[0], Return)
 
 
 def test_void_outside_return_position_rejected():
@@ -126,7 +126,7 @@ def test_let_with_struct_type_and_load():
     fn = parse_function(
         "fn f(p: i8*) -> i32 { let q: Parser = load[Parser](p) return 0 }"
     )
-    let = fn.body[0]
+    let = fn.body.stmts[0]
     assert isinstance(let, Let) and let.name == "q"
     assert isinstance(let.type, StructType) and let.type.name == "Parser"
     assert isinstance(let.init, Load)
@@ -136,8 +136,8 @@ def test_assign_distinct_from_field_set():
     fn = parse_function(
         "fn f() -> i32 { let x: i32 = 1 x = 2 return x }"
     )
-    assert isinstance(fn.body[1], Assign)
-    assert fn.body[1].name == "x"
+    assert isinstance(fn.body.stmts[1], Assign)
+    assert fn.body.stmts[1].name == "x"
 
 
 def test_field_set():
@@ -145,7 +145,7 @@ def test_field_set():
         "fn f(p: i8*) -> i32 { let v: Parser = load[Parser](p) "
         "v.cursor = v.cursor + 1 return 0 }"
     )
-    fs = fn.body[1]
+    fs = fn.body.stmts[1]
     assert isinstance(fs, FieldSet) and fs.local == "v" and fs.name == "cursor"
 
 
@@ -153,25 +153,25 @@ def test_if_with_else():
     fn = parse_function(
         "fn f(x: i32) -> i32 { if (x == 0) { return 1 } else { return 2 } }"
     )
-    iff = fn.body[0]
+    iff = fn.body.stmts[0]
     assert isinstance(iff, If)
-    assert isinstance(iff.then_body[0], ReturnExpr)
-    assert isinstance(iff.then_body[0].value, IntLit) and iff.then_body[0].value.value == 1
-    assert isinstance(iff.else_body[0], ReturnExpr)
-    assert isinstance(iff.else_body[0].value, IntLit) and iff.else_body[0].value.value == 2
+    assert isinstance(iff.then_body.stmts[0], ReturnExpr)
+    assert isinstance(iff.then_body.stmts[0].value, IntLit) and iff.then_body.stmts[0].value.value == 1
+    assert isinstance(iff.else_body.stmts[0], ReturnExpr)
+    assert isinstance(iff.else_body.stmts[0].value, IntLit) and iff.else_body.stmts[0].value.value == 2
 
 
 def test_if_without_else():
     fn = parse_function("fn f(x: i32) -> i32 { if (x == 0) { return 1 } return 0 }")
-    iff = fn.body[0]
-    assert iff.else_body == ()
+    iff = fn.body.stmts[0]
+    assert iff.else_body.stmts == ()
 
 
 def test_while_loop():
     fn = parse_function(
         "fn loop_(n: i32) -> i32 { let i: i32 = 0 while (i <  n) { i = i + 1 } return i }"
     )
-    w = fn.body[1]
+    w = fn.body.stmts[1]
     assert isinstance(w, While)
     assert isinstance(w.cond, BinOp) and w.cond.op == "slt"
 
@@ -180,7 +180,7 @@ def test_for_loop():
     fn = parse_function(
         "fn f(n: i32) -> i32 { let s: i32 = 0 for i: i32 in 0 .. n { s = s + i } return s }"
     )
-    fl = fn.body[1]
+    fl = fn.body.stmts[1]
     assert isinstance(fl, For) and fl.var == "i"
     assert isinstance(fl.type, I32Type)
 
@@ -188,33 +188,33 @@ def test_for_loop():
 def test_return_void_vs_int_vs_expr():
     # Bare void return.
     fn = parse_function("fn a() -> void { return }")
-    assert isinstance(fn.body[0], Return)
+    assert isinstance(fn.body.stmts[0], Return)
 
     # Bare int literal at return position retypes to the function's
     # return_type — `return 7` from an i32 fn carries i32, not the script's
     # default i64.
     fn = parse_function("fn a() -> i32 { return 7 }")
-    r = fn.body[0]
+    r = fn.body.stmts[0]
     assert isinstance(r, ReturnExpr)
     assert isinstance(r.value, IntLit) and r.value.value == 7
     assert isinstance(r.value.type, I32Type)
 
     fn = parse_function("fn a() -> i32 { return -7 }")
-    r = fn.body[0]
+    r = fn.body.stmts[0]
     assert isinstance(r, ReturnExpr)
     assert isinstance(r.value, IntLit) and r.value.value == -7
     assert isinstance(r.value.type, I32Type)
 
     # Composite expression — normal type rules.
     fn = parse_function("fn a(x: i32) -> i32 { return x + 1 }")
-    assert isinstance(fn.body[0], ReturnExpr)
+    assert isinstance(fn.body.stmts[0], ReturnExpr)
 
 
 def test_store_statement():
     fn = parse_function(
         "fn f(p: i8*) -> i32 { store(p, 65) return 0 }"
     )
-    s = fn.body[0]
+    s = fn.body.stmts[0]
     assert isinstance(s, Store)
     assert isinstance(s.value, IntLit) and s.value.value == 65
 
@@ -223,17 +223,17 @@ def test_with_arena():
     fn = parse_function(
         "fn f() -> i32 { with_arena a (capacity = 64) { let x: i32 = 1 } return 0 }"
     )
-    wa = fn.body[0]
+    wa = fn.body.stmts[0]
     assert isinstance(wa, WithArena) and wa.name == "a"
     assert isinstance(wa.capacity, IntLit) and wa.capacity.value == 64
-    assert len(wa.body) == 1
+    assert len(wa.body.stmts) == 1
 
 
 def test_expression_statement_call():
     fn = parse_function(
         'fn f() -> i32 { printf(&.fmt, 1) return 0 }'
     )
-    es = fn.body[0]
+    es = fn.body.stmts[0]
     assert isinstance(es, ExprStmt)
     assert isinstance(es.value, Call) and es.value.function == "printf"
 
@@ -242,7 +242,7 @@ def test_expression_statement_call():
 
 def test_expr_int_lit_default_i64():
     fn = parse_function("fn f() -> i64 { return 42 + 1 }")
-    body = fn.body[0]
+    body = fn.body.stmts[0]
     assert isinstance(body, ReturnExpr)
     assert isinstance(body.value.lhs, IntLit) and isinstance(body.value.lhs.type, I64Type)
 
@@ -251,13 +251,13 @@ def test_expr_char_lit_and_null_and_bools():
     fn = parse_function(
         "fn f() -> i1 { let c: i8 = 'l' let p: i8* = null let b: i1 = true return false }"
     )
-    assert isinstance(fn.body[0].init, CharLit) and fn.body[0].init.value == "l"
-    assert isinstance(fn.body[1].init, NullPtr)
-    blit = fn.body[2].init
+    assert isinstance(fn.body.stmts[0].init, CharLit) and fn.body.stmts[0].init.value == "l"
+    assert isinstance(fn.body.stmts[1].init, NullPtr)
+    blit = fn.body.stmts[2].init
     assert isinstance(blit, IntLit) and isinstance(blit.type, I1Type) and blit.value == 1
     # `return false` is ReturnExpr(IntLit(i1, 0)) — booleans are typed at
     # the source so they don't go through the bare-int retype path.
-    ret = fn.body[3]
+    ret = fn.body.stmts[3]
     assert isinstance(ret, ReturnExpr)
     assert isinstance(ret.value, IntLit) and ret.value.value == 0
     assert isinstance(ret.value.type, I1Type)
@@ -265,7 +265,7 @@ def test_expr_char_lit_and_null_and_bools():
 
 def test_expr_string_ref_dotted():
     fn = parse_function("fn f() -> i32 { printf(&.str.greeting) return 0 }")
-    arg = fn.body[0].value.args[0]
+    arg = fn.body.stmts[0].value.args[0]
     assert isinstance(arg, StringRef) and arg.name == ".str.greeting"
 
 
@@ -273,7 +273,7 @@ def test_expr_field_read_chained():
     fn = parse_function(
         "fn f(p: i8*) -> i64 { let v: Parser = load[Parser](p) return v.cursor }"
     )
-    ret = fn.body[1]
+    ret = fn.body.stmts[1]
     assert isinstance(ret.value, FieldRead) and ret.value.name == "cursor"
 
 
@@ -281,7 +281,7 @@ def test_expr_call_with_args_uses_param_ref():
     fn = parse_function(
         "fn f(x: i32) -> i32 { return helper(x, 7) }"
     )
-    call = fn.body[0].value
+    call = fn.body.stmts[0].value
     assert isinstance(call, Call) and call.function == "helper"
     assert isinstance(call.args[0], ParamRef) and call.args[0].name == "x"
     assert isinstance(call.args[1], IntLit)
@@ -293,7 +293,7 @@ def test_expr_struct_init_with_trailing_comma():
         "Parser { input_ptr: null, input_len: 0, cursor: 0, arena: null, had_error: 0, } "
         "return 0 }"
     )
-    init = fn.body[0].init
+    init = fn.body.stmts[0].init
     assert isinstance(init, StructInit) and init.type == "Parser"
     assert [fi.name for fi in init.fields] == [
         "input_ptr", "input_len", "cursor", "arena", "had_error",
@@ -308,12 +308,12 @@ def test_expr_load_widen_uwiden_ptr_offset():
         "let s: i32 = widen(b to i32) "
         "return w + s }"
     )
-    assert isinstance(fn.body[0].init, Load)
-    load = fn.body[0].init
+    assert isinstance(fn.body.stmts[0].init, Load)
+    load = fn.body.stmts[0].init
     assert isinstance(load.ptr, PtrOffset)
-    uw = fn.body[1].init
+    uw = fn.body.stmts[1].init
     assert isinstance(uw, Widen) and uw.signed is False
-    sw = fn.body[2].init
+    sw = fn.body.stmts[2].init
     assert isinstance(sw, Widen) and sw.signed is True
 
 
@@ -322,35 +322,35 @@ def test_expr_short_circuit_and_or():
         "fn f(x: i1, y: i1, z: i1) -> i1 { return x || y && z }"
     )
     # `&&` binds tighter than `||`, so the tree is `x || (y && z)`.
-    e = fn.body[0].value
+    e = fn.body.stmts[0].value
     assert isinstance(e, ShortCircuitOr)
     assert isinstance(e.rhs, ShortCircuitAnd)
 
 
 def test_expr_cmp_and_arithmetic_precedence():
     fn = parse_function("fn f(x: i32) -> i1 { return x + 1 == 2 }")
-    e = fn.body[0].value
+    e = fn.body.stmts[0].value
     assert isinstance(e, BinOp) and e.op == "eq"
     assert isinstance(e.lhs, BinOp) and e.lhs.op == "add"
 
 
 def test_expr_paren_grouping():
     fn = parse_function("fn f(a: i32, b: i32, c: i32) -> i32 { return (a + b) * c }")
-    e = fn.body[0].value
+    e = fn.body.stmts[0].value
     assert e.op == "mul"
     assert isinstance(e.lhs, BinOp) and e.lhs.op == "add"
 
 
 def test_expr_try_postfix():
     fn = parse_function("fn f() -> i64 { let v: i64 = foo()? return v }")
-    init = fn.body[0].init
+    init = fn.body.stmts[0].init
     assert isinstance(init, TryExpr)
     assert isinstance(init.value, Call) and init.value.function == "foo"
 
 
 def test_expr_try_chained_with_field_read():
     fn = parse_function("fn f() -> i64 { let v: i64 = bar()?.x return v }")
-    init = fn.body[0].init
+    init = fn.body.stmts[0].init
     assert isinstance(init, FieldRead) and init.name == "x"
     assert isinstance(init.value, TryExpr)
     assert isinstance(init.value.value, Call) and init.value.value.function == "bar"
@@ -362,14 +362,14 @@ def test_typed_int_literal_suffix():
     fn = parse_function(
         "fn f() -> i32 { let a: i8 = 0i8 let b: i32 = 7i32 let c: i64 = 9i64 return 0 }"
     )
-    assert isinstance(fn.body[0].init, IntLit) and isinstance(fn.body[0].init.type, I8Type)
-    assert isinstance(fn.body[1].init, IntLit) and isinstance(fn.body[1].init.type, I32Type)
-    assert isinstance(fn.body[2].init, IntLit) and isinstance(fn.body[2].init.type, I64Type)
+    assert isinstance(fn.body.stmts[0].init, IntLit) and isinstance(fn.body.stmts[0].init.type, I8Type)
+    assert isinstance(fn.body.stmts[1].init, IntLit) and isinstance(fn.body.stmts[1].init.type, I32Type)
+    assert isinstance(fn.body.stmts[2].init, IntLit) and isinstance(fn.body.stmts[2].init.type, I64Type)
 
 
 def test_typed_int_literal_negative():
     fn = parse_function("fn f() -> i32 { let x: i8 = -3i8 return 0 }")
-    init = fn.body[0].init
+    init = fn.body.stmts[0].init
     assert isinstance(init, IntLit) and isinstance(init.type, I8Type)
     assert init.value == -3
 
@@ -379,14 +379,14 @@ def test_typed_int_literal_in_field_set():
         "fn f(p: i8*) -> i32 { let v: Parser = load[Parser](p) "
         "v.had_error = 1i8 store(p, v) return 0 }"
     )
-    fs = fn.body[1]
+    fs = fn.body.stmts[1]
     assert isinstance(fs, FieldSet) and fs.name == "had_error"
     assert isinstance(fs.value, IntLit) and isinstance(fs.value.type, I8Type)
 
 
 def test_unsuffixed_int_defaults_to_i64():
     fn = parse_function("fn f() -> i32 { let x: i64 = 42 return 0 }")
-    init = fn.body[0].init
+    init = fn.body.stmts[0].init
     assert isinstance(init, IntLit) and isinstance(init.type, I64Type)
 
 
@@ -404,10 +404,10 @@ def test_param_names_become_param_ref():
     fn = parse_function(
         "fn f(x: i32) -> i32 { let y: i32 = x + 1 return y }"
     )
-    let = fn.body[0]
+    let = fn.body.stmts[0]
     add = let.init  # x + 1
     assert isinstance(add.lhs, ParamRef) and add.lhs.name == "x"
-    ret = fn.body[1]
+    ret = fn.body.stmts[1]
     assert isinstance(ret.value, LocalRef) and ret.value.name == "y"
 
 

@@ -20,7 +20,7 @@
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_buf_writer_smoke_5", "stmts": [
           {
             "kind": "quod.let",
             "name": "a",
@@ -116,13 +116,13 @@
             "kind": "quod.match",
             "scrutinee": {"kind": "quod.local_ref", "name": "rc"},
             "arms": [
-              {"variant": "Ok", "bindings": ["_n"], "body": []},
+              {"variant": "Ok", "bindings": ["_n"], "body": {"id": "@blk_buf_writer_smoke_1", "stmts": []}},
               {
                 "variant": "Err",
                 "bindings": ["_e"],
-                "body": [
+                "body": {"id": "@blk_buf_writer_smoke_2", "stmts": [
                   {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}
-                ]
+                ]}
               }
             ]
           },
@@ -152,13 +152,13 @@
             "kind": "quod.match",
             "scrutinee": {"kind": "quod.local_ref", "name": "flush_rc"},
             "arms": [
-              {"variant": "None", "bindings": [], "body": []},
+              {"variant": "None", "bindings": [], "body": {"id": "@blk_buf_writer_smoke_3", "stmts": []}},
               {
                 "variant": "Some",
                 "bindings": ["_e"],
-                "body": [
+                "body": {"id": "@blk_buf_writer_smoke_4", "stmts": [
                   {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 2}}
-                ]
+                ]}
               }
             ]
           },
@@ -181,7 +181,7 @@
               "signed": false
             }
           }
-        ]
+        ]}
       }
     ]
   },

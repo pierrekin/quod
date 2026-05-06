@@ -279,7 +279,8 @@ def _substitute_wirables(mod: InputProgram, wire_map: dict) -> InputProgram:
             Param(name=p.name, type=type_fn(p.type)) for p in fn.params
         )
         new_return = type_fn(fn.return_type)
-        new_body = tuple(substitute_in_stmt(s, type_fn) for s in fn.body)
+        new_stmts = tuple(substitute_in_stmt(s, type_fn) for s in fn.body.stmts)
+        new_body = fn.body.model_copy(update={"stmts": new_stmts})
         new_functions.append(fn.model_copy(update={
             "params":      new_params,
             "return_type": new_return,
@@ -300,7 +301,8 @@ def _substitute_wirables(mod: InputProgram, wire_map: dict) -> InputProgram:
                 Param(name=p.name, type=method_fn(p.type)) for p in method.params
             )
             m_return = method_fn(method.return_type)
-            m_body = tuple(substitute_in_stmt(s, method_fn) for s in method.body)
+            m_stmts = tuple(substitute_in_stmt(s, method_fn) for s in method.body.stmts)
+            m_body = method.body.model_copy(update={"stmts": m_stmts})
             new_methods.append(method.model_copy(update={
                 "params":      m_params,
                 "return_type": m_return,

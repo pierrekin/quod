@@ -50,6 +50,8 @@ from quod.model import (
     Function,
     Widen,
     WithArena,
+
+    Block,
 )
 
 
@@ -91,7 +93,7 @@ def _print_align_up_main(x: int, align: int) -> Program:
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_int_call(Call(
                 function="core.mem.align_up",
                 args=(
@@ -100,7 +102,7 @@ def _print_align_up_main(x: int, align: int) -> Program:
                 ),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     return Program(
         imports=(Import(module="core.mem"),),
@@ -114,7 +116,7 @@ def _print_align_down_main(x: int, align: int) -> Program:
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_int_call(Call(
                 function="core.mem.align_down",
                 args=(
@@ -123,7 +125,7 @@ def _print_align_down_main(x: int, align: int) -> Program:
                 ),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     return Program(
         imports=(Import(module="core.mem"),),
@@ -183,11 +185,11 @@ def test_set_writes_byte_pattern():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             WithArena(
                 name="a",
                 capacity=IntLit(type=I64Type(), value=64),
-                body=(
+                body=Block(stmts=(
                     Let(
                         name="buf",
                         type=I8PtrType(),
@@ -208,10 +210,10 @@ def test_set_writes_byte_pattern():
                     _load_byte_print("buf", 1),
                     _load_byte_print("buf", 2),
                     _load_byte_print("buf", 3),
-                ),
+                )),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.mem"), Import(module="mem.arena")),
@@ -242,11 +244,11 @@ def test_copy_overlapping_handles_forward_overlap():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             WithArena(
                 name="a",
                 capacity=IntLit(type=I64Type(), value=64),
-                body=(
+                body=Block(stmts=(
                     Let(
                         name="buf",
                         type=I8PtrType(),
@@ -265,10 +267,10 @@ def test_copy_overlapping_handles_forward_overlap():
                         ),
                     )),
                     *prints,
-                ),
+                )),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.mem"), Import(module="mem.arena")),
@@ -286,7 +288,7 @@ def _compare_main(a: str, alen: int, b: str, blen: int) -> Program:
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(
                 name="ord",
                 type=EnumType(name="core.cmp.Ordering"),
@@ -305,20 +307,20 @@ def _compare_main(a: str, alen: int, b: str, blen: int) -> Program:
                 arms=(
                     MatchArm(
                         variant="Less",
-                        body=(_print_int_call(IntLit(type=I64Type(), value=0)),),
+                        body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=0)),)),
                     ),
                     MatchArm(
                         variant="Equal",
-                        body=(_print_int_call(IntLit(type=I64Type(), value=1)),),
+                        body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=1)),)),
                     ),
                     MatchArm(
                         variant="Greater",
-                        body=(_print_int_call(IntLit(type=I64Type(), value=2)),),
+                        body=Block(stmts=(_print_int_call(IntLit(type=I64Type(), value=2)),)),
                     ),
                 ),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     return Program(
         imports=(Import(module="core.mem"),),

@@ -44,6 +44,8 @@ from quod.model import (
     IsizeType,
     UsizeType,
     Widen,
+
+    Block,
 )
 from quod.script import parse_function
 
@@ -103,14 +105,14 @@ def test_u32_addition_round_trips():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_lld(_zext_to_i64(BinOp(
                 op="add",
                 lhs=IntLit(type=U32Type(), value=10),
                 rhs=IntLit(type=U32Type(), value=32),
             ))),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,),
@@ -123,13 +125,13 @@ def test_u8_u16_u32_u64_all_lower():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_lld(_zext_to_i64(IntLit(type=U8Type(), value=200))),
             _print_lld(_zext_to_i64(IntLit(type=U16Type(), value=50000))),
             _print_lld(_zext_to_i64(IntLit(type=U32Type(), value=3000000000))),
             _print_lld(IntLit(type=U64Type(), value=42)),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,),
@@ -145,14 +147,14 @@ def test_urem_lowers():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_lld(_zext_to_i64(BinOp(
                 op="urem",
                 lhs=IntLit(type=U32Type(), value=13),
                 rhs=IntLit(type=U32Type(), value=5),
             ))),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,),
@@ -169,7 +171,7 @@ def test_udiv_vs_sdiv_divergence_on_u32_max():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_lld(_zext_to_i64(BinOp(
                 op="udiv",
                 lhs=IntLit(type=U32Type(), value=0xFFFFFFFF),
@@ -185,7 +187,7 @@ def test_udiv_vs_sdiv_divergence_on_u32_max():
                 signed=True,
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,),
@@ -199,7 +201,7 @@ def test_ult_vs_slt_divergence():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_lld(_zext_to_i64(BinOp(
                 op="ult",
                 lhs=IntLit(type=U32Type(), value=0xFFFFFFFF),
@@ -211,7 +213,7 @@ def test_ult_vs_slt_divergence():
                 rhs=IntLit(type=I32Type(), value=1),
             ))),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,),
@@ -229,10 +231,10 @@ def test_u64_wide_literal_via_llu():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_llu(IntLit(type=U64Type(), value=wide)),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_LLU,), externs=(_PRINTF,), functions=(main,),
@@ -258,7 +260,7 @@ def test_script_u_suffix_int_lit():
     fn = parse_function(
         "fn f() -> u32 { return 42u32 }"
     )
-    body = fn.body
+    body = fn.body.stmts
     assert len(body) == 1
     assert isinstance(body[0], ReturnExpr)
     lit = body[0].value
@@ -272,14 +274,14 @@ def test_script_urem_via_percent_u_operator():
     fn_urem = parse_function(
         "fn r(a: u32, b: u32) -> u32 { return a %u b }"
     )
-    expr_urem = fn_urem.body[0].value
+    expr_urem = fn_urem.body.stmts[0].value
     assert isinstance(expr_urem, BinOp)
     assert expr_urem.op == "urem"
 
     fn_srem = parse_function(
         "fn r(a: i32, b: i32) -> i32 { return a % b }"
     )
-    expr_srem = fn_srem.body[0].value
+    expr_srem = fn_srem.body.stmts[0].value
     assert isinstance(expr_srem, BinOp)
     assert expr_srem.op == "srem"
 
@@ -305,13 +307,13 @@ def test_isize_usize_lower_to_64bit():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             # An isize value: a small positive number, %lld.
             _print_lld(IntLit(type=IsizeType(), value=12345)),
             # A usize value larger than i64::MAX: %llu.
             _print_llu(IntLit(type=UsizeType(), value=(1 << 63) + 7)),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_LLD, _FMT_LLU), externs=(_PRINTF,), functions=(main,),
@@ -325,14 +327,14 @@ def test_isize_arith_signed_semantics():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_lld(BinOp(
                 op="sdiv",
                 lhs=IntLit(type=IsizeType(), value=-7),
                 rhs=IntLit(type=IsizeType(), value=2),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,),
@@ -346,14 +348,14 @@ def test_usize_arith_unsigned_semantics():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_llu(BinOp(
                 op="udiv",
                 lhs=IntLit(type=UsizeType(), value=(1 << 63) + (1 << 62)),  # 0xC000_0000_0000_0000
                 rhs=IntLit(type=UsizeType(), value=2),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_LLU,), externs=(_PRINTF,), functions=(main,),
@@ -379,7 +381,7 @@ def test_script_isize_suffix():
     fn = parse_function(
         "fn f() -> isize { return -42isize }"
     )
-    body = fn.body
+    body = fn.body.stmts
     assert len(body) == 1
     lit = body[0].value
     assert isinstance(lit, IntLit)
@@ -396,7 +398,7 @@ def test_script_end_to_end_u32_compute_and_print():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             _print_lld(_zext_to_i64(Call(
                 function="add_u",
                 args=(
@@ -405,7 +407,7 @@ def test_script_end_to_end_u32_compute_and_print():
                 ),
             ))),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         constants=(_FMT_LLD,), externs=(_PRINTF,),

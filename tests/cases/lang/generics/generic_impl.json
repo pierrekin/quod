@@ -39,12 +39,12 @@
               {"name": "self", "type": {"kind": "quod.self_type"}}
             ],
             "return_type": {"kind": "llvm.i32"},
-            "body": [
+            "body": {"id": "@blk_generic_impl_1", "stmts": [
               {
                 "kind": "quod.return_expr",
                 "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42}
               }
-            ]
+            ]}
           }
         ]
       }
@@ -54,7 +54,7 @@
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_generic_impl_2", "stmts": [
           {
             "kind": "quod.let",
             "name": "b",
@@ -88,7 +88,7 @@
               ]
             }
           }
-        ]
+        ]}
       }
     ]
   },

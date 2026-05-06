@@ -35,7 +35,7 @@
               {"name": "n",    "type": {"kind": "llvm.i32"}}
             ],
             "return_type": {"kind": "llvm.i32"},
-            "body": [
+            "body": {"id": "@blk_generic_fn_with_trait_1", "stmts": [
               {
                 "kind": "quod.return_expr",
                 "value": {
@@ -49,7 +49,7 @@
                   "rhs": {"kind": "llvm.param_ref", "name": "n"}
                 }
               }
-            ]
+            ]}
           }
         ]
       }
@@ -63,7 +63,7 @@
           {"name": "n", "type": {"kind": "llvm.i32"}}
         ],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_generic_fn_with_trait_2", "stmts": [
           {
             "kind": "quod.return_expr",
             "value": {
@@ -77,13 +77,13 @@
               ]
             }
           }
-        ]
+        ]}
       },
       {
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_generic_fn_with_trait_3", "stmts": [
           {
             "kind": "quod.let",
             "name": "c",
@@ -108,7 +108,7 @@
               ]
             }
           }
-        ]
+        ]}
       }
     ]
   },

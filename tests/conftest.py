@@ -191,7 +191,7 @@ def _run_behavior_case(item: CaseItem) -> None:
     if expected_program_json is not None:
         actual = json.loads(program.model_dump_json())
         expected = _resolve_program_ref(expected_program_json, item.path.parent)
-        if actual != expected:
+        if _normalize_block_ids(actual) != _normalize_block_ids(expected):
             item._failure_blob.append(
                 "  program_json mismatch (loaded program ≠ expected):\n"
                 + _json_diff(actual, expected, indent="    ")
@@ -304,7 +304,7 @@ def _run_cli_case(item: CaseItem) -> None:
         if ref is not None:
             actual = json.loads(program_path.read_text())
             expected = _resolve_program_ref(ref, item.path.parent)
-            if actual != expected:
+            if _normalize_block_ids(actual) != _normalize_block_ids(expected):
                 item._failure_blob.append(
                     "  program_json mismatch (final file ≠ expected):\n"
                     + _json_diff(actual, expected, indent="    ")
@@ -373,6 +373,46 @@ def _resolve_program_ref(ref: Any, case_dir: Path) -> Any:
     if isinstance(ref, str):
         return json.loads((case_dir / ref).resolve().read_text())
     return ref
+
+
+def _normalize_block_ids(node: Any, counter: dict[str, int] | None = None) -> Any:
+    """Alpha-rename opaque node IDs so program_json comparisons aren't
+    sensitive to ID minting differences. Block IDs (auto-minted via uuid
+    in script.py / templates.py, sequential in the C ingester,
+    file-prefixed in test fixtures) become `@blk_norm_<n>`; Function IDs
+    (added in step 2 of the C-ingest redesign) become `@fn_norm_<n>`.
+
+    The structural-equality-up-to-renaming comparison is the right one
+    until edges + equivalences pin specific IDs as load-bearing — which
+    will need a different comparator that checks edge endpoints resolve
+    consistently rather than ignoring ID values entirely.
+    """
+    if counter is None:
+        counter = {"blk": 0, "fn": 0}
+    if isinstance(node, dict):
+        out = {}
+        for k, v in node.items():
+            if k in ("body", "then_body", "else_body") and isinstance(v, dict) and "stmts" in v:
+                counter["blk"] += 1
+                norm_id = f"@blk_norm_{counter['blk']}"
+                out[k] = {**_normalize_block_ids(v, counter), "id": norm_id}
+            else:
+                out[k] = _normalize_block_ids(v, counter)
+        # Normalize Function.id at the dict that *contains* the function —
+        # any dict with a "name" and a "body" with stmts. Always set
+        # (never just rewrite) so missing-id fixtures and present-id
+        # programs compare equal: existing after.json fixtures predate
+        # step-2 IDs and don't carry one yet.
+        if (
+            isinstance(out.get("body"), dict)
+            and "stmts" in out["body"] and "name" in out
+        ):
+            counter["fn"] += 1
+            out["id"] = f"@fn_norm_{counter['fn']}"
+        return out
+    if isinstance(node, list):
+        return [_normalize_block_ids(item, counter) for item in node]
+    return node
 
 
 def _json_diff(actual: Any, expected: Any, *, indent: str = "") -> str:

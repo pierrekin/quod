@@ -23,7 +23,7 @@
         "name": "main",
         "params": [],
         "return_type": {"kind": "llvm.i32"},
-        "body": [
+        "body": {"id": "@blk_json_roundtrip_string_escapes_11", "stmts": [
           {
             "kind": "quod.let",
             "name": "a",
@@ -136,20 +136,20 @@
               {
                 "variant": "Some",
                 "bindings": ["v_out"],
-                "body": [
+                "body": {"id": "@blk_json_roundtrip_string_escapes_9", "stmts": [
                   {
                     "kind": "quod.match",
                     "scrutinee": {"kind": "quod.local_ref", "name": "v_out"},
                     "arms": [
-                      {"variant": "Null", "bindings": [], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}]},
-                      {"variant": "Bool", "bindings": ["_b"], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 2}}]},
-                      {"variant": "Number", "bindings": ["_n"], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 3}}]},
-                      {"variant": "Array", "bindings": ["_i"], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 4}}]},
-                      {"variant": "Object", "bindings": ["_k", "_v"], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 5}}]},
+                      {"variant": "Null", "bindings": [], "body": {"id": "@blk_json_roundtrip_string_escapes_1", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}]}},
+                      {"variant": "Bool", "bindings": ["_b"], "body": {"id": "@blk_json_roundtrip_string_escapes_2", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 2}}]}},
+                      {"variant": "Number", "bindings": ["_n"], "body": {"id": "@blk_json_roundtrip_string_escapes_3", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 3}}]}},
+                      {"variant": "Array", "bindings": ["_i"], "body": {"id": "@blk_json_roundtrip_string_escapes_4", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 4}}]}},
+                      {"variant": "Object", "bindings": ["_k", "_v"], "body": {"id": "@blk_json_roundtrip_string_escapes_5", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 5}}]}},
                       {
                         "variant": "String",
                         "bindings": ["p", "l"],
-                        "body": [
+                        "body": {"id": "@blk_json_roundtrip_string_escapes_8", "stmts": [
                           {
                             "kind": "quod.let",
                             "name": "len_ok",
@@ -215,23 +215,23 @@
                           {
                             "kind": "quod.if",
                             "cond": {"kind": "quod.local_ref", "name": "all_ok"},
-                            "then_body": [
+                            "then_body": {"id": "@blk_json_roundtrip_string_escapes_6", "stmts": [
                               {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42}}
-                            ],
-                            "else_body": [
+                            ]},
+                            "else_body": {"id": "@blk_json_roundtrip_string_escapes_7", "stmts": [
                               {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 7}}
-                            ]
+                            ]}
                           }
-                        ]
+                        ]}
                       }
                     ]
                   }
-                ]
+                ]}
               },
-              {"variant": "None", "bindings": [], "body": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 99}}]}
+              {"variant": "None", "bindings": [], "body": {"id": "@blk_json_roundtrip_string_escapes_10", "stmts": [{"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 99}}]}}
             ]
           }
-        ]
+        ]}
       }
     ]
   },

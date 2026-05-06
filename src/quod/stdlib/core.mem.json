@@ -84,7 +84,7 @@
       "return_type": {
         "kind": "llvm.i64"
       },
-      "body": [
+      "body": {"id": "@blk_core.mem_1", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -127,7 +127,7 @@
             }
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -149,7 +149,7 @@
       "return_type": {
         "kind": "llvm.i64"
       },
-      "body": [
+      "body": {"id": "@blk_core.mem_2", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -173,7 +173,7 @@
             }
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -201,7 +201,7 @@
       "return_type": {
         "kind": "llvm.void"
       },
-      "body": [
+      "body": {"id": "@blk_core.mem_3", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -223,7 +223,7 @@
             ]
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -251,7 +251,7 @@
       "return_type": {
         "kind": "llvm.void"
       },
-      "body": [
+      "body": {"id": "@blk_core.mem_4", "stmts": [
         {
           "kind": "quod.expr_stmt",
           "value": {
@@ -273,7 +273,7 @@
             ]
           }
         }
-      ],
+      ]},
       "claims": []
     },
     {
@@ -308,7 +308,7 @@
         "kind": "llvm.enum",
         "name": "core.cmp.Ordering"
       },
-      "body": [
+      "body": {"id": "@blk_core.mem_15", "stmts": [
         {
           "kind": "quod.let",
           "name": "n",
@@ -334,7 +334,7 @@
               "name": "alen"
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_core.mem_5", "stmts": [
             {
               "kind": "quod.assign",
               "name": "n",
@@ -343,8 +343,8 @@
                 "name": "blen"
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_core.mem_6", "stmts": []}
         },
         {
           "kind": "quod.let",
@@ -388,7 +388,7 @@
               "value": 0
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_core.mem_7", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -398,8 +398,8 @@
                 "fields": []
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_core.mem_8", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -418,7 +418,7 @@
               "value": 0
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_core.mem_9", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -428,8 +428,8 @@
                 "fields": []
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_core.mem_10", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -445,7 +445,7 @@
               "name": "blen"
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_core.mem_11", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -455,8 +455,8 @@
                 "fields": []
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_core.mem_12", "stmts": []}
         },
         {
           "kind": "quod.if",
@@ -472,7 +472,7 @@
               "name": "blen"
             }
           },
-          "then_body": [
+          "then_body": {"id": "@blk_core.mem_13", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -482,8 +482,8 @@
                 "fields": []
               }
             }
-          ],
-          "else_body": []
+          ]},
+          "else_body": {"id": "@blk_core.mem_14", "stmts": []}
         },
         {
           "kind": "quod.return_expr",
@@ -494,7 +494,7 @@
             "fields": []
           }
         }
-      ],
+      ]},
       "claims": []
     }
   ]

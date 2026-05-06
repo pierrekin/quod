@@ -58,6 +58,8 @@ from quod.model import (
     UsizeType,
     Widen,
     WithArena,
+
+    Block,
 )
 
 
@@ -123,28 +125,28 @@ def test_io_error_construct_and_match_unit_and_payload():
             arms=(
                 MatchArm(
                     variant="NotFound",
-                    body=(_print_lld(IntLit(type=I64Type(), value=1)),),
+                    body=Block(stmts=(_print_lld(IntLit(type=I64Type(), value=1)),)),
                 ),
                 MatchArm(
                     variant="PermissionDenied",
-                    body=(_print_lld(IntLit(type=I64Type(), value=2)),),
+                    body=Block(stmts=(_print_lld(IntLit(type=I64Type(), value=2)),)),
                 ),
                 MatchArm(
                     variant="Interrupted",
-                    body=(_print_lld(IntLit(type=I64Type(), value=3)),),
+                    body=Block(stmts=(_print_lld(IntLit(type=I64Type(), value=3)),)),
                 ),
                 MatchArm(
                     variant="AlreadyExists",
-                    body=(_print_lld(IntLit(type=I64Type(), value=4)),),
+                    body=Block(stmts=(_print_lld(IntLit(type=I64Type(), value=4)),)),
                 ),
                 MatchArm(
                     variant="WouldBlock",
-                    body=(_print_lld(IntLit(type=I64Type(), value=5)),),
+                    body=Block(stmts=(_print_lld(IntLit(type=I64Type(), value=5)),)),
                 ),
                 MatchArm(
                     variant="Other",
                     bindings=("e",),
-                    body=(_print_lld(_zext64(LocalRef(name="e"))),),
+                    body=Block(stmts=(_print_lld(_zext64(LocalRef(name="e"))),)),
                 ),
             ),
         )
@@ -152,7 +154,7 @@ def test_io_error_construct_and_match_unit_and_payload():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(
                 name="e1", type=err_ty,
                 init=EnumInit(enum="core.io.IoError", variant="NotFound"),
@@ -168,7 +170,7 @@ def test_io_error_construct_and_match_unit_and_payload():
             ),
             match_print(LocalRef(name="e2"), 42),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.io"),),
@@ -315,11 +317,11 @@ def _print_result_or_err(result_local: str):
         arms=(
             MatchArm(
                 variant="Ok", bindings=("n",),
-                body=(_print_lld(_zext64(LocalRef(name="n"))),),
+                body=Block(stmts=(_print_lld(_zext64(LocalRef(name="n"))),)),
             ),
             MatchArm(
                 variant="Err", bindings=("_e",),
-                body=(_print_lld(IntLit(type=I64Type(), value=-1)),),
+                body=Block(stmts=(_print_lld(IntLit(type=I64Type(), value=-1)),)),
             ),
         ),
     )
@@ -332,11 +334,11 @@ def test_bytes_reader_reads_full_buffer():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             WithArena(
                 name="a",
                 capacity=IntLit(type=I64Type(), value=128),
-                body=(
+                body=Block(stmts=(
                     _arena_alloc_struct("a", "core.io.BytesReader", dest="r"),
                     Let(name="src_ptr", type=I8PtrType(),
                         init=StringRef(name=".src")),
@@ -349,10 +351,10 @@ def test_bytes_reader_reads_full_buffer():
                     _print_byte_at("dest", 1),
                     _print_byte_at("dest", 2),
                     _print_byte_at("dest", 3),
-                ),
+                )),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.io"), Import(module="mem.arena")),
@@ -369,10 +371,10 @@ def test_bytes_reader_short_read_when_n_exceeds_remaining():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             WithArena(
                 name="a", capacity=IntLit(type=I64Type(), value=128),
-                body=(
+                body=Block(stmts=(
                     _arena_alloc_struct("a", "core.io.BytesReader", dest="r"),
                     Let(name="src_ptr", type=I8PtrType(),
                         init=StringRef(name=".src")),
@@ -381,10 +383,10 @@ def test_bytes_reader_short_read_when_n_exceeds_remaining():
                     Let(name="result", type=_RESULT_USIZE_IOERROR,
                         init=_reader_read("r", "dest", 10)),
                     _print_result_or_err("result"),
-                ),
+                )),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.io"), Import(module="mem.arena")),
@@ -402,10 +404,10 @@ def test_bytes_reader_eof_returns_ok_zero():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             WithArena(
                 name="a", capacity=IntLit(type=I64Type(), value=128),
-                body=(
+                body=Block(stmts=(
                     _arena_alloc_struct("a", "core.io.BytesReader", dest="r"),
                     Let(name="src_ptr", type=I8PtrType(),
                         init=StringRef(name=".src")),
@@ -419,10 +421,10 @@ def test_bytes_reader_eof_returns_ok_zero():
                     Let(name="r2", type=_RESULT_USIZE_IOERROR,
                         init=_reader_read("r", "dest", 4)),
                     _print_result_or_err("r2"),
-                ),
+                )),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.io"), Import(module="mem.arena")),
@@ -442,10 +444,10 @@ def test_bytes_writer_writes_full_buffer():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             WithArena(
                 name="a", capacity=IntLit(type=I64Type(), value=128),
-                body=(
+                body=Block(stmts=(
                     _arena_alloc_struct("a", "core.io.BytesWriter", dest="w"),
                     _arena_alloc_bytes("a", 16, dest="dest"),
                     *_init_bytes_writer("w", "dest", 16),
@@ -457,10 +459,10 @@ def test_bytes_writer_writes_full_buffer():
                     _print_byte_at("dest", 2),
                     _print_byte_at("dest", 3),
                     _print_byte_at("dest", 4),
-                ),
+                )),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.io"), Import(module="mem.arena")),
@@ -478,20 +480,20 @@ def test_bytes_writer_short_write_at_capacity():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             WithArena(
                 name="a", capacity=IntLit(type=I64Type(), value=128),
-                body=(
+                body=Block(stmts=(
                     _arena_alloc_struct("a", "core.io.BytesWriter", dest="w"),
                     _arena_alloc_bytes("a", 4, dest="dest"),
                     *_init_bytes_writer("w", "dest", 4),
                     Let(name="result", type=_RESULT_USIZE_IOERROR,
                         init=_writer_write_strref("w", ".src", 8)),
                     _print_result_or_err("result"),
-                ),
+                )),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.io"), Import(module="mem.arena")),
@@ -508,10 +510,10 @@ def test_bytes_writer_flush_returns_none():
     main = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             WithArena(
                 name="a", capacity=IntLit(type=I64Type(), value=128),
-                body=(
+                body=Block(stmts=(
                     _arena_alloc_struct("a", "core.io.BytesWriter", dest="w"),
                     _arena_alloc_bytes("a", 4, dest="dest"),
                     *_init_bytes_writer("w", "dest", 4),
@@ -522,18 +524,18 @@ def test_bytes_writer_flush_returns_none():
                         arms=(
                             MatchArm(
                                 variant="None",
-                                body=(_print_lld(IntLit(type=I64Type(), value=0)),),
+                                body=Block(stmts=(_print_lld(IntLit(type=I64Type(), value=0)),)),
                             ),
                             MatchArm(
                                 variant="Some", bindings=("_e",),
-                                body=(_print_lld(IntLit(type=I64Type(), value=-1)),),
+                                body=Block(stmts=(_print_lld(IntLit(type=I64Type(), value=-1)),)),
                             ),
                         ),
                     ),
-                ),
+                )),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(
         imports=(Import(module="core.io"), Import(module="mem.arena")),

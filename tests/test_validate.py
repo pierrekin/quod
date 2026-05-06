@@ -45,6 +45,8 @@ from quod.model import (
     StructType,
     TryExpr,
     VoidType,
+
+    Block,
 )
 from quod.validate import (
     ASSIGN_UNDECLARED_LOCAL,
@@ -111,18 +113,18 @@ def test_unresolved_struct_in_param():
     fn = Function(
         name="f", return_type=I32Type(),
         params=(),
-        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+        body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
     )
     # Function returning a non-existent struct via let init won't even
     # compile expression-wise, so we exercise via a let with a missing
     # struct type.
     fn = Function(
         name="g", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="p", type=StructType(name="Nope"),
                 init=StructInit(type="Nope", fields=())),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(functions=(fn,))
     diags = validate(prog)
@@ -133,11 +135,11 @@ def test_unresolved_struct_in_param():
 def test_unresolved_enum_in_let_type():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="m", type=EnumType(name="MissingEnum"),
                 init=IntLit(type=I32Type(), value=0)),  # init is wrong-type but typing isn't checked yet
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(functions=(fn,))
     diags = validate(prog)
@@ -150,14 +152,14 @@ def test_unresolved_enum_in_let_type():
 def test_struct_init_unknown_struct():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="p", type=StructType(name="Point"),
                 init=StructInit(type="Point", fields=(
                     FieldInit(name="x", value=IntLit(type=I64Type(), value=1)),
                     FieldInit(name="y", value=IntLit(type=I64Type(), value=2)),
                 ))),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     # No structs declared; Point is unresolved.
     prog = Program(functions=(fn,))
@@ -168,14 +170,14 @@ def test_struct_init_unknown_struct():
 def test_struct_init_missing_field():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="p", type=StructType(name="Point"),
                 init=StructInit(type="Point", fields=(
                     FieldInit(name="x", value=IntLit(type=I64Type(), value=1)),
                     # missing 'y'
                 ))),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(structs=(_point_struct(),), functions=(fn,))
     diags = validate(prog)
@@ -185,7 +187,7 @@ def test_struct_init_missing_field():
 def test_struct_init_extra_field():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="p", type=StructType(name="Point"),
                 init=StructInit(type="Point", fields=(
                     FieldInit(name="x", value=IntLit(type=I64Type(), value=1)),
@@ -193,7 +195,7 @@ def test_struct_init_extra_field():
                     FieldInit(name="z", value=IntLit(type=I64Type(), value=3)),  # not a field
                 ))),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(structs=(_point_struct(),), functions=(fn,))
     diags = validate(prog)
@@ -203,7 +205,7 @@ def test_struct_init_extra_field():
 def test_struct_init_duplicate_field():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="p", type=StructType(name="Point"),
                 init=StructInit(type="Point", fields=(
                     FieldInit(name="x", value=IntLit(type=I64Type(), value=1)),
@@ -211,7 +213,7 @@ def test_struct_init_duplicate_field():
                     FieldInit(name="y", value=IntLit(type=I64Type(), value=2)),
                 ))),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(structs=(_point_struct(),), functions=(fn,))
     diags = validate(prog)
@@ -224,10 +226,10 @@ def test_struct_init_duplicate_field():
 def test_enum_init_unknown_variant():
     fn = Function(
         name="f", return_type=EnumType(name="Maybe"),
-        body=(ReturnExpr(value=EnumInit(
+        body=Block(stmts=(ReturnExpr(value=EnumInit(
             enum="Maybe", variant="Nope",  # variant doesn't exist
             fields=(),
-        )),),
+        )),)),
     )
     prog = Program(enums=(_maybe_enum(),), functions=(fn,))
     diags = validate(prog)
@@ -237,24 +239,24 @@ def test_enum_init_unknown_variant():
 def test_enum_init_unresolved_enum():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="m", type=I32Type(),
                 init=IntLit(type=I32Type(), value=0)),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     # Override to use an unresolved enum init.
     fn = fn.model_copy(update={
-        "body": (
+        "body": Block(stmts=(
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
             # ExprStmt-equivalent path doesn't exist; use the return value.
-        ),
+        )),
         "return_type": EnumType(name="Phantom"),
     })
     fn = fn.model_copy(update={
-        "body": (ReturnExpr(value=EnumInit(
+        "body": Block(stmts=(ReturnExpr(value=EnumInit(
             enum="Phantom", variant="Whatever", fields=(),
-        )),),
+        )),)),
     })
     prog = Program(enums=(), functions=(fn,))
     diags = validate(prog)
@@ -268,7 +270,7 @@ def test_match_non_exhaustive():
     # Match on Maybe with only Some arm (missing None).
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Match(
                 scrutinee=EnumInit(
                     enum="Maybe", variant="Some",
@@ -276,11 +278,11 @@ def test_match_non_exhaustive():
                 ),
                 arms=(
                     MatchArm(variant="Some", bindings=("v",),
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=1)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=1)),))),
                 ),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(enums=(_maybe_enum(),), functions=(fn,))
     diags = validate(prog)
@@ -290,7 +292,7 @@ def test_match_non_exhaustive():
 def test_match_extra_arm():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Match(
                 scrutinee=EnumInit(
                     enum="Maybe", variant="Some",
@@ -298,15 +300,15 @@ def test_match_extra_arm():
                 ),
                 arms=(
                     MatchArm(variant="Some", bindings=("v",),
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=1)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=1)),))),
                     MatchArm(variant="None",
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),))),
                     MatchArm(variant="Nope",  # not a real variant
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=2)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=2)),))),
                 ),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(enums=(_maybe_enum(),), functions=(fn,))
     diags = validate(prog)
@@ -316,7 +318,7 @@ def test_match_extra_arm():
 def test_match_duplicate_arm():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Match(
                 scrutinee=EnumInit(
                     enum="Maybe", variant="Some",
@@ -324,15 +326,15 @@ def test_match_duplicate_arm():
                 ),
                 arms=(
                     MatchArm(variant="Some", bindings=("v",),
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=1)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=1)),))),
                     MatchArm(variant="Some", bindings=("v",),
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=2)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=2)),))),
                     MatchArm(variant="None",
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),))),
                 ),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(enums=(_maybe_enum(),), functions=(fn,))
     diags = validate(prog)
@@ -342,7 +344,7 @@ def test_match_duplicate_arm():
 def test_match_arity_mismatch():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Match(
                 scrutinee=EnumInit(
                     enum="Maybe", variant="Some",
@@ -350,13 +352,13 @@ def test_match_arity_mismatch():
                 ),
                 arms=(
                     MatchArm(variant="Some", bindings=("v", "extra"),  # Some has 1 field
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=1)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=1)),))),
                     MatchArm(variant="None",
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),))),
                 ),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(enums=(_maybe_enum(),), functions=(fn,))
     diags = validate(prog)
@@ -366,7 +368,7 @@ def test_match_arity_mismatch():
 def test_match_wildcard_with_bindings_rejected():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Match(
                 scrutinee=EnumInit(
                     enum="Maybe", variant="Some",
@@ -374,11 +376,11 @@ def test_match_wildcard_with_bindings_rejected():
                 ),
                 arms=(
                     MatchArm(variant="_", bindings=("v",),  # wildcard can't bind
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),))),
                 ),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(enums=(_maybe_enum(),), functions=(fn,))
     diags = validate(prog)
@@ -388,7 +390,7 @@ def test_match_wildcard_with_bindings_rejected():
 def test_match_multiple_wildcards():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Match(
                 scrutinee=EnumInit(
                     enum="Maybe", variant="Some",
@@ -396,13 +398,13 @@ def test_match_multiple_wildcards():
                 ),
                 arms=(
                     MatchArm(variant="_",
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),))),
                     MatchArm(variant="_",
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=1)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=1)),))),
                 ),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(enums=(_maybe_enum(),), functions=(fn,))
     diags = validate(prog)
@@ -412,7 +414,7 @@ def test_match_multiple_wildcards():
 def test_match_duplicate_binding():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Match(
                 scrutinee=EnumInit(
                     enum="Pair", variant="Both",
@@ -423,11 +425,11 @@ def test_match_duplicate_binding():
                 ),
                 arms=(
                     MatchArm(variant="Both", bindings=("v", "v"),  # dup name
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),))),
                 ),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     pair = EnumDef(name="Pair", variants=(
         EnumVariant(name="Both", fields=(
@@ -449,11 +451,11 @@ def test_collects_multiple_diagnostics():
     don't have to fix-and-rerun for every error."""
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="p", type=StructType(name="MissingA"),
                 init=StructInit(type="MissingB", fields=())),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(functions=(fn,))
     diags = validate(prog)
@@ -467,7 +469,7 @@ def test_collects_multiple_diagnostics():
 def test_validate_or_raise_clean_program():
     prog = Program(functions=(Function(
         name="main", return_type=I32Type(),
-        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+        body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
     ),))
     validate_or_raise(prog)  # no exception
 
@@ -475,11 +477,11 @@ def test_validate_or_raise_clean_program():
 def test_validate_or_raise_raises_validation_error():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="p", type=StructType(name="Nope"),
                 init=StructInit(type="Nope", fields=())),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(functions=(fn,))
     with pytest.raises(ValidationError) as exc_info:
@@ -493,7 +495,7 @@ def test_validate_or_raise_raises_validation_error():
 def test_undeclared_local():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(ReturnExpr(value=LocalRef(name="ghost")),),
+        body=Block(stmts=(ReturnExpr(value=LocalRef(name="ghost")),)),
     )
     diags = validate(Program(functions=(fn,)))
     assert UNDECLARED_LOCAL in _codes(diags)
@@ -502,11 +504,11 @@ def test_undeclared_local():
 def test_local_declared_twice():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="x", type=I64Type(), init=IntLit(type=I64Type(), value=1)),
             Let(name="x", type=I64Type(), init=IntLit(type=I64Type(), value=2)),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     diags = validate(Program(functions=(fn,)))
     assert LOCAL_DECLARED_TWICE in _codes(diags)
@@ -516,10 +518,10 @@ def test_local_shadows_param():
     fn = Function(
         name="f", return_type=I32Type(),
         params=(Param(name="x", type=I32Type()),),
-        body=(
+        body=Block(stmts=(
             Let(name="x", type=I64Type(), init=IntLit(type=I64Type(), value=1)),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     diags = validate(Program(functions=(fn,)))
     assert LOCAL_SHADOWS_PARAM in _codes(diags)
@@ -528,14 +530,14 @@ def test_local_shadows_param():
 def test_for_var_conflict():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="i", type=I64Type(), init=IntLit(type=I64Type(), value=0)),
             For(var="i", type=I64Type(),
                 lo=IntLit(type=I64Type(), value=0),
                 hi=IntLit(type=I64Type(), value=10),
-                body=()),
+                body=Block(stmts=())),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     diags = validate(Program(functions=(fn,)))
     assert FOR_VAR_CONFLICT in _codes(diags)
@@ -544,10 +546,10 @@ def test_for_var_conflict():
 def test_undefined_function_call():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             ExprStmt(value=Call(function="ghost_fn", args=())),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     diags = validate(Program(functions=(fn,)))
     assert UNDEFINED_FUNCTION in _codes(diags)
@@ -556,10 +558,10 @@ def test_undefined_function_call():
 def test_assign_undeclared_local():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Assign(name="ghost", value=IntLit(type=I64Type(), value=1)),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     diags = validate(Program(functions=(fn,)))
     assert ASSIGN_UNDECLARED_LOCAL in _codes(diags)
@@ -568,11 +570,11 @@ def test_assign_undeclared_local():
 def test_fieldset_undeclared_local():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             FieldSet(local="ghost", name="x",
                      value=IntLit(type=I64Type(), value=1)),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     diags = validate(Program(functions=(fn,)))
     assert FIELDSET_UNDECLARED_LOCAL in _codes(diags)
@@ -581,7 +583,7 @@ def test_fieldset_undeclared_local():
 def test_bare_return_non_void():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(Return(),),
+        body=Block(stmts=(Return(),)),
     )
     diags = validate(Program(functions=(fn,)))
     assert BARE_RETURN_NON_VOID in _codes(diags)
@@ -590,7 +592,7 @@ def test_bare_return_non_void():
 def test_return_expr_void_function():
     fn = Function(
         name="f", return_type=VoidType(),
-        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+        body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
     )
     diags = validate(Program(functions=(fn,)))
     assert RETURN_EXPR_VOID in _codes(diags)
@@ -601,7 +603,7 @@ def test_match_arm_bindings_introduce_local_in_arm_scope():
     validator must push the binding before walking the arm body."""
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Match(
                 scrutinee=EnumInit(
                     enum="Maybe", variant="Some",
@@ -609,13 +611,13 @@ def test_match_arm_bindings_introduce_local_in_arm_scope():
                 ),
                 arms=(
                     MatchArm(variant="Some", bindings=("v",),
-                             body=(ReturnExpr(value=LocalRef(name="v")),)),
+                             body=Block(stmts=(ReturnExpr(value=LocalRef(name="v")),))),
                     MatchArm(variant="None",
-                             body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
+                             body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),))),
                 ),
             ),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     diags = validate(Program(enums=(_maybe_enum(),), functions=(fn,)))
     assert UNDECLARED_LOCAL not in _codes(diags)
@@ -633,11 +635,11 @@ def test_try_ineligible_enum():
     ))
     fn = Function(
         name="f", return_type=EnumType(name="Bad"),
-        body=(
+        body=Block(stmts=(
             ReturnExpr(value=TryExpr(value=EnumInit(
                 enum="Bad", variant="A", fields=(),
             ))),
-        ),
+        )),
     )
     diags = validate(Program(enums=(bad,), functions=(fn,)))
     assert TRY_INELIGIBLE_ENUM in _codes(diags)
@@ -651,13 +653,13 @@ def test_try_return_type_mismatch():
     ))
     fn = Function(
         name="f", return_type=EnumType(name="Maybe"),
-        body=(
+        body=Block(stmts=(
             Let(name="v", type=I64Type(), init=TryExpr(value=EnumInit(
                 enum="R", variant="Ok",
                 fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=1)),),
             ))),
             ReturnExpr(value=EnumInit(enum="Maybe", variant="None", fields=())),
-        ),
+        )),
     )
     diags = validate(Program(enums=(_maybe_enum(), result), functions=(fn,)))
     assert TRY_RETURN_TYPE_MISMATCH in _codes(diags)
@@ -670,10 +672,10 @@ def test_field_read_on_non_struct():
     """Reading .x off an i64 local should be flagged."""
     fn = Function(
         name="f", return_type=I64Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="n", type=I64Type(), init=IntLit(type=I64Type(), value=42)),
             ReturnExpr(value=FieldRead(value=LocalRef(name="n"), name="x")),
-        ),
+        )),
     )
     diags = validate(Program(functions=(fn,)))
     assert FIELD_READ_NON_STRUCT in _codes(diags)
@@ -687,14 +689,14 @@ def test_field_read_unknown_field_via_inferred_type():
     ))
     fn = Function(
         name="f", return_type=I64Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="p", type=StructType(name="Point"),
                 init=StructInit(type="Point", fields=(
                     FieldInit(name="x", value=IntLit(type=I64Type(), value=1)),
                     FieldInit(name="y", value=IntLit(type=I64Type(), value=2)),
                 ))),
             ReturnExpr(value=FieldRead(value=LocalRef(name="p"), name="z")),
-        ),
+        )),
     )
     diags = validate(Program(structs=(point,), functions=(fn,)))
     assert UNKNOWN_FIELD in _codes(diags)
@@ -703,11 +705,11 @@ def test_field_read_unknown_field_via_inferred_type():
 def test_fieldset_non_struct_local():
     fn = Function(
         name="f", return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(name="n", type=I64Type(), init=IntLit(type=I64Type(), value=0)),
             FieldSet(local="n", name="x", value=IntLit(type=I64Type(), value=1)),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
-        ),
+        )),
     )
     diags = validate(Program(functions=(fn,)))
     assert FIELDSET_NON_STRUCT_LOCAL in _codes(diags)
@@ -718,7 +720,7 @@ def test_param_ref_resolves():
     fn = Function(
         name="f", return_type=I32Type(),
         params=(Param(name="x", type=I32Type()),),
-        body=(ReturnExpr(value=ParamRef(name="x")),),
+        body=Block(stmts=(ReturnExpr(value=ParamRef(name="x")),)),
     )
     diags = validate(Program(functions=(fn,)))
     # No undeclared-anything diagnostics.

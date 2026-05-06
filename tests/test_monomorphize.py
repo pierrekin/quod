@@ -29,6 +29,8 @@ from quod.model import (
     StructType,
     TypeParam,
     TypeParamRef,
+
+    Block,
 )
 from quod.monomorphize import monomorphize
 
@@ -44,7 +46,7 @@ def _box_program() -> Program:
         name="make_box_i64",
         params=(),
         return_type=StructType(name="Box", type_args=(I64Type(),)),
-        body=(
+        body=Block(stmts=(
             Let(
                 name="b",
                 type=StructType(name="Box", type_args=(I64Type(),)),
@@ -59,7 +61,7 @@ def _box_program() -> Program:
                 type_args=(I64Type(),),
                 fields=(FieldInit(name="value", value=IntLit(type=I64Type(), value=42)),),
             )),
-        ),
+        )),
     )
     return Program(structs=(box_def,), functions=(fn,))
 
@@ -93,7 +95,7 @@ def test_monomorphize_rewrites_struct_init_and_type_refs():
     assert fn.return_type.type_args == ()
 
     # Let.type rewrites the same way.
-    let = fn.body[0]
+    let = fn.body.stmts[0]
     assert isinstance(let, Let)
     assert isinstance(let.type, StructType)
     assert let.type.name == "Box<i64>"
@@ -115,7 +117,7 @@ def test_monomorphize_two_distinct_instantiations_yield_two_structs():
         name="two",
         params=(),
         return_type=I64Type(),
-        body=(
+        body=Block(stmts=(
             Let(
                 name="a",
                 type=StructType(name="Box", type_args=(I64Type(),)),
@@ -135,7 +137,7 @@ def test_monomorphize_two_distinct_instantiations_yield_two_structs():
                 ),
             ),
             ReturnExpr(value=IntLit(type=I64Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(structs=(box_def,), functions=(fn,))
     out = monomorphize(prog)
@@ -158,7 +160,7 @@ def test_monomorphize_generic_enum_and_payload_substitution():
         name="dummy",
         params=(Param(name="x", type=EnumType(name="Option", type_args=(I64Type(),))),),
         return_type=I64Type(),
-        body=(ReturnExpr(value=IntLit(type=I64Type(), value=0)),),
+        body=Block(stmts=(ReturnExpr(value=IntLit(type=I64Type(), value=0)),)),
     )
     prog = Program(enums=(opt_def,), functions=(fn,))
     out = monomorphize(prog)
@@ -196,7 +198,7 @@ def test_monomorphize_nested_generics():
         name="dummy",
         params=(Param(name="p", type=outer),),
         return_type=I64Type(),
-        body=(ReturnExpr(value=IntLit(type=I64Type(), value=0)),),
+        body=Block(stmts=(ReturnExpr(value=IntLit(type=I64Type(), value=0)),)),
     )
     prog = Program(structs=(pair_def,), functions=(fn,))
     out = monomorphize(prog)
@@ -213,7 +215,7 @@ def test_monomorphize_noop_for_program_with_no_generics():
         name="trivial",
         params=(),
         return_type=I64Type(),
-        body=(ReturnExpr(value=IntLit(type=I64Type(), value=42)),),
+        body=Block(stmts=(ReturnExpr(value=IntLit(type=I64Type(), value=42)),)),
     )
     prog = Program(functions=(fn,))
     out = monomorphize(prog)
@@ -244,18 +246,18 @@ def test_monomorphize_generic_function_drops_template_emits_concrete():
         type_params=(TypeParam(name="T"),),
         params=(Param(name="x", type=TypeParamRef(name="T")),),
         return_type=TypeParamRef(name="T"),
-        body=(ReturnExpr(value=ParamRef(name="x")),),
+        body=Block(stmts=(ReturnExpr(value=ParamRef(name="x")),)),
     )
     main_fn = Function(
         name="main",
         return_type=I64Type(),
-        body=(
+        body=Block(stmts=(
             ReturnExpr(value=Call(
                 function="id",
                 type_args=(I64Type(),),
                 args=(IntLit(type=I64Type(), value=42),),
             )),
-        ),
+        )),
     )
     prog = Program(functions=(id_fn, main_fn))
     out = monomorphize(prog)
@@ -272,7 +274,7 @@ def test_monomorphize_generic_function_drops_template_emits_concrete():
 
     # main's Call gets rewritten to mangled name with empty type_args.
     main_after = next(fn for fn in out.functions if fn.name == "main")
-    body0 = main_after.body[0]
+    body0 = main_after.body.stmts[0]
     assert isinstance(body0, ReturnExpr)
     assert isinstance(body0.value, Call)
     assert body0.value.function == "id<i64>"
@@ -285,12 +287,12 @@ def test_monomorphize_generic_function_two_instantiations():
         type_params=(TypeParam(name="T"),),
         params=(Param(name="x", type=TypeParamRef(name="T")),),
         return_type=TypeParamRef(name="T"),
-        body=(ReturnExpr(value=ParamRef(name="x")),),
+        body=Block(stmts=(ReturnExpr(value=ParamRef(name="x")),)),
     )
     main_fn = Function(
         name="main",
         return_type=I64Type(),
-        body=(
+        body=Block(stmts=(
             Let(
                 name="a", type=I64Type(),
                 init=Call(function="id", type_args=(I64Type(),),
@@ -302,7 +304,7 @@ def test_monomorphize_generic_function_two_instantiations():
                           args=(IntLit(type=I32Type(), value=2),)),
             ),
             ReturnExpr(value=IntLit(type=I64Type(), value=0)),
-        ),
+        )),
     )
     prog = Program(functions=(id_fn, main_fn))
     out = monomorphize(prog)
@@ -324,22 +326,22 @@ def test_monomorphize_generic_function_referencing_generic_struct():
         type_params=(TypeParam(name="T"),),
         params=(Param(name="v", type=TypeParamRef(name="T")),),
         return_type=StructType(name="Box", type_args=(TypeParamRef(name="T"),)),
-        body=(ReturnExpr(value=StructInit(
+        body=Block(stmts=(ReturnExpr(value=StructInit(
             type="Box",
             type_args=(TypeParamRef(name="T"),),
             fields=(FieldInit(name="value", value=ParamRef(name="v")),),
-        )),),
+        )),)),
     )
     main_fn = Function(
         name="main",
         return_type=I64Type(),
-        body=(
+        body=Block(stmts=(
             ReturnExpr(value=Call(
                 function="make",
                 type_args=(I64Type(),),
                 args=(IntLit(type=I64Type(), value=42),),
             )),
-        ),
+        )),
     )
     prog = Program(structs=(box_def,), functions=(make_fn, main_fn))
     out = monomorphize(prog)
@@ -354,7 +356,7 @@ def test_monomorphize_generic_function_referencing_generic_struct():
 
     # The make<i64> body's StructInit should be rewritten to "Box<i64>".
     make_i64 = next(fn for fn in out.functions if fn.name == "make<i64>")
-    body = make_i64.body[0]
+    body = make_i64.body.stmts[0]
     assert isinstance(body, ReturnExpr)
     assert isinstance(body.value, StructInit)
     assert body.value.type == "Box<i64>"
@@ -380,7 +382,7 @@ def _counter_program():
                 name="add",
                 params=(Param(name="self", type=SelfType()), Param(name="n", type=I32Type())),
                 return_type=I32Type(),
-                body=(ReturnExpr(value=ParamRef(name="n")),),  # body doesn't matter for these checks
+                body=Block(stmts=(ReturnExpr(value=ParamRef(name="n")),)),  # body doesn't matter for these checks
             ),
         ),
     )
@@ -421,19 +423,19 @@ def test_impldef_substitutes_self_in_body():
                 name="add",
                 params=(Param(name="self", type=SelfType()), Param(name="n", type=I32Type())),
                 return_type=I32Type(),
-                body=(
+                body=Block(stmts=(
                     Let(name="s", type=SelfType(), init=ParamRef(name="self")),
                     ReturnExpr(value=BinOp(
                         op="add",
                         lhs=FieldRead(value=LocalRef(name="s"), name="count"),
                         rhs=ParamRef(name="n"),
                     )),
-                ),
+                )),
             ),
         ),
     )
     # Walk the body and assert no SelfType remains anywhere.
-    let = impl.methods[0].body[0]
+    let = impl.methods[0].body.stmts[0]
     assert isinstance(let, Let)
     assert isinstance(let.type, StructType)
     assert let.type.name == "Counter"
@@ -447,7 +449,7 @@ def test_monomorphize_promotes_impl_methods_to_top_level_fns():
     main_fn = Function(
         name="main",
         return_type=I32Type(),
-        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+        body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
     )
     prog = Program(
         structs=(counter,), traits=(add_trait,), impls=(add_impl,),
@@ -467,7 +469,7 @@ def test_monomorphize_resolves_trait_call_to_impl_method():
     main_fn = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(
                 name="c", type=StructType(name="Counter"),
                 init=StructInit(type="Counter", fields=(
@@ -480,7 +482,7 @@ def test_monomorphize_resolves_trait_call_to_impl_method():
                 dispatch_type=StructType(name="Counter"),
                 args=(LocalRef(name="c"), IntLit(type=I32Type(), value=32)),
             )),
-        ),
+        )),
     )
     prog = Program(
         structs=(counter,), traits=(add_trait,), impls=(add_impl,),
@@ -489,7 +491,7 @@ def test_monomorphize_resolves_trait_call_to_impl_method():
     out = monomorphize(prog)
 
     new_main = next(fn for fn in out.functions if fn.name == "main")
-    return_stmt = new_main.body[1]
+    return_stmt = new_main.body.stmts[1]
     assert isinstance(return_stmt, ReturnExpr)
     # TraitCall is gone; replaced by a regular Call to the mangled impl method.
     assert isinstance(return_stmt.value, Call)
@@ -513,19 +515,19 @@ def test_monomorphize_bound_violation_at_instantiation_no_trait_call_in_body():
         type_params=(TypeParam(name="T", bound="Add"),),
         params=(Param(name="x", type=TypeParamRef(name="T")),),
         return_type=I32Type(),
-        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+        body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
     )
     # Instantiate with i64, which has no impl Add for i64.
     main_fn = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             ReturnExpr(value=Call(
                 function="passthrough",
                 type_args=(I64Type(),),
                 args=(IntLit(type=I64Type(), value=42),),
             )),
-        ),
+        )),
     )
     prog = Program(
         structs=(counter,), traits=(add_trait,), impls=(add_impl,),
@@ -543,12 +545,12 @@ def test_monomorphize_bound_satisfied_succeeds():
         type_params=(TypeParam(name="T", bound="Add"),),
         params=(Param(name="x", type=TypeParamRef(name="T")),),
         return_type=I32Type(),
-        body=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),),
+        body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
     )
     main_fn = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(
                 name="c", type=StructType(name="Counter"),
                 init=StructInit(type="Counter", fields=(
@@ -560,7 +562,7 @@ def test_monomorphize_bound_satisfied_succeeds():
                 type_args=(StructType(name="Counter"),),
                 args=(LocalRef(name="c"),),
             )),
-        ),
+        )),
     )
     prog = Program(
         structs=(counter,), traits=(add_trait,), impls=(add_impl,),
@@ -577,7 +579,7 @@ def test_monomorphize_missing_impl_raises_clear_error():
     main_fn = Function(
         name="main",
         return_type=I32Type(),
-        body=(
+        body=Block(stmts=(
             Let(
                 name="c", type=StructType(name="Counter"),
                 init=StructInit(type="Counter", fields=(
@@ -590,7 +592,7 @@ def test_monomorphize_missing_impl_raises_clear_error():
                 dispatch_type=StructType(name="Counter"),
                 args=(LocalRef(name="c"), IntLit(type=I32Type(), value=32)),
             )),
-        ),
+        )),
     )
     prog = Program(structs=(counter,), traits=(add_trait,), functions=(main_fn,))
     with pytest.raises(ValueError, match="no impl of trait"):

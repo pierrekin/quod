@@ -7,7 +7,7 @@
       "return_type": {
         "kind": "llvm.i32"
       },
-      "body": [
+      "body": {"id": "@blk_program_1", "stmts": [
         {
           "kind": "quod.return_expr",
           "value": {
@@ -18,7 +18,7 @@
             "value": 0
           }
         }
-      ],
+      ]},
       "claims": []
     }
   ],

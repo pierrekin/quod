@@ -46,7 +46,7 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": [
+        "body": {"id": "@blk_from_stored_struct_2", "stmts": [
           {
             "kind": "quod.with_arena",
             "name": "a",
@@ -57,7 +57,7 @@
               },
               "value": 4096
             },
-            "body": [
+            "body": {"id": "@blk_from_stored_struct_1", "stmts": [
               {
                 "kind": "quod.let",
                 "name": "p",
@@ -146,7 +146,7 @@
                   ]
                 }
               }
-            ]
+            ]}
           },
           {
             "kind": "quod.return_expr",
@@ -158,7 +158,7 @@
               "value": 0
             }
           }
-        ],
+        ]},
         "claims": []
       }
     ],

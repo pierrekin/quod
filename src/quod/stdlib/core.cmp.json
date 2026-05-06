@@ -36,7 +36,7 @@
             {"name": "other", "type": {"kind": "quod.self_type"}}
           ],
           "return_type": {"kind": "llvm.i1"},
-          "body": [
+          "body": {"id": "@blk_core.cmp_1", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -46,7 +46,7 @@
                 "rhs": {"kind": "llvm.param_ref", "name": "other"}
               }
             }
-          ]
+          ]}
         }
       ]
     },
@@ -61,7 +61,7 @@
             {"name": "other", "type": {"kind": "quod.self_type"}}
           ],
           "return_type": {"kind": "llvm.i1"},
-          "body": [
+          "body": {"id": "@blk_core.cmp_2", "stmts": [
             {
               "kind": "quod.return_expr",
               "value": {
@@ -71,7 +71,7 @@
                 "rhs": {"kind": "llvm.param_ref", "name": "other"}
               }
             }
-          ]
+          ]}
         }
       ]
     }
