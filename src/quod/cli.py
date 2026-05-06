@@ -428,17 +428,13 @@ def _run_one_c_ingest(
         raise typer.Exit(1)
 
 
-def _prove_lifts_for_ingest(program: Program, cfg) -> Program:
+def _prove_and_stamp_lifts(program: Program, cfg) -> Program:
     """Run the A→B lift checker for every (CFn, layer-B Function)
     pair the ingester produced, write the trace artifacts under
     `<config.root>/proofs/lift/`, and replace each manual A~B
     `Equivalence` with a witness-regime `LiftEquivalence` claim.
-
-    Called at ingest time so the saved program.json carries pinned
-    transcription proofs by default. `quod equiv prove --bump`
-    re-runs this for hand-edited programs. Stamps the program with
-    the current quod version after pinning — see
-    `quod.version.stamp_quod_version`."""
+    Stamps the program with the current quod version after pinning —
+    see `quod.version.stamp_quod_version`."""
     from quod.lift_check import LiftCheckError, prove_lifts
     from quod.version import stamp_quod_version
     write_dir = cfg.resolve(cfg.proofs_dir) / "lift"
@@ -501,7 +497,7 @@ def ingest_callback(ctx: typer.Context) -> None:
                 f"ingested {source} ({len(ingested.functions)} function(s))"
             )
 
-        program = _prove_lifts_for_ingest(program, cfg)
+        program = _prove_and_stamp_lifts(program, cfg)
         save_program(program, program_path)
     typer.echo(f"wrote {program_path}")
 
@@ -562,7 +558,7 @@ def ingest_c_cmd(
         program, warnings = merge_program(program, ingested)
         for w in warnings:
             typer.echo(f"warning: {w}", err=True)
-        program = _prove_lifts_for_ingest(program, cfg)
+        program = _prove_and_stamp_lifts(program, cfg)
         save_program(program, program_path)
 
     typer.echo(

@@ -591,7 +591,7 @@ def _function_meta(fn: Function) -> tuple[Span, ...]:
 
 
 def _claim_meta(claims: tuple) -> tuple[Span, ...]:
-    """Regime-grouped claim summary used by both functions and externs."""
+    """Regime-grouped claim summary."""
     if not claims:
         return ()
     out: list[Span] = [Span("[", "punct")]
@@ -614,7 +614,7 @@ def _claim_meta(claims: tuple) -> tuple[Span, ...]:
 
 def claim_full_spans(claim) -> tuple[Span, ...]:
     """`claim_spans` + the trailing `{regime=..., enforcement=..., justification=...}`
-    block for non-default fields. The full rendering used by `quod claim ls`."""
+    block for non-default fields. The full per-claim rendering."""
     head = claim_spans(claim)
     suffix = format_claim_metadata(claim)
     if not suffix:

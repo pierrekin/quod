@@ -23,7 +23,7 @@ Schema:
     lattice = "trust"
 
     [[program]]
-    name    = "hello"        # program identifier (used by --program / -p)
+    name    = "hello"        # program identifier
     version = "0.1.0"
     file    = "program.json" # path to the program JSON
 
@@ -342,7 +342,7 @@ def with_overrides(
     return replace(cfg, build=new_build, enforce=new_enforce)
 
 
-# ---------- Starter generation (used by `quod init`) ----------
+# ---------- Starter generation ----------
 
 _STARTER_TOMLS: dict[str, str] = {
     "hello": """\

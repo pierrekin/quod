@@ -922,7 +922,7 @@ class Z3Justification(_Node):
     # tampered with"). `body_smt_hash` pins the SMT text the current
     # body+claim *would* produce ("did the body drift"). Both are
     # sha256 of the same bytes at prove time; they answer different
-    # questions at verify time. See cli.py:_verify_justification.
+    # questions at verify time.
     kind: Literal["z3"] = "z3"
     artifact_path: str
     artifact_hash: str

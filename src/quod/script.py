@@ -282,13 +282,9 @@ def tokenize(src: str) -> list[Token]:
             i = j
             continue
 
-        # Dotted identifier: .name (used by &.const_name)
+        # `.` is tokenised as OP above; the parser composes dotted forms
+        # like `&.name` from the OP token.
         if c == ".":
-            # Already handled as OP if not followed by an identifier char;
-            # the OP path covers `..` (range) too. Here we only fall in if we
-            # need a special case. Actually: keep '.' as OP; the parser
-            # composes &name. — see below.
-            # (No-op; the OP block above already consumed it.)
             pass
 
         # Identifier or keyword
