@@ -92,6 +92,7 @@ from quod.model import (
     Program,
     ProvenanceEdge,
     PtrOffset,
+    Return,
     ReturnExpr,
     ShortCircuitAnd,
     ShortCircuitOr,
@@ -100,6 +101,7 @@ from quod.model import (
     Statement,
     Type,
     Unreachable,
+    VoidType,
     While,
     Widen,
     body_always_terminates,
@@ -109,6 +111,7 @@ from quod.model import (
 _I32 = I32Type()
 _I64 = I64Type()
 _I8PTR = I8PtrType()
+_VOID = VoidType()
 
 
 # Char-typed pointee kinds. Pointer arithmetic on these has byte stride,
@@ -357,9 +360,9 @@ def _extern_type(cursor: cx.Cursor, t: cx.Type, *, is_return: bool = False) -> T
       - any pointer → I8Ptr. LLVM has opaque pointers, so `char*`, `void*`,
         and `CURL*` are all the same type at IR level — modeling them as
         i8_ptr is honest, not a hack.
-      - `void` (return only) → I32. Stand-in until VoidType lands; callers
-        must discard the return value, since the runtime ABI doesn't put
-        anything in the return register and we'd be reading garbage.
+      - `void` (return only) → VoidType. Callers must discard the return
+        value via ExprStmt; using it as an rvalue is rejected by the
+        validator.
 
     Floats, wider ints, structs, function pointers (other than as opaque
     i8_ptr) all refuse — quod can't represent them yet.
@@ -370,9 +373,7 @@ def _extern_type(cursor: cx.Cursor, t: cx.Type, *, is_return: bool = False) -> T
     if canon.kind == cx.TypeKind.POINTER:
         return _I8PTR
     if is_return and canon.kind == cx.TypeKind.VOID:
-        # TODO: replace with VoidType once quod gains one — i32 stand-in
-        # works only because expr-stmt calls discard the return value.
-        return _I32
+        return _VOID
     raise _refuse(cursor, f"unsupported extern signature type {t.spelling!r}")
 
 
@@ -381,13 +382,18 @@ class _FunctionTranslator:
     ParamRef vs LocalRef. Locals introduced by Let are added as we go.
 
     Holds a reference to shared _ProgramState for string-literal interning
-    and extern-signature recording.
+    and extern-signature recording. `is_void` controls whether a bare
+    `return;` statement is accepted (only valid in void-returning functions).
     """
 
-    def __init__(self, params: tuple[str, ...], program_state: _ProgramState) -> None:
+    def __init__(
+        self, params: tuple[str, ...], program_state: _ProgramState,
+        *, is_void: bool = False,
+    ) -> None:
         self._params = set(params)
         self._locals: set[str] = set()
         self._state = program_state
+        self._is_void = is_void
 
     def _ref(self, cursor: cx.Cursor, name: str) -> Expr:
         if name in self._params:
@@ -508,7 +514,18 @@ class _FunctionTranslator:
         if k == cx.CursorKind.RETURN_STMT:
             children = list(c.get_children())
             if not children:
-                raise _refuse(c, "bare `return;` not supported (function must return int)")
+                # Bare `return;` is valid only in void-returning functions.
+                # In a non-void function, falling off the end (or bare-
+                # returning) is C99 §6.9.1/12 UB. Refusing is the
+                # conservative response — see project memory on
+                # how-to-handle-invalid-C.
+                if not self._is_void:
+                    raise _refuse(
+                        c,
+                        "bare `return;` is only valid in void-returning "
+                        "functions; this function returns a non-void type."
+                    )
+                return Return()
             inner = _unwrap(children[0])
             if inner.kind == cx.CursorKind.INTEGER_LITERAL:
                 tokens = [t.spelling for t in inner.get_tokens()]
@@ -1016,8 +1033,17 @@ def _translate_function_layer_a(
     derived from the spelling so it's stable across re-ingest of the
     same source — the same convention the layer-B Function uses, with a
     distinct `@cfn_c_*` prefix so the two are addressable separately."""
-    if not _is_int_type(cursor.result_type):
-        raise _refuse(cursor, f"layer A: only `int`-returning functions are supported, got {cursor.result_type.spelling!r}")
+    result_canon = cursor.result_type.get_canonical()
+    if result_canon.kind == cx.TypeKind.INT:
+        return_type = CNamedType(name="int")
+    elif result_canon.kind == cx.TypeKind.VOID:
+        return_type = CNamedType(name="void")
+    else:
+        raise _refuse(
+            cursor,
+            f"layer A: only `int`- and `void`-returning functions are "
+            f"supported, got {cursor.result_type.spelling!r}"
+        )
     params: list[CParam] = []
     body_cursor: cx.Cursor | None = None
     for child in cursor.get_children():
@@ -1032,7 +1058,7 @@ def _translate_function_layer_a(
     return CFn(
         id=f"@cfn_c_{cursor.spelling}",
         name=cursor.spelling,
-        return_type=CNamedType(name="int"),
+        return_type=return_type,
         params=tuple(params),
         body=body,
     )
@@ -1041,8 +1067,19 @@ def _translate_function_layer_a(
 def _translate_function(
     cursor: cx.Cursor, source_path: Path, state: _ProgramState,
 ) -> Function:
-    if not _is_int_type(cursor.result_type):
-        raise _refuse(cursor, f"only `int`-returning functions are supported, got {cursor.result_type.spelling!r}")
+    result_canon = cursor.result_type.get_canonical()
+    if result_canon.kind == cx.TypeKind.INT:
+        return_type: Type = _I32
+        is_void = False
+    elif result_canon.kind == cx.TypeKind.VOID:
+        return_type = _VOID
+        is_void = True
+    else:
+        raise _refuse(
+            cursor,
+            f"only `int`- and `void`-returning functions are supported, "
+            f"got {cursor.result_type.spelling!r}"
+        )
 
     params: list[Param] = []
     body_cursor: cx.Cursor | None = None
@@ -1056,15 +1093,22 @@ def _translate_function(
     if body_cursor is None:
         raise _refuse(cursor, "function has no body (forward declarations are skipped, not ingested)")
 
-    translator = _FunctionTranslator(tuple(p.name for p in params), state)
+    translator = _FunctionTranslator(
+        tuple(p.name for p in params), state, is_void=is_void,
+    )
     body = tuple(translator.stmt(s) for s in body_cursor.get_children())
 
     # Faithful translation of C fall-through. C99 §5.1.2.2.3 defines falling
-    # off `main` as `return 0;` — synthesize that. Every other int-returning
-    # function falling off the end is UB (§6.9.1/12) — represent it
-    # explicitly with `Unreachable` so analysis can flag the path.
+    # off `main` as `return 0;` — synthesize that for int-returning `main`.
+    # Void-returning functions may fall through (the standard treats this
+    # as an implicit `return;`) — append an explicit `Return()` so layer C
+    # carries a terminator. Any other int-returning function falling off
+    # the end is UB (§6.9.1/12) — represent it explicitly with
+    # `Unreachable` so analysis can flag the path.
     if not body_always_terminates(body):
-        if cursor.spelling == "main":
+        if is_void:
+            body = body + (Return(),)
+        elif cursor.spelling == "main":
             body = body + (ReturnExpr(value=IntLit(type=_I32, value=0)),)
         else:
             body = body + (Unreachable(),)
@@ -1074,7 +1118,7 @@ def _translate_function(
         id=state.mint_function_id(cursor.spelling),
         name=cursor.spelling,
         params=tuple(params),
-        return_type=_I32,
+        return_type=return_type,
         body=Block(id=state.mint_block_id(), stmts=body),
         notes=(note,),
     )

@@ -101,6 +101,7 @@ from quod.model import (
     ReturnExpr,
     StringConstant,
     StringRef,
+    VoidType,
     While,
     Widen,
     ShortCircuitAnd,
@@ -254,7 +255,8 @@ def _check_return_type(a, b, *, path: str) -> None:
 def _check_value_type(a, b, *, path: str) -> None:
     """Map layer-A types to their layer-B counterparts. Pointers
     collapse to `I8PtrType` regardless of pointee — LLVM has opaque
-    pointers, so all `T*` denote i8* at IR level."""
+    pointers, so all `T*` denote i8* at IR level. `void` only appears
+    in return position and pairs with `VoidType`."""
     if isinstance(a, CPointerType):
         if not isinstance(b, I8PtrType):
             raise LiftCheckError(
@@ -269,12 +271,18 @@ def _check_value_type(a, b, *, path: str) -> None:
                     f"{path}: layer-A int but layer-B is {type(b).__name__}"
                 )
             return
+        if a.name == "void":
+            if not isinstance(b, VoidType):
+                raise LiftCheckError(
+                    f"{path}: layer-A void but layer-B is {type(b).__name__}"
+                )
+            return
         # `char`, `signed char`, `unsigned char` are only valid as
-        # pointee names in v6 — they appear inside CPointerType, not
-        # as a standalone `CParam.type` etc. The lifter doesn't emit
-        # `char` locals at the top level today.
+        # pointee names in the supported subset — they appear inside
+        # CPointerType, not as a standalone `CParam.type`. The lifter
+        # doesn't emit `char` locals at the top level today.
         raise LiftCheckError(
-            f"{path}: layer-A type {a.name!r} is not in the v6 supported subset"
+            f"{path}: layer-A type {a.name!r} is not in the supported subset"
         )
     raise LiftCheckError(f"{path}: layer-A type is {type(a).__name__}, expected CNamedType or CPointerType")
 
@@ -335,6 +343,10 @@ def _is_synthesized_fallthrough(stmt) -> bool:
     """
     from quod.model import Unreachable
     if isinstance(stmt, Unreachable):
+        return True
+    if isinstance(stmt, Return):
+        # Synthesized terminator for a void-returning function whose
+        # source body falls through without an explicit `return;`.
         return True
     if isinstance(stmt, ReturnExpr):
         v = stmt.value

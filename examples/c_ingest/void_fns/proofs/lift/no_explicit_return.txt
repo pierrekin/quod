@@ -1,0 +1,46 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_no_explicit_return",
+    "b_id": "@fn_c_no_explicit_return",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_4",
+      "stmts": [
+        {
+          "a_id": "@cexprstmt_c_no_explicit_return_1",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.void_fns.1",
+                "value": "count = %d\n"
+              },
+              {
+                "kind": "var_ref \u2194 param_ref",
+                "name": "n"
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        }
+      ]
+    },
+    "name": "no_explicit_return",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "n"
+      }
+    ],
+    "return_type": {
+      "a": "void",
+      "b": "llvm.void"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

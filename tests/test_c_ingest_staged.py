@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from quod.ingest.c import ingest_c
+from quod.ingest.c import IngestError, ingest_c
 from quod.lower import compile_program
 from quod.model import (
     CAssign,
@@ -246,6 +246,79 @@ def test_bitwise_example_passes_lift_check():
     fns_by_name = {fn.name: fn for fn in p.structured_functions}
     for name, cfn in cfns_by_name.items():
         walk_lift(cfn, fns_by_name[name], program=p)
+
+
+VOID_FNS_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/void_fns/void_fns.c"
+
+
+def test_ingest_void_returning_function():
+    """`void f(...)` ingests as a Function with VoidType return; bare
+    `return;` emits a Return() statement; void externs now carry a
+    real VoidType (not the previous I32 stand-in)."""
+    from quod.model import Return as ReturnNode, VoidType
+    p = ingest_c(VOID_FNS_C)
+
+    fns_by_name = {fn.name: fn for fn in p.functions}
+    assert isinstance(fns_by_name["greet"].return_type, VoidType)
+    assert isinstance(fns_by_name["no_explicit_return"].return_type, VoidType)
+    # Bare `return;` lifted to Return().
+    greet = fns_by_name["greet"]
+    iff = greet.body.stmts[0]  # if (n <= 0) { return; }
+    assert isinstance(iff.then_body.stmts[0], ReturnNode)
+    # Falling off the end of a void body synthesizes Return() at the tail.
+    no_ret = fns_by_name["no_explicit_return"]
+    assert isinstance(no_ret.body.stmts[-1], ReturnNode)
+
+    # Void externs (e.g. printf is i32-returning, but if exit() were
+    # called we'd see VoidType). Here printf is the only extern.
+    [printf] = [e for e in p.externs if e.name == "printf"]
+    assert printf.return_type.kind == "llvm.i32"
+
+
+def test_void_fns_example_compiles_and_runs(tmp_path):
+    import subprocess
+    from quod.lower import compile_program
+    p = ingest_c(VOID_FNS_C)
+    res = compile_program(
+        p, build_dir=tmp_path, bins=(("void_fns", "main"),),
+        profile=2, link=True,
+    )
+    out = subprocess.run([str(res.bins[0].binary)], capture_output=True, text=True, timeout=10)
+    assert out.returncode == 0
+    assert out.stdout == "hello 1\nhello 2\ncount = 42\n"
+
+
+def test_bare_return_in_non_void_function_refuses(tmp_path):
+    """Bare `return;` from a non-void function is rejected — clang's
+    parse step catches it before the ingester walks the AST, but the
+    ingester also has its own defensive check for the same case (so
+    AST shapes that bypass the parse error still refuse cleanly)."""
+    src = tmp_path / "bad.c"
+    src.write_text("int f(int x) { if (x < 0) { return; } return x; }\n")
+    with pytest.raises(IngestError, match="non-void function|bare `return;`"):
+        ingest_c(src)
+
+
+def test_void_extern_signature_uses_voidtype(tmp_path):
+    """Calls to void-returning externs (e.g. libc `exit`) flow through
+    the ingester with a real VoidType in the extern signature, and the
+    layer-B program lowers and runs cleanly."""
+    import subprocess
+    from quod.lower import compile_program
+    src = tmp_path / "void_extern.c"
+    src.write_text(
+        "#include <stdlib.h>\n"
+        "int main(void) { exit(0); return 1; }\n"
+    )
+    p = ingest_c(src)
+    [exit_ext] = [e for e in p.externs if e.name == "exit"]
+    assert exit_ext.return_type.kind == "llvm.void"
+    res = compile_program(
+        p, build_dir=tmp_path, bins=(("vox", "main"),),
+        profile=2, link=True,
+    )
+    out = subprocess.run([str(res.bins[0].binary)], capture_output=True, text=True, timeout=10)
+    assert out.returncode == 0
 
 
 def test_every_c_corpus_example_emits_layer_a():

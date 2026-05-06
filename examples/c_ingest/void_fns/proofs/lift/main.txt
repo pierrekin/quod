@@ -4,39 +4,19 @@
     "b_id": "@fn_c_main",
     "body": {
       "a_block": "<inline>",
-      "b_block_id": "@blk_c_1",
+      "b_block_id": "@blk_c_5",
       "stmts": [
-        {
-          "a_id": "@cvardecl_c_main_1",
-          "init": {
-            "args": [],
-            "callee": "curl_easy_init",
-            "kind": "call \u2194 call"
-          },
-          "kind": "var_decl \u2194 let",
-          "name": "handle"
-        },
         {
           "a_id": "@cexprstmt_c_main_1",
           "kind": "c.expr_stmt \u2194 expr_stmt",
           "value": {
             "args": [
               {
-                "kind": "var_ref \u2194 local_ref",
-                "name": "handle"
-              },
-              {
-                "kind": "enum_const_ref \u2194 int_lit",
-                "name": "CURLOPT_URL",
-                "value": 10002
-              },
-              {
-                "kind": "string_lit \u2194 string_ref",
-                "string_ref": ".str.curl_fetch.0",
-                "value": "https://example.com"
+                "kind": "int_lit",
+                "value": 0
               }
             ],
-            "callee": "curl_easy_setopt",
+            "callee": "greet",
             "kind": "call \u2194 call"
           }
         },
@@ -46,11 +26,11 @@
           "value": {
             "args": [
               {
-                "kind": "var_ref \u2194 local_ref",
-                "name": "handle"
+                "kind": "int_lit",
+                "value": 1
               }
             ],
-            "callee": "curl_easy_perform",
+            "callee": "greet",
             "kind": "call \u2194 call"
           }
         },
@@ -60,11 +40,25 @@
           "value": {
             "args": [
               {
-                "kind": "var_ref \u2194 local_ref",
-                "name": "handle"
+                "kind": "int_lit",
+                "value": 2
               }
             ],
-            "callee": "curl_easy_cleanup",
+            "callee": "greet",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_4",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "int_lit",
+                "value": 42
+              }
+            ],
+            "callee": "no_explicit_return",
             "kind": "call \u2194 call"
           }
         },
