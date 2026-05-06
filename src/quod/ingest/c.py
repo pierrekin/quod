@@ -1,32 +1,42 @@
-"""C source → quod Program (staged-lift v3).
+"""C source → quod Program (staged-lift).
 
-Walks a libclang AST once and emits **two parallel subtrees**:
+Walks a libclang AST once and emits **three parallel subtrees**:
 
   - Layer A (`Program.source_units`): the original C preserved as quod
     nodes (`CUnit`, `CFn`, `CFor`, `CVarDecl`, …). Inert — no codegen,
     no validation — but addressable by stable IDs so future analyses
     can reach the source-form.
-  - Layer B (`Program.functions`): the c-like-quod transcription. Mostly
-    core nodes, with `c.*` family extensions where core can't represent
-    a construct (e.g. C `for` becomes `CStyleFor`).
+  - Layer B (`Program.structured_functions`): the c-like-quod
+    transcription. Mostly core nodes, with `c.*` family extensions
+    where layer-B carries information the lift hasn't finished
+    collapsing (e.g. C `for` becomes `CStyleFor`).
+  - Layer C (`Program.functions`): pure core, what `lower.py`
+    consumes. Produced by the c-family lowering pass
+    (`lower/c_family.py`) at the end of `ingest_c`.
 
-The two subtrees are paired by `ProvenanceEdge`s and `Equivalence`
-claims (see `Program.edges`, `Program.equivalences`). At step 4 we emit
-function-level edges with `regime=axiom` — the auto-checker for
-transcription faithfulness is future work; the equivalence claim today
-is the ingester's promise that the lift is structural.
+The subtrees are paired by `ProvenanceEdge`s and `Equivalence` claims
+(see `Program.edges`, `Program.equivalences`). The ingester emits A↔B
+equivalences with a `ManualJustification` ("the ingester promises a
+structural lift"); `quod equiv prove` (or `prove_lifts` directly)
+upgrades them to `regime=witness` with a `LiftEquivalence` artifact
+under `<proofs_dir>/lift/<fn>.txt`. The B↔C `FamilyLowering`
+equivalences carry per-rule SMT proofs from
+`src/quod/lower/c_family_proofs/*.smt2`.
 
-Step 5 implements the c-family lowering pass (`lower/c_family.py`) that
-strips `c.*` extensions to produce layer C. Until then a Program
-containing `CStyleFor` cannot be lowered to LLVM IR — `lower.py`
-refuses with a clear error.
+The supported C subset covers int- and char-pointer-only programs
+with the standard control-flow vocabulary: if / while / do-while /
+for (any of init/cond/inc may be absent) / return / break /
+continue / switch (no implicit fallthrough). Expressions cover
+arithmetic, comparison, short-circuit boolean, bitwise (`& | ^ ~ <<
+>>`), unary (`- ! ~`), ternary `? :`, compound assignments
+(`+= -= ...`), calls. Locals can be declared without an initializer
+(`int x;`); the validator's definite-init analysis refuses any read
+that isn't dominated by a write. See `.scratch/c-ingest/roadmap.md`
+for the broader subset map (Tier 2/3 still missing — loads, casts,
+wider integer types, structs, floats, …).
 
-The supported C subset stays deliberately narrow: int-only types,
-arithmetic / comparison / boolean binops, if / while / for / return,
-calls between ingested functions, locals via plain int declarations.
-For-loops require all four slots populated (`for (init; cond; inc) body`)
-in v3; sparse forms refuse. Anything outside raises IngestError with
-the offending source location.
+Constructs outside the supported subset raise `IngestError` with the
+offending source location.
 
 Macros / #include / #ifdef are handled by clang's preprocessor before
 we see the AST — we ingest one build configuration of the source. We
