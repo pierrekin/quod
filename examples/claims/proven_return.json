@@ -2,6 +2,7 @@
   "constants": [],
   "functions": [
     {
+      "id": "@fn_b734577f0a27",
       "name": "f",
       "params": [
         {
@@ -77,6 +78,14 @@
       },
       "claims": [
         {
+          "regime": "witness",
+          "justification": {
+            "kind": "z3",
+            "artifact_path": "proofs/proven_return/f_36d0735e6d2e.smt2",
+            "artifact_hash": "36d0735e6d2e176392cc89af07bc1d7b583b217db9dab1064b4b6d846f6f32dd",
+            "body_smt_hash": "36d0735e6d2e176392cc89af07bc1d7b583b217db9dab1064b4b6d846f6f32dd",
+            "note": null
+          },
           "kind": "predicate",
           "expr": {
             "kind": "llvm.binop",
@@ -91,18 +100,11 @@
             "rhs": {
               "kind": "quod.return_ref"
             }
-          },
-          "regime": "witness",
-          "justification": {
-            "kind": "z3",
-            "artifact_path": "proofs/proven_return/f_return_in_range_return_e7b5f9f88a3d.smt2",
-            "artifact_hash": "e7b5f9f88a3d8fc7ef50359ff602fedeea1dae1101dae4a779fe2061698282e3",
-            "body_smt_hash": "e7b5f9f88a3d8fc7ef50359ff602fedeea1dae1101dae4a779fe2061698282e3",
-            "note": null
           }
         }
       ]
     }
   ],
-  "externs": []
+  "externs": [],
+  "quod_version": "022bc4c95375e33c54d99422ac647ef0942e6b0d"
 }

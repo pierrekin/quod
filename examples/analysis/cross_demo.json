@@ -2,6 +2,7 @@
   "constants": [],
   "functions": [
     {
+      "id": "@fn_92882fce5a87",
       "name": "f",
       "params": [
         {
@@ -77,6 +78,14 @@
       },
       "claims": [
         {
+          "regime": "witness",
+          "justification": {
+            "kind": "z3",
+            "artifact_path": "proofs/cross_demo/f_36d0735e6d2e.smt2",
+            "artifact_hash": "36d0735e6d2e176392cc89af07bc1d7b583b217db9dab1064b4b6d846f6f32dd",
+            "body_smt_hash": "36d0735e6d2e176392cc89af07bc1d7b583b217db9dab1064b4b6d846f6f32dd",
+            "note": null
+          },
           "kind": "predicate",
           "expr": {
             "kind": "llvm.binop",
@@ -91,19 +100,12 @@
             "rhs": {
               "kind": "quod.return_ref"
             }
-          },
-          "regime": "witness",
-          "justification": {
-            "kind": "z3",
-            "artifact_path": "proofs/cross_demo/f_return_in_range_return_e7b5f9f88a3d.smt2",
-            "artifact_hash": "e7b5f9f88a3d8fc7ef50359ff602fedeea1dae1101dae4a779fe2061698282e3",
-            "body_smt_hash": "e7b5f9f88a3d8fc7ef50359ff602fedeea1dae1101dae4a779fe2061698282e3",
-            "note": null
           }
         }
       ]
     },
     {
+      "id": "@fn_2a2c226b6488",
       "name": "g",
       "params": [
         {
@@ -180,6 +182,14 @@
       },
       "claims": [
         {
+          "regime": "witness",
+          "justification": {
+            "kind": "z3",
+            "artifact_path": "proofs/cross_demo/g_8b795c46b2d7.smt2",
+            "artifact_hash": "8b795c46b2d79c2434d410f4b9cea3cdaecdcbd1f684b220659cedfe25e0fbb1",
+            "body_smt_hash": "8b795c46b2d79c2434d410f4b9cea3cdaecdcbd1f684b220659cedfe25e0fbb1",
+            "note": null
+          },
           "kind": "predicate",
           "expr": {
             "kind": "llvm.binop",
@@ -194,18 +204,11 @@
             "rhs": {
               "kind": "quod.return_ref"
             }
-          },
-          "regime": "witness",
-          "justification": {
-            "kind": "z3",
-            "artifact_path": "proofs/cross_demo/g_return_in_range_return_3c9af24cea62.smt2",
-            "artifact_hash": "3c9af24cea621314341c31048fe17bd1b2f10ed812832f62812759c7898d9a0b",
-            "body_smt_hash": "3c9af24cea621314341c31048fe17bd1b2f10ed812832f62812759c7898d9a0b",
-            "note": null
           }
         }
       ]
     }
   ],
-  "externs": []
+  "externs": [],
+  "quod_version": "022bc4c95375e33c54d99422ac647ef0942e6b0d"
 }
