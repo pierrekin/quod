@@ -1,0 +1,80 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_reduce",
+    "b_id": "@fn_c_reduce",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_3",
+      "stmts": [
+        {
+          "a_id": "@cvardecl_c_reduce_1",
+          "init": {
+            "kind": "var_ref \u2194 param_ref",
+            "name": "n"
+          },
+          "kind": "var_decl \u2194 let",
+          "name": "x"
+        },
+        {
+          "a_id": "@ccompound_c_reduce_1",
+          "kind": "compound_assign(*=) \u2194 assign(_, binop(mul))",
+          "target": "x",
+          "value": {
+            "kind": "int_lit",
+            "value": 3
+          }
+        },
+        {
+          "a_id": "@ccompound_c_reduce_2",
+          "kind": "compound_assign(-=) \u2194 assign(_, binop(sub))",
+          "target": "x",
+          "value": {
+            "kind": "int_lit",
+            "value": 4
+          }
+        },
+        {
+          "a_id": "@ccompound_c_reduce_3",
+          "kind": "compound_assign(/=) \u2194 assign(_, binop(sdiv))",
+          "target": "x",
+          "value": {
+            "kind": "int_lit",
+            "value": 2
+          }
+        },
+        {
+          "a_id": "@ccompound_c_reduce_4",
+          "kind": "compound_assign(%=) \u2194 assign(_, binop(srem))",
+          "target": "x",
+          "value": {
+            "kind": "int_lit",
+            "value": 100
+          }
+        },
+        {
+          "a_id": "@creturn_c_reduce_1",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "var_ref \u2194 local_ref",
+            "name": "x"
+          }
+        }
+      ]
+    },
+    "name": "reduce",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "n"
+      }
+    ],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

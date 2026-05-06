@@ -33,6 +33,7 @@ from quod.model import (
     CAssign,
     CBinOp,
     CCall,
+    CCompoundAssign,
     CEnumConstRef,
     CExprStmt,
     CFn,
@@ -1130,6 +1131,22 @@ _KIND_INFO["c.multi_var_decl"] = {
     },
 }
 
+_KIND_INFO["c.compound_assign"] = {
+    "class": CCompoundAssign,
+    "summary": (
+        "`x += y`, `x -= y`, etc. — compound assignment combining a "
+        "binary operator with assignment. Layer-A only: the lift "
+        "desugars to `Assign(x, BinOp(op_translated, LocalRef(x), y'))` "
+        "on the layer-B side, paired by the lift-checker."
+    ),
+    "example": {
+        "kind": "c.compound_assign",
+        "target": "s",
+        "op": "+=",
+        "value": {"kind": "c.var_ref", "name": "i"},
+    },
+}
+
 _KIND_INFO["c.assign"] = {
     "class": CAssign,
     "summary": (
@@ -1320,8 +1337,8 @@ _CATEGORIES: dict[str, list[str]] = {
     # .scratch/c-ingest/00-overview.md.
     "source.c": [
         "c_unit", "c.fn", "c.param", "c.type", "c.type.ptr",
-        "c.var_decl", "c.multi_var_decl", "c.assign", "c.return", "c.for",
-        "c.if", "c.while", "c.expr_stmt",
+        "c.var_decl", "c.multi_var_decl", "c.assign", "c.compound_assign",
+        "c.return", "c.for", "c.if", "c.while", "c.expr_stmt",
         "c.binop", "c.lit_int", "c.lit_str", "c.var_ref",
         "c.enum_const_ref", "c.call",
         "c.array_subscript", "c.addr_of", "c.unary",

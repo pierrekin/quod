@@ -381,6 +381,80 @@ def test_multi_decl_in_for_init_refuses(tmp_path):
         ingest_c(src)
 
 
+COMPOUND_ASSIGN_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/compound_assign/compound_assign.c"
+
+
+def test_compound_assign_layer_a_preserves_op():
+    """`x += y` lifts to a layer-A CCompoundAssign('+=') preserving
+    source form, and desugars to Assign(x, BinOp("add", LocalRef(x),
+    y')) on the layer-B side."""
+    from quod.model import CCompoundAssign, Assign, BinOp, LocalRef
+    p = ingest_c(COMPOUND_ASSIGN_C)
+
+    # Layer A: while-body has two compound assigns (total += i; i += 1;)
+    sum_to_a = next(cf for cf in p.source_units[0].functions if cf.name == "sum_to")
+    while_stmt = sum_to_a.body[2]
+    body_stmts = while_stmt.body
+    assert isinstance(body_stmts[0], CCompoundAssign) and body_stmts[0].op == "+="
+    assert body_stmts[0].target == "total"
+    assert isinstance(body_stmts[1], CCompoundAssign) and body_stmts[1].op == "+="
+
+    # Layer B: same positions are Assign(name, BinOp("add", LocalRef(name), ...))
+    sum_to_b = next(fn for fn in p.structured_functions if fn.name == "sum_to")
+    while_b = sum_to_b.body.stmts[2]
+    body_b = while_b.body.stmts
+    assign = body_b[0]
+    assert isinstance(assign, Assign) and assign.name == "total"
+    assert isinstance(assign.value, BinOp) and assign.value.op == "add"
+    assert isinstance(assign.value.lhs, LocalRef) and assign.value.lhs.name == "total"
+
+
+def test_compound_assign_lift_check_pairs_op():
+    """walk_lift records the compound-assign correspondence with the
+    underlying BinOp.op."""
+    from quod.lift_check import walk_lift
+    p = ingest_c(COMPOUND_ASSIGN_C)
+    cfn = next(cf for cf in p.source_units[0].functions if cf.name == "reduce")
+    fn = next(f for f in p.structured_functions if f.name == "reduce")
+    rec = walk_lift(cfn, fn, program=p)
+    body_stmts = rec["fn"]["body"]["stmts"]
+    # `int x = n;` then x *=, -=, /=, %= in order.
+    ops = [
+        s["kind"] for s in body_stmts
+        if s["kind"].startswith("compound_assign")
+    ]
+    assert ops == [
+        "compound_assign(*=) ↔ assign(_, binop(mul))",
+        "compound_assign(-=) ↔ assign(_, binop(sub))",
+        "compound_assign(/=) ↔ assign(_, binop(sdiv))",
+        "compound_assign(%=) ↔ assign(_, binop(srem))",
+    ]
+
+
+def test_compound_assign_example_compiles_and_runs(tmp_path):
+    import subprocess
+    from quod.lower import compile_program
+    p = ingest_c(COMPOUND_ASSIGN_C)
+    res = compile_program(
+        p, build_dir=tmp_path, bins=(("compound", "main"),),
+        profile=2, link=True,
+    )
+    out = subprocess.run([str(res.bins[0].binary)], capture_output=True, text=True, timeout=10)
+    assert out.returncode == 0
+    assert "sum_to(10)         = 55" in out.stdout
+    assert "reduce(50)         = 73" in out.stdout
+    assert "bit_ops(0x1234, 2) = 98" in out.stdout
+
+
+def test_compound_assign_to_parameter_refuses(tmp_path):
+    """Compound assignment to a parameter is refused, matching the
+    existing rule for plain Assign."""
+    src = tmp_path / "bad_param.c"
+    src.write_text("int f(int x) { x += 1; return x; }\n")
+    with pytest.raises(IngestError, match="cannot assign to 'x'"):
+        ingest_c(src)
+
+
 def test_every_c_corpus_example_emits_layer_a():
     """Coverage sweep: every example now produces a `source_units`
     entry. The layer-A widening landed in three steps (calls /

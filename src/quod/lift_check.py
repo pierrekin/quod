@@ -68,6 +68,7 @@ from quod.model import (
     CAssign,
     CBinOp,
     CCall,
+    CCompoundAssign,
     CEnumConstRef,
     CExprStmt,
     CFn,
@@ -113,6 +114,22 @@ from quod.model import (
 # Map layer-A binary-operator spelling to layer-B BinOp.op spelling.
 # Mirrors the table in src/quod/ingest/c.py — kept in sync because
 # the lift produces the layer-B side from the same source character.
+# C compound-assignment operator → underlying layer-B BinOp.op spelling.
+# Mirrors `_COMPOUND_ASSIGN_TABLE` in src/quod/ingest/c.py.
+_COMPOUND_ASSIGN_TO_BINOP = {
+    "+=":  "add",
+    "-=":  "sub",
+    "*=":  "mul",
+    "/=":  "sdiv",
+    "%=":  "srem",
+    "&=":  "and",
+    "|=":  "or",
+    "^=":  "xor",
+    "<<=": "shl",
+    ">>=": "ashr",
+}
+
+
 _BINOP_LAYER_A_TO_B = {
     "+": "add",
     "-": "sub",
@@ -428,6 +445,42 @@ def _check_stmt(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
             "kind": "assign ↔ assign",
             "a_id": a.id, "target": a.target,
             "value": _check_expr(a.value, b.value, path=f"{path}.value", ctx=ctx),
+        }
+
+    if isinstance(a, CCompoundAssign):
+        # `x op= y` ↔ `Assign(x, BinOp(op_translated, LocalRef(x), y'))`.
+        if not isinstance(b, Assign):
+            raise LiftCheckError(
+                f"{path}: layer-A CCompoundAssign vs layer-B {type(b).__name__}"
+            )
+        if a.target != b.name:
+            raise LiftCheckError(
+                f"{path}: compound-assign target {a.target!r} vs {b.name!r}"
+            )
+        expected_op = _COMPOUND_ASSIGN_TO_BINOP.get(a.op)
+        if expected_op is None:
+            raise LiftCheckError(
+                f"{path}: unsupported compound-assignment operator {a.op!r}"
+            )
+        if not isinstance(b.value, BinOp):
+            raise LiftCheckError(
+                f"{path}: compound-assign expects layer-B Assign(BinOp), "
+                f"got Assign({type(b.value).__name__})"
+            )
+        if b.value.op != expected_op:
+            raise LiftCheckError(
+                f"{path}: compound-assign {a.op!r} expects layer-B "
+                f"BinOp({expected_op!r}), got {b.value.op!r}"
+            )
+        if not isinstance(b.value.lhs, LocalRef) or b.value.lhs.name != a.target:
+            raise LiftCheckError(
+                f"{path}: compound-assign expects layer-B BinOp's LHS to be "
+                f"LocalRef({a.target!r}), got {type(b.value.lhs).__name__}"
+            )
+        return {
+            "kind": f"compound_assign({a.op}) ↔ assign(_, binop({expected_op}))",
+            "a_id": a.id, "target": a.target,
+            "value": _check_expr(a.value, b.value.rhs, path=f"{path}.value", ctx=ctx),
         }
 
     if isinstance(a, CReturn):

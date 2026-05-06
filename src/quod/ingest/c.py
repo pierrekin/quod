@@ -52,6 +52,7 @@ from quod.model import (
     CAssign,
     CBinOp,
     CCall,
+    CCompoundAssign,
     CEnumConstRef,
     CExpr,
     CExprStmt,
@@ -157,6 +158,22 @@ def _is_i1_typed(expr: Expr) -> bool:
     if isinstance(expr, (ShortCircuitAnd, ShortCircuitOr)):
         return True
     return False
+
+
+# Mapping from C compound-assignment operators to the underlying quod
+# BinOp.op (used to desugar `x op= y` to `x = x op y` at lift time).
+_COMPOUND_ASSIGN_TABLE: dict[str, str] = {
+    "+=":  "add",
+    "-=":  "sub",
+    "*=":  "mul",
+    "/=":  "sdiv",
+    "%=":  "srem",
+    "&=":  "and",
+    "|=":  "or",
+    "^=":  "xor",
+    "<<=": "shl",
+    ">>=": "ashr",
+}
 
 
 # Mapping from C operator spellings (read from tokens) to quod BinOp.op.
@@ -645,6 +662,37 @@ class _FunctionTranslator:
                 return (Assign(name=lhs.spelling, value=value),)
             return (ExprStmt(value=self.expr(c)),)
 
+        if k == cx.CursorKind.COMPOUND_ASSIGNMENT_OPERATOR:
+            # `x op= y;` desugars to `x = x op y;`. The lift-checker
+            # pairs the layer-A CCompoundAssign with this Assign+BinOp
+            # shape via _COMPOUND_ASSIGN_TABLE.
+            children = list(c.get_children())
+            if len(children) != 2:
+                raise _refuse(c, f"compound assignment with {len(children)} children")
+            lhs = _unwrap(children[0])
+            if lhs.kind != cx.CursorKind.DECL_REF_EXPR:
+                raise _refuse(lhs, "only simple `name op= expr` assignment supported")
+            if lhs.spelling not in self._locals:
+                raise _refuse(
+                    lhs,
+                    f"cannot assign to {lhs.spelling!r} (compound assignment "
+                    f"requires a local declared with `int`; assignment to "
+                    f"parameters is not supported)"
+                )
+            op = c.spelling
+            translated = _COMPOUND_ASSIGN_TABLE.get(op)
+            if translated is None:
+                raise _refuse(c, f"unsupported compound-assignment operator {op!r}")
+            value = self.expr(children[1])
+            return (Assign(
+                name=lhs.spelling,
+                value=BinOp(
+                    op=cast(any, translated),
+                    lhs=LocalRef(name=lhs.spelling),
+                    rhs=value,
+                ),
+            ),)
+
         if k == cx.CursorKind.CALL_EXPR:
             return (ExprStmt(value=self.expr(c)),)
 
@@ -945,6 +993,24 @@ class _LayerATranslator:
                     value=self.expr(children[1]),
                 )
             raise _refuse(c, "layer A: bare expression-as-statement only supported for assignments")
+
+        if k == cx.CursorKind.COMPOUND_ASSIGNMENT_OPERATOR:
+            # Layer A preserves the source operator faithfully.
+            children = list(c.get_children())
+            if len(children) != 2:
+                raise _refuse(c, f"layer A: compound assignment with {len(children)} children")
+            lhs = _unwrap(children[0])
+            if lhs.kind != cx.CursorKind.DECL_REF_EXPR:
+                raise _refuse(lhs, "layer A: only simple `name op= expr` assignment supported")
+            op = c.spelling
+            if op not in _COMPOUND_ASSIGN_TABLE:
+                raise _refuse(c, f"layer A: unsupported compound-assignment operator {op!r}")
+            return CCompoundAssign(
+                id=self._mint("ccompound"),
+                target=lhs.spelling,
+                op=op,
+                value=self.expr(children[1]),
+            )
 
         if k == cx.CursorKind.FOR_STMT:
             children = list(c.get_children())

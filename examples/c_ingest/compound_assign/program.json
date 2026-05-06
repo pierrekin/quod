@@ -1,0 +1,1553 @@
+{
+  "constants": [
+    {
+      "name": ".str.compound_assign.0",
+      "value": "sum_to(10)         = %d\n"
+    },
+    {
+      "name": ".str.compound_assign.1",
+      "value": "reduce(50)         = %d\n"
+    },
+    {
+      "name": ".str.compound_assign.2",
+      "value": "bit_ops(0x1234, 2) = %d\n"
+    }
+  ],
+  "functions": [
+    {
+      "id": "@fn_c_lowered_sum_to",
+      "name": "sum_to",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_lowered_sum_to_2",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "total",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "i",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 1
+            }
+          },
+          {
+            "kind": "quod.while",
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "sle",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "i"
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "n"
+              }
+            },
+            "body": {
+              "id": "@blk_c_lowered_sum_to_1",
+              "stmts": [
+                {
+                  "kind": "quod.assign",
+                  "name": "total",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "total"
+                    },
+                    "rhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    }
+                  }
+                },
+                {
+                  "kind": "quod.assign",
+                  "name": "i",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 1
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "total"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from compound_assign.c:8"
+      ]
+    },
+    {
+      "id": "@fn_c_lowered_reduce",
+      "name": "reduce",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_lowered_reduce_1",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "x",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.param_ref",
+              "name": "n"
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "x",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "mul",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 3
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "x",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "sub",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 4
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "x",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "sdiv",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 2
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "x",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "srem",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 100
+              }
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "x"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from compound_assign.c:18"
+      ]
+    },
+    {
+      "id": "@fn_c_lowered_bit_ops",
+      "name": "bit_ops",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        },
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_lowered_bit_ops_1",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "r",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "r",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "and",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "r"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 255
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "r",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "or",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "r"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 16
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "r",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "xor",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "r"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 5
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "r",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "shl",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "r"
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "n"
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "r",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "ashr",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "r"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 1
+              }
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "r"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from compound_assign.c:28"
+      ]
+    },
+    {
+      "id": "@fn_c_lowered_main",
+      "name": "main",
+      "params": [],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_lowered_main_1",
+        "stmts": [
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.compound_assign.0"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "sum_to",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 10
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.compound_assign.1"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "reduce",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 50
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.compound_assign.2"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "bit_ops",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 4660
+                    },
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 2
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from compound_assign.c:39"
+      ]
+    }
+  ],
+  "externs": [
+    {
+      "name": "printf",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ],
+      "varargs": true,
+      "linkage": {
+        "kind": "linkage.libc"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_sum_to",
+      "target": "@fn_c_sum_to"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_reduce",
+      "target": "@fn_c_reduce"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_bit_ops",
+      "target": "@fn_c_bit_ops"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_main",
+      "target": "@fn_c_main"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_1",
+      "target": "@blk_c_lowered_sum_to_1"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_2",
+      "target": "@blk_c_lowered_sum_to_2"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@fn_c_sum_to",
+      "target": "@fn_c_lowered_sum_to"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_3",
+      "target": "@blk_c_lowered_reduce_1"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@fn_c_reduce",
+      "target": "@fn_c_lowered_reduce"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_4",
+      "target": "@blk_c_lowered_bit_ops_1"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@fn_c_bit_ops",
+      "target": "@fn_c_lowered_bit_ops"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_5",
+      "target": "@blk_c_lowered_main_1"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@fn_c_main",
+      "target": "@fn_c_lowered_main"
+    }
+  ],
+  "equivalences": [
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@fn_c_sum_to",
+      "b_node_id": "@fn_c_lowered_sum_to",
+      "regime": "witness",
+      "justification": {
+        "kind": "family_lowering",
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@fn_c_reduce",
+      "b_node_id": "@fn_c_lowered_reduce",
+      "regime": "witness",
+      "justification": {
+        "kind": "family_lowering",
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@fn_c_bit_ops",
+      "b_node_id": "@fn_c_lowered_bit_ops",
+      "regime": "witness",
+      "justification": {
+        "kind": "family_lowering",
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@fn_c_main",
+      "b_node_id": "@fn_c_lowered_main",
+      "regime": "witness",
+      "justification": {
+        "kind": "family_lowering",
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_sum_to",
+      "b_node_id": "@fn_c_sum_to",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/sum_to.txt",
+        "artifact_hash": "7f6ba53badd36b61809eb19dee9e516a16f02f88ab9cba9f0ba03d9b4599f9f8"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_reduce",
+      "b_node_id": "@fn_c_reduce",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/reduce.txt",
+        "artifact_hash": "421417b17b446da25b4de52744129ae7f82c525c55bd61926ffac6c9be036715"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_bit_ops",
+      "b_node_id": "@fn_c_bit_ops",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/bit_ops.txt",
+        "artifact_hash": "143cc07cc495b1eeff54ae4fb42d82dafab7ef9e192c65adf386767d5f4e8c2c"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_main",
+      "b_node_id": "@fn_c_main",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/main.txt",
+        "artifact_hash": "4af2aba9c363e33b77e3a19fbc3e73a1564212b67aac34e76e48c217b6c7ba7b"
+      }
+    }
+  ],
+  "source_units": [
+    {
+      "kind": "c_unit",
+      "id": "@cunit_c_compound_assign",
+      "source_path": "compound_assign.c",
+      "functions": [
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_sum_to",
+          "name": "sum_to",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [
+            {
+              "kind": "c.param",
+              "name": "n",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            }
+          ],
+          "body": [
+            {
+              "kind": "c.var_decl",
+              "id": "@cvardecl_c_sum_to_1",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              },
+              "name": "total",
+              "init": {
+                "kind": "c.lit_int",
+                "value": 0
+              }
+            },
+            {
+              "kind": "c.var_decl",
+              "id": "@cvardecl_c_sum_to_2",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              },
+              "name": "i",
+              "init": {
+                "kind": "c.lit_int",
+                "value": 1
+              }
+            },
+            {
+              "kind": "c.while",
+              "id": "@cwhile_c_sum_to_1",
+              "cond": {
+                "kind": "c.binop",
+                "id": "@cbinop_c_sum_to_1",
+                "op": "<=",
+                "lhs": {
+                  "kind": "c.var_ref",
+                  "name": "i"
+                },
+                "rhs": {
+                  "kind": "c.var_ref",
+                  "name": "n"
+                }
+              },
+              "body": [
+                {
+                  "kind": "c.compound_assign",
+                  "id": "@ccompound_c_sum_to_1",
+                  "target": "total",
+                  "op": "+=",
+                  "value": {
+                    "kind": "c.var_ref",
+                    "name": "i"
+                  }
+                },
+                {
+                  "kind": "c.compound_assign",
+                  "id": "@ccompound_c_sum_to_2",
+                  "target": "i",
+                  "op": "+=",
+                  "value": {
+                    "kind": "c.lit_int",
+                    "value": 1
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_sum_to_1",
+              "value": {
+                "kind": "c.var_ref",
+                "name": "total"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_reduce",
+          "name": "reduce",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [
+            {
+              "kind": "c.param",
+              "name": "n",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            }
+          ],
+          "body": [
+            {
+              "kind": "c.var_decl",
+              "id": "@cvardecl_c_reduce_1",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              },
+              "name": "x",
+              "init": {
+                "kind": "c.var_ref",
+                "name": "n"
+              }
+            },
+            {
+              "kind": "c.compound_assign",
+              "id": "@ccompound_c_reduce_1",
+              "target": "x",
+              "op": "*=",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 3
+              }
+            },
+            {
+              "kind": "c.compound_assign",
+              "id": "@ccompound_c_reduce_2",
+              "target": "x",
+              "op": "-=",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 4
+              }
+            },
+            {
+              "kind": "c.compound_assign",
+              "id": "@ccompound_c_reduce_3",
+              "target": "x",
+              "op": "/=",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 2
+              }
+            },
+            {
+              "kind": "c.compound_assign",
+              "id": "@ccompound_c_reduce_4",
+              "target": "x",
+              "op": "%=",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 100
+              }
+            },
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_reduce_1",
+              "value": {
+                "kind": "c.var_ref",
+                "name": "x"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_bit_ops",
+          "name": "bit_ops",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [
+            {
+              "kind": "c.param",
+              "name": "x",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            },
+            {
+              "kind": "c.param",
+              "name": "n",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            }
+          ],
+          "body": [
+            {
+              "kind": "c.var_decl",
+              "id": "@cvardecl_c_bit_ops_1",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              },
+              "name": "r",
+              "init": {
+                "kind": "c.var_ref",
+                "name": "x"
+              }
+            },
+            {
+              "kind": "c.compound_assign",
+              "id": "@ccompound_c_bit_ops_1",
+              "target": "r",
+              "op": "&=",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 255
+              }
+            },
+            {
+              "kind": "c.compound_assign",
+              "id": "@ccompound_c_bit_ops_2",
+              "target": "r",
+              "op": "|=",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 16
+              }
+            },
+            {
+              "kind": "c.compound_assign",
+              "id": "@ccompound_c_bit_ops_3",
+              "target": "r",
+              "op": "^=",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 5
+              }
+            },
+            {
+              "kind": "c.compound_assign",
+              "id": "@ccompound_c_bit_ops_4",
+              "target": "r",
+              "op": "<<=",
+              "value": {
+                "kind": "c.var_ref",
+                "name": "n"
+              }
+            },
+            {
+              "kind": "c.compound_assign",
+              "id": "@ccompound_c_bit_ops_5",
+              "target": "r",
+              "op": ">>=",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 1
+              }
+            },
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_bit_ops_1",
+              "value": {
+                "kind": "c.var_ref",
+                "name": "r"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_main",
+          "name": "main",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [],
+          "body": [
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_1",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_2",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_1",
+                    "value": "sum_to(10)         = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_1",
+                    "callee": "sum_to",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 10
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_2",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_4",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_2",
+                    "value": "reduce(50)         = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_3",
+                    "callee": "reduce",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 50
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_3",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_6",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_3",
+                    "value": "bit_ops(0x1234, 2) = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_5",
+                    "callee": "bit_ops",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 4660
+                      },
+                      {
+                        "kind": "c.lit_int",
+                        "value": 2
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_main_1",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "structured_functions": [
+    {
+      "id": "@fn_c_sum_to",
+      "name": "sum_to",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_2",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "total",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "i",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 1
+            }
+          },
+          {
+            "kind": "quod.while",
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "sle",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "i"
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "n"
+              }
+            },
+            "body": {
+              "id": "@blk_c_1",
+              "stmts": [
+                {
+                  "kind": "quod.assign",
+                  "name": "total",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "total"
+                    },
+                    "rhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    }
+                  }
+                },
+                {
+                  "kind": "quod.assign",
+                  "name": "i",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 1
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "total"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from compound_assign.c:8"
+      ]
+    },
+    {
+      "id": "@fn_c_reduce",
+      "name": "reduce",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_3",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "x",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.param_ref",
+              "name": "n"
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "x",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "mul",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 3
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "x",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "sub",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 4
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "x",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "sdiv",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 2
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "x",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "srem",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 100
+              }
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "x"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from compound_assign.c:18"
+      ]
+    },
+    {
+      "id": "@fn_c_bit_ops",
+      "name": "bit_ops",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        },
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_4",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "r",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "r",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "and",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "r"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 255
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "r",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "or",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "r"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 16
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "r",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "xor",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "r"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 5
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "r",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "shl",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "r"
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "n"
+              }
+            }
+          },
+          {
+            "kind": "quod.assign",
+            "name": "r",
+            "value": {
+              "kind": "llvm.binop",
+              "op": "ashr",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "r"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 1
+              }
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "r"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from compound_assign.c:28"
+      ]
+    },
+    {
+      "id": "@fn_c_main",
+      "name": "main",
+      "params": [],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_5",
+        "stmts": [
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.compound_assign.0"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "sum_to",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 10
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.compound_assign.1"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "reduce",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 50
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.compound_assign.2"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "bit_ops",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 4660
+                    },
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 2
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from compound_assign.c:39"
+      ]
+    }
+  ]
+}

@@ -1888,6 +1888,23 @@ CForInit = Annotated[
 ]
 
 
+class CCompoundAssign(_Node):
+    """`x += y`, `x -= y`, `x &= y`, etc. — assignment combined with a
+    binary operator. Layer A preserves the source operator; the lift
+    desugars to `Assign(x, BinOp(op_translated, LocalRef(x), y'))` on
+    the layer-B side. The lift-checker pairs the source-form operator
+    with the corresponding layer-B BinOp.
+
+    Only locals declared with `Let` can be the target — assignment to
+    parameters is refused at ingest, matching plain `Assign`.
+    """
+    kind: Literal["c.compound_assign"] = "c.compound_assign"
+    id: str = Field(default_factory=lambda: _mint_node_id("ccompound"))
+    target: str
+    op: Literal["+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="]
+    value: "CExpr"
+
+
 class CMultiVarDecl(_Node):
     """`int a, b, c;` or `int a = 1, b = 2;` — a single declaration
     statement that introduces multiple locals.
@@ -1905,7 +1922,8 @@ class CMultiVarDecl(_Node):
 
 
 CStmt = Annotated[
-    Union[CVarDecl, CMultiVarDecl, CAssign, CReturn, CFor, CIf, CWhile, CExprStmt],
+    Union[CVarDecl, CMultiVarDecl, CAssign, CCompoundAssign, CReturn,
+          CFor, CIf, CWhile, CExprStmt],
     Field(discriminator="kind"),
 ]
 
