@@ -176,6 +176,11 @@
   "edges": [
     {
       "kind": "edge.provenance",
+      "source": "@cfn_c_main",
+      "target": "@fn_c_main"
+    },
+    {
+      "kind": "edge.provenance",
       "source": "@blk_c_1",
       "target": "@blk_c_lowered_main_1"
     },
@@ -197,6 +202,173 @@
         "artifact_path": "lower/c_family_proofs/identity.smt2",
         "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
       }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_main",
+      "b_node_id": "@fn_c_main",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/main.txt",
+        "artifact_hash": "490a21c40524bc4970fed18f89768e5ec356cf4f61cbc0eec0b39a992b937aa8"
+      }
+    }
+  ],
+  "source_units": [
+    {
+      "kind": "c_unit",
+      "id": "@cunit_c_string_offset",
+      "source_path": "string_offset.c",
+      "functions": [
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_main",
+          "name": "main",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [],
+          "body": [
+            {
+              "kind": "c.var_decl",
+              "id": "@cvardecl_c_main_1",
+              "type": {
+                "kind": "c.type.ptr",
+                "pointee": {
+                  "kind": "c.type",
+                  "name": "char"
+                }
+              },
+              "name": "greeting",
+              "init": {
+                "kind": "c.lit_str",
+                "id": "@clitstr_c_main_1",
+                "value": "hello, world!"
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_1",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_1",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_2",
+                    "value": "full   = %s\n"
+                  },
+                  {
+                    "kind": "c.var_ref",
+                    "name": "greeting"
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_2",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_2",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_3",
+                    "value": "p + 7  = %s\n"
+                  },
+                  {
+                    "kind": "c.binop",
+                    "id": "@cbinop_c_main_1",
+                    "op": "+",
+                    "lhs": {
+                      "kind": "c.var_ref",
+                      "name": "greeting"
+                    },
+                    "rhs": {
+                      "kind": "c.lit_int",
+                      "value": 7
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_3",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_3",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_4",
+                    "value": "&p[7]  = %s\n"
+                  },
+                  {
+                    "kind": "c.addr_of",
+                    "id": "@caddrof_c_main_1",
+                    "target": {
+                      "kind": "c.array_subscript",
+                      "id": "@carrsub_c_main_1",
+                      "base": {
+                        "kind": "c.var_ref",
+                        "name": "greeting"
+                      },
+                      "index": {
+                        "kind": "c.lit_int",
+                        "value": 7
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_4",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_4",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_5",
+                    "value": "p + 12 = %s\n"
+                  },
+                  {
+                    "kind": "c.binop",
+                    "id": "@cbinop_c_main_2",
+                    "op": "+",
+                    "lhs": {
+                      "kind": "c.var_ref",
+                      "name": "greeting"
+                    },
+                    "rhs": {
+                      "kind": "c.lit_int",
+                      "value": 12
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_main_1",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 0
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "structured_functions": [

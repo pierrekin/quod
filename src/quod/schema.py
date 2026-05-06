@@ -28,6 +28,8 @@ from quod.model import (
     BinOp,
     Call,
     CharLit,
+    CAddressOf,
+    CArraySubscript,
     CAssign,
     CBinOp,
     CCall,
@@ -36,12 +38,13 @@ from quod.model import (
     CFor,
     CIf,
     CIntLit,
+    CNamedType,
     CParam,
+    CPointerType,
     CReturn,
     CScopedBlock,
     CStringLit,
     CStyleFor,
-    CType,
     CUnit,
     CVarDecl,
     CVarRef,
@@ -956,9 +959,26 @@ _KIND_INFO["quod.match"] = {
 # end-to-end slice).
 
 _KIND_INFO["c.type"] = {
-    "class": CType,
-    "summary": "A C type as it appears in source. v3 supports only `int`.",
+    "class": CNamedType,
+    "summary": (
+        "A named scalar C type. v6 supports `int` and `char` "
+        "(`char*` is `c.type.ptr` wrapping `c.type` with name='char')."
+    ),
     "example": {"kind": "c.type", "name": "int"},
+}
+
+_KIND_INFO["c.type.ptr"] = {
+    "class": CPointerType,
+    "summary": (
+        "A pointer C type — `T*`. The pointee is any `c.type` or "
+        "another `c.type.ptr` (for `int**` etc.). All pointers "
+        "collapse to `i8_ptr` at layer B; the pointee name is "
+        "informational at the layer-A surface."
+    ),
+    "example": {
+        "kind": "c.type.ptr",
+        "pointee": {"kind": "c.type", "name": "char"},
+    },
 }
 
 _KIND_INFO["c.lit_int"] = {
@@ -1009,6 +1029,36 @@ _KIND_INFO["c.call"] = {
             {"kind": "c.lit_str", "value": "%d\n"},
             {"kind": "c.var_ref", "name": "x"},
         ],
+    },
+}
+
+_KIND_INFO["c.array_subscript"] = {
+    "class": CArraySubscript,
+    "summary": (
+        "`base[index]` — array subscript. v6 only emits this inside "
+        "a `c.addr_of`; bare reads aren't yet supported."
+    ),
+    "example": {
+        "kind": "c.array_subscript",
+        "base": {"kind": "c.var_ref", "name": "buf"},
+        "index": {"kind": "c.lit_int", "value": 7},
+    },
+}
+
+_KIND_INFO["c.addr_of"] = {
+    "class": CAddressOf,
+    "summary": (
+        "`&expr` — address-of. v6 only emits this with a "
+        "`c.array_subscript` target (`&p[k]` is C's pointer-arithmetic "
+        "spelling, equivalent to `p + k` for char*)."
+    ),
+    "example": {
+        "kind": "c.addr_of",
+        "target": {
+            "kind": "c.array_subscript",
+            "base": {"kind": "c.var_ref", "name": "buf"},
+            "index": {"kind": "c.lit_int", "value": 7},
+        },
     },
 }
 
@@ -1218,10 +1268,11 @@ _CATEGORIES: dict[str, list[str]] = {
     # Layer-A nodes — original C source preserved as quod nodes. See
     # .scratch/c-ingest/00-overview.md.
     "source.c": [
-        "c_unit", "c.fn", "c.param", "c.type",
+        "c_unit", "c.fn", "c.param", "c.type", "c.type.ptr",
         "c.var_decl", "c.assign", "c.return", "c.for",
         "c.if", "c.while", "c.expr_stmt",
         "c.binop", "c.lit_int", "c.lit_str", "c.var_ref", "c.call",
+        "c.array_subscript", "c.addr_of",
     ],
     # Layer-B `c.*` extensions — constructs core quod can't represent;
     # lowered to core by lower/c_family.py (step 5).

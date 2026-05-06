@@ -1635,11 +1635,43 @@ def _mint_node_id(prefix: str) -> str:
 # structs/floats/switch), narrowed further to what `sum.c` exercises.
 
 
-class CType(_Node):
-    """A C type as it appears in source. v3 supports only `int` (sum.c
-    is the worked example). Extends as the supported subset grows."""
+class CNamedType(_Node):
+    """A named scalar C type (`int`, `char`, etc.) — anything not a
+    composite (pointer, array, struct). v6 supports only `int` and
+    `char`; the lift-checker decides which `CNamedType` names map
+    cleanly onto layer-B types and refuses the rest.
+
+    JSON kind stays `c.type` for backward compatibility with the
+    existing layer-A corpus; the Python class was renamed when
+    `CPointerType` joined to make `CType` a real union.
+    """
     kind: Literal["c.type"] = "c.type"
-    name: str  # "int" for v3
+    name: str
+
+
+class CPointerType(_Node):
+    """A pointer-to-T C type: `int*`, `char*`, `CURL*`, …. The pointee
+    can be any `CType` (named scalar or another pointer for `int**`),
+    so `int **p` round-trips as
+    `CPointerType(CPointerType(CNamedType("int")))`.
+
+    At layer B all pointers collapse to `I8PtrType` (LLVM's opaque-
+    pointer convention); the lift-checker treats any `CPointerType`
+    as corresponding to `I8PtrType`. The pointee name is informational
+    — useful for human-readable rendering and provenance, no semantic
+    weight in the equivalence claim.
+    """
+    kind: Literal["c.type.ptr"] = "c.type.ptr"
+    pointee: "CType"
+
+
+# Layer-A C type — a named scalar or a pointer-to-CType. Used wherever
+# a type annotation appears at layer A (CParam.type, CVarDecl.type,
+# CFn.return_type, CPointerType.pointee).
+CType = Annotated[
+    Union[CNamedType, CPointerType],
+    Field(discriminator="kind"),
+]
 
 
 class CIntLit(_Node):
@@ -1692,8 +1724,32 @@ class CCall(_Node):
     args: tuple["CExpr", ...] = ()
 
 
+class CArraySubscript(_Node):
+    """`base[index]` — array subscript. v6 only emits this inside a
+    `CAddressOf` (the lifter recognizes `&p[k]` as pointer arithmetic
+    and produces a `PtrOffset` at layer B). Bare `arr[k]` reads —
+    e.g. for an `int arr[]` value — aren't yet supported by the
+    layer-A or layer-B translators.
+    """
+    kind: Literal["c.array_subscript"] = "c.array_subscript"
+    id: str = Field(default_factory=lambda: _mint_node_id("carrsub"))
+    base: "CExpr"
+    index: "CExpr"
+
+
+class CAddressOf(_Node):
+    """`&expr` — address-of. v6 only emits this with a
+    `CArraySubscript` target (`&p[k]` ≡ `p + k` for char-pointer
+    arithmetic). Other `&` forms (`&local`, `&struct.field`, …) are
+    refused at ingest time."""
+    kind: Literal["c.addr_of"] = "c.addr_of"
+    id: str = Field(default_factory=lambda: _mint_node_id("caddrof"))
+    target: "CExpr"
+
+
 CExpr = Annotated[
-    Union[CIntLit, CVarRef, CBinOp, CStringLit, CCall],
+    Union[CIntLit, CVarRef, CBinOp, CStringLit, CCall,
+          CArraySubscript, CAddressOf],
     Field(discriminator="kind"),
 ]
 
@@ -2368,8 +2424,13 @@ def _format_c_fn(fn: "CFn", *, label: NodeLabel) -> str:
     return "\n".join(lines)
 
 
-def _format_c_type(t: "CType") -> str:
-    return t.name
+def _format_c_type(t) -> str:
+    match t:
+        case CNamedType(name=n):
+            return n
+        case CPointerType(pointee=p):
+            return f"{_format_c_type(p)}*"
+    raise ValueError(f"unhandled c.* type: {t!r}")
 
 
 def _format_c_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
@@ -2435,6 +2496,10 @@ def _format_c_expr(e) -> str:
         case CCall(callee=callee, args=args):
             args_s = ", ".join(_format_c_expr(a) for a in args)
             return f"{callee}({args_s})"
+        case CArraySubscript(base=b, index=i):
+            return f"{_format_c_expr(b)}[{_format_c_expr(i)}]"
+        case CAddressOf(target=t):
+            return f"&{_format_c_expr(t)}"
     raise ValueError(f"unhandled c.* expression: {e!r}")
 
 

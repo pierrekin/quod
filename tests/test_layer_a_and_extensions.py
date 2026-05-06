@@ -36,7 +36,7 @@ from quod.model import (
     CReturn,
     CScopedBlock,
     CStyleFor,
-    CType,
+    CNamedType,
     CUnit,
     CVarDecl,
     CVarRef,
@@ -52,7 +52,7 @@ from quod.model import (
 
 
 def _sum_c_unit() -> CUnit:
-    int_t = CType(name="int")
+    int_t = CNamedType(name="int")
     return CUnit(
         source_path="sum.c",
         functions=(

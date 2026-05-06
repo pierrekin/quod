@@ -27,7 +27,7 @@ from quod.model import (
     CParam,
     CReturn,
     CStringLit,
-    CType,
+    CNamedType,
     CVarDecl,
     CVarRef,
     CWhile,
@@ -154,7 +154,7 @@ def test_lift_check_passes_on_every_layer_a_corpus_example():
         )
         for name, cfn in cfns_by_name.items():
             try:
-                walk_lift(cfn, fns_by_name[name])
+                walk_lift(cfn, fns_by_name[name], program=p)
             except LiftCheckError as e:
                 raise AssertionError(f"{src}::{name}: {e}") from e
 
@@ -167,7 +167,7 @@ def test_i1_widened_return_correspondence():
     at layer B. The lift-checker accepts this shape (a CReturn with
     an i1-typed CBinOp ↔ a layer-B If with the standard widening
     structure)."""
-    int_t = CType(name="int")
+    int_t = CNamedType(name="int")
     cfn = CFn(
         id="@cfn_neg", name="neg", return_type=int_t,
         params=(CParam(name="x", type=int_t),),

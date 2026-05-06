@@ -15,7 +15,12 @@ node correspondence per a per-construct table:
   | CUnit                | (program-level — not paired here)      |
   | CFn                  | Function                               |
   | CParam(name, int)    | Param(name, I32Type)                   |
-  | CType("int")         | I32Type                                |
+  | CNamedType("int")    | I32Type                                |
+  | CPointerType(_)      | I8PtrType                              |
+  | CAddressOf(           | PtrOffset(b', i')                      |
+  |   CArraySubscript(    |                                        |
+  |     b, i))            |                                        |
+  | CBinOp("+", ptr, n)   | PtrOffset(ptr', n')                    |
   | CVarDecl(int, n, e)  | Let(n, I32Type, e')                    |
   | CAssign(t, e)        | Assign(t, e')                          |
   | CReturn(None)        | Return                                 |
@@ -58,6 +63,8 @@ from quod.model import (
     BinOp,
     Block,
     Call,
+    CAddressOf,
+    CArraySubscript,
     CAssign,
     CBinOp,
     CCall,
@@ -66,29 +73,34 @@ from quod.model import (
     CFor,
     CIf,
     CIntLit,
+    CNamedType,
     CParam,
+    CPointerType,
     CReturn,
     CScopedBlock,
     CStringLit,
     CStyleFor,
-    CType,
     CVarDecl,
     CVarRef,
     CWhile,
     ExprStmt,
     Function,
-    I1Type,
+    I8PtrType,
     I32Type,
+    I64Type,
     If,
     IntLit,
     Let,
     LocalRef,
     Param,
     ParamRef,
+    PtrOffset,
     Return,
     ReturnExpr,
+    StringConstant,
     StringRef,
     While,
+    Widen,
     ShortCircuitAnd,
     ShortCircuitOr,
 )
@@ -124,14 +136,42 @@ class LiftCheckError(Exception):
     """
 
 
-def walk_lift(cfn: CFn, fn: Function) -> dict[str, Any]:
+class _Ctx:
+    """Walk-time context passed through the lift-checker. Carries the
+    program-level lookups the structural walk needs (today: a string-
+    constant table; in future, more). Held as a class with a `__slots__`-
+    style attribute set so the contract is explicit.
+    """
+    __slots__ = ("constants_by_name",)
+
+    def __init__(self, *, constants_by_name: dict[str, str] | None) -> None:
+        self.constants_by_name = constants_by_name
+
+
+def walk_lift(
+    cfn: CFn, fn: Function, *, program=None,
+) -> dict[str, Any]:
     """Walk a layer-A `CFn` and its layer-B `Function` in lockstep,
     asserting structural correspondence. Returns a deterministic
     JSON-serializable record of the walk.
 
-    Raises `LiftCheckError` on any divergence (different node kinds,
-    mismatched param names, unknown operators, etc.).
+    `program`, if supplied, lets the checker compare layer-A
+    `CStringLit.value` against the layer-B `StringConstant.value`
+    that the corresponding `StringRef` points at. Without it,
+    encountering a string literal raises (the soundness contract is
+    "every CStringLit's value must be verifiable").
+
+    Raises `LiftCheckError` on any divergence — different node kinds,
+    mismatched param names, unknown operators, missing string
+    constants, etc.
     """
+    constants_by_name = (
+        {c.name: c.value for c in program.constants}
+        if program is not None
+        else None
+    )
+    ctx = _Ctx(constants_by_name=constants_by_name)
+
     if cfn.name != fn.name:
         raise LiftCheckError(
             f"function name mismatch: layer-A {cfn.name!r} vs layer-B {fn.name!r}"
@@ -155,6 +195,7 @@ def walk_lift(cfn: CFn, fn: Function) -> dict[str, Any]:
     body_record = _check_body(
         cfn.body, b_body_block,
         path=f"fn[{fn.name}].body",
+        ctx=ctx,
         strip_fallthrough=True,  # outer function body may end in a synthesized stub
     )
 
@@ -173,20 +214,20 @@ def walk_lift(cfn: CFn, fn: Function) -> dict[str, Any]:
     }
 
 
-def lift_check_artifact(cfn: CFn, fn: Function) -> bytes:
+def lift_check_artifact(cfn: CFn, fn: Function, *, program=None) -> bytes:
     """Walk the lift and serialize the result to deterministic bytes.
 
     The bytes are what gets written to disk and what
     `LiftEquivalence.artifact_hash` pins.
     """
-    record = walk_lift(cfn, fn)
+    record = walk_lift(cfn, fn, program=program)
     text = json.dumps(record, indent=2, sort_keys=True) + "\n"
     return text.encode("utf-8")
 
 
-def lift_check_hash(cfn: CFn, fn: Function) -> str:
+def lift_check_hash(cfn: CFn, fn: Function, *, program=None) -> str:
     """sha256 of the lift-check artifact."""
-    return hashlib.sha256(lift_check_artifact(cfn, fn)).hexdigest()
+    return hashlib.sha256(lift_check_artifact(cfn, fn, program=program)).hexdigest()
 
 
 # ---------- internal walkers ----------
@@ -201,25 +242,50 @@ def _check_param(cp: CParam, bp: Param, *, path: str) -> dict[str, Any]:
     return {"name": cp.name, "a_type": _type_a_repr(cp.type), "b_type": _type_b_repr(bp.type)}
 
 
-def _check_return_type(a: CType, b, *, path: str) -> None:
+def _check_return_type(a, b, *, path: str) -> None:
     _check_value_type(a, b, path=path)
 
 
-def _check_value_type(a: CType, b, *, path: str) -> None:
-    """v6 only supports `int ↔ i32`. Broaden when layer A grows."""
-    if not isinstance(a, CType):
-        raise LiftCheckError(f"{path}: layer-A type is {type(a).__name__}, expected CType")
-    if a.name == "int":
-        if not isinstance(b, I32Type):
+def _check_value_type(a, b, *, path: str) -> None:
+    """Map layer-A types to their layer-B counterparts. Pointers
+    collapse to `I8PtrType` regardless of pointee — LLVM has opaque
+    pointers, so all `T*` denote i8* at IR level."""
+    if isinstance(a, CPointerType):
+        if not isinstance(b, I8PtrType):
             raise LiftCheckError(
-                f"{path}: layer-A int but layer-B is {type(b).__name__}"
+                f"{path}: layer-A pointer (`{_format_c_type_str(a)}`) "
+                f"but layer-B is {type(b).__name__}"
             )
         return
-    raise LiftCheckError(f"{path}: layer-A type {a.name!r} is not in the supported subset")
+    if isinstance(a, CNamedType):
+        if a.name == "int":
+            if not isinstance(b, I32Type):
+                raise LiftCheckError(
+                    f"{path}: layer-A int but layer-B is {type(b).__name__}"
+                )
+            return
+        # `char`, `signed char`, `unsigned char` are only valid as
+        # pointee names in v6 — they appear inside CPointerType, not
+        # as a standalone `CParam.type` etc. The lifter doesn't emit
+        # `char` locals at the top level today.
+        raise LiftCheckError(
+            f"{path}: layer-A type {a.name!r} is not in the v6 supported subset"
+        )
+    raise LiftCheckError(f"{path}: layer-A type is {type(a).__name__}, expected CNamedType or CPointerType")
+
+
+def _format_c_type_str(t) -> str:
+    """Compact rendering of a layer-A CType for error messages."""
+    if isinstance(t, CNamedType):
+        return t.name
+    if isinstance(t, CPointerType):
+        return _format_c_type_str(t.pointee) + "*"
+    return repr(t)
 
 
 def _check_body(
-    a_stmts, b_block: Block, *, path: str, strip_fallthrough: bool = False,
+    a_stmts, b_block: Block, *, path: str, ctx: "_Ctx",
+    strip_fallthrough: bool = False,
 ) -> dict[str, Any]:
     """Walk a tuple of layer-A statements against a layer-B Block's
     stmts. The C ingester appends a synthesized `Unreachable` or
@@ -251,7 +317,7 @@ def _check_body(
         "a_block": "<inline>",  # layer-A bodies are tuple[CStmt, ...], not blocks
         "b_block_id": b_block.id,
         "stmts": [
-            _check_stmt(a, b, path=f"{path}.stmts[{i}]")
+            _check_stmt(a, b, path=f"{path}.stmts[{i}]", ctx=ctx)
             for i, (a, b) in enumerate(zip(a_list, b_list))
         ],
     }
@@ -271,7 +337,7 @@ def _is_synthesized_fallthrough(stmt) -> bool:
     return False
 
 
-def _check_stmt(a, b, *, path: str) -> dict[str, Any]:
+def _check_stmt(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
     if isinstance(a, CVarDecl):
         if not isinstance(b, Let):
             raise LiftCheckError(f"{path}: layer-A CVarDecl vs layer-B {type(b).__name__}")
@@ -285,7 +351,7 @@ def _check_stmt(a, b, *, path: str) -> dict[str, Any]:
         return {
             "kind": "var_decl ↔ let",
             "a_id": a.id, "name": a.name,
-            "init": _check_expr(a.init, b.init, path=f"{path}.init"),
+            "init": _check_expr(a.init, b.init, path=f"{path}.init", ctx=ctx),
         }
 
     if isinstance(a, CAssign):
@@ -296,7 +362,7 @@ def _check_stmt(a, b, *, path: str) -> dict[str, Any]:
         return {
             "kind": "assign ↔ assign",
             "a_id": a.id, "target": a.target,
-            "value": _check_expr(a.value, b.value, path=f"{path}.value"),
+            "value": _check_expr(a.value, b.value, path=f"{path}.value", ctx=ctx),
         }
 
     if isinstance(a, CReturn):
@@ -316,13 +382,13 @@ def _check_stmt(a, b, *, path: str) -> dict[str, Any]:
             return {
                 "kind": "return e ↔ return_expr",
                 "a_id": a.id,
-                "value": _check_expr(a.value, b.value, path=f"{path}.value"),
+                "value": _check_expr(a.value, b.value, path=f"{path}.value", ctx=ctx),
             }
         if isinstance(b, If) and _is_layer_a_i1_typed(a.value):
             return {
                 "kind": "return cond ↔ if(cond, return 1, return 0)",
                 "a_id": a.id,
-                "cond": _check_expr(a.value, b.cond, path=f"{path}.cond"),
+                "cond": _check_expr(a.value, b.cond, path=f"{path}.cond", ctx=ctx),
                 "transform": "i1_widen",
             }
         raise LiftCheckError(
@@ -342,10 +408,10 @@ def _check_stmt(a, b, *, path: str) -> dict[str, Any]:
         return {
             "kind": "c.for ↔ c.for_general",
             "a_id": a.id, "b_id": b.id,
-            "init": (_check_stmt(a.init, b.init, path=f"{path}.init") if a.init is not None else None),
-            "cond": (_check_expr(a.cond, b.cond, path=f"{path}.cond") if a.cond is not None else None),
-            "inc":  (_check_stmt(a.inc, b.inc, path=f"{path}.inc")  if a.inc  is not None else None),
-            "body": _check_body(a.body, b_body_block, path=f"{path}.body"),
+            "init": (_check_stmt(a.init, b.init, path=f"{path}.init", ctx=ctx) if a.init is not None else None),
+            "cond": (_check_expr(a.cond, b.cond, path=f"{path}.cond", ctx=ctx) if a.cond is not None else None),
+            "inc":  (_check_stmt(a.inc, b.inc, path=f"{path}.inc", ctx=ctx)  if a.inc  is not None else None),
+            "body": _check_body(a.body, b_body_block, path=f"{path}.body", ctx=ctx),
         }
 
     if isinstance(a, CIf):
@@ -354,9 +420,9 @@ def _check_stmt(a, b, *, path: str) -> dict[str, Any]:
         return {
             "kind": "c.if ↔ if",
             "a_id": a.id,
-            "cond": _check_expr(a.cond, b.cond, path=f"{path}.cond"),
-            "then_body": _check_body(a.then_body, b.then_body, path=f"{path}.then_body"),
-            "else_body": _check_body(a.else_body, b.else_body, path=f"{path}.else_body"),
+            "cond": _check_expr(a.cond, b.cond, path=f"{path}.cond", ctx=ctx),
+            "then_body": _check_body(a.then_body, b.then_body, path=f"{path}.then_body", ctx=ctx),
+            "else_body": _check_body(a.else_body, b.else_body, path=f"{path}.else_body", ctx=ctx),
         }
 
     if isinstance(a, CWhile):
@@ -366,8 +432,8 @@ def _check_stmt(a, b, *, path: str) -> dict[str, Any]:
         return {
             "kind": "c.while ↔ while",
             "a_id": a.id,
-            "cond": _check_expr(a.cond, b.cond, path=f"{path}.cond"),
-            "body": _check_body(a.body, b_body_block, path=f"{path}.body"),
+            "cond": _check_expr(a.cond, b.cond, path=f"{path}.cond", ctx=ctx),
+            "body": _check_body(a.body, b_body_block, path=f"{path}.body", ctx=ctx),
         }
 
     if isinstance(a, CExprStmt):
@@ -376,7 +442,7 @@ def _check_stmt(a, b, *, path: str) -> dict[str, Any]:
         return {
             "kind": "c.expr_stmt ↔ expr_stmt",
             "a_id": a.id,
-            "value": _check_expr(a.value, b.value, path=f"{path}.value"),
+            "value": _check_expr(a.value, b.value, path=f"{path}.value", ctx=ctx),
         }
 
     raise LiftCheckError(
@@ -397,7 +463,7 @@ def _is_layer_a_i1_typed(expr) -> bool:
     return isinstance(expr, CBinOp) and expr.op in _LAYER_A_I1_OPS
 
 
-def _check_expr(a, b, *, path: str) -> dict[str, Any]:
+def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
     if isinstance(a, CIntLit):
         if not isinstance(b, IntLit):
             raise LiftCheckError(f"{path}: layer-A CIntLit vs layer-B {type(b).__name__}")
@@ -431,17 +497,25 @@ def _check_expr(a, b, *, path: str) -> dict[str, Any]:
                 raise LiftCheckError(f"{path}: && vs layer-B {type(b).__name__}")
             return {
                 "kind": "&& ↔ sc_and",
-                "lhs": _check_expr(a.lhs, b.lhs, path=f"{path}.lhs"),
-                "rhs": _check_expr(a.rhs, b.rhs, path=f"{path}.rhs"),
+                "lhs": _check_expr(a.lhs, b.lhs, path=f"{path}.lhs", ctx=ctx),
+                "rhs": _check_expr(a.rhs, b.rhs, path=f"{path}.rhs", ctx=ctx),
             }
         if a.op == "||":
             if not isinstance(b, ShortCircuitOr):
                 raise LiftCheckError(f"{path}: || vs layer-B {type(b).__name__}")
             return {
                 "kind": "|| ↔ sc_or",
-                "lhs": _check_expr(a.lhs, b.lhs, path=f"{path}.lhs"),
-                "rhs": _check_expr(a.rhs, b.rhs, path=f"{path}.rhs"),
+                "lhs": _check_expr(a.lhs, b.lhs, path=f"{path}.lhs", ctx=ctx),
+                "rhs": _check_expr(a.rhs, b.rhs, path=f"{path}.rhs", ctx=ctx),
             }
+        # Pointer arithmetic: `p + n` (layer A: CBinOp("+", ...))
+        # corresponds to layer-B `PtrOffset(p', n')`. We dispatch on
+        # the layer-B kind rather than reasoning about layer-A operand
+        # types — if the lifter produced a PtrOffset, the operands
+        # were typed as pointer + integer; the structural pairing
+        # implies the type pairing.
+        if a.op == "+" and isinstance(b, PtrOffset):
+            return _check_pointer_arith(a.lhs, a.rhs, b, path=path, ctx=ctx)
         expected_b_op = _BINOP_LAYER_A_TO_B.get(a.op)
         if expected_b_op is None:
             raise LiftCheckError(f"{path}: layer-A operator {a.op!r} not in correspondence table")
@@ -454,20 +528,36 @@ def _check_expr(a, b, *, path: str) -> dict[str, Any]:
             )
         return {
             "kind": f"binop({a.op}) ↔ binop({b.op})",
-            "lhs": _check_expr(a.lhs, b.lhs, path=f"{path}.lhs"),
-            "rhs": _check_expr(a.rhs, b.rhs, path=f"{path}.rhs"),
+            "lhs": _check_expr(a.lhs, b.lhs, path=f"{path}.lhs", ctx=ctx),
+            "rhs": _check_expr(a.rhs, b.rhs, path=f"{path}.rhs", ctx=ctx),
         }
 
     if isinstance(a, CStringLit):
-        # Layer A holds the decoded value; layer B holds a StringRef
-        # to a program-level StringConstant. The StringConstant's
-        # actual bytes can't be cross-checked here without access to
-        # the Program; that lookup happens at the program-level walk
-        # caller (walk_lift records the StringRef name and the
-        # layer-A value side-by-side).
+        # Layer-B `StringRef` resolves to a `StringConstant` whose
+        # value should equal layer-A's `CStringLit.value`. We thread
+        # the program's constants table through `ctx` and verify;
+        # without the table (program=None) we can't verify, so we
+        # refuse rather than silently passing.
         if not isinstance(b, StringRef):
             raise LiftCheckError(
                 f"{path}: layer-A CStringLit vs layer-B {type(b).__name__}"
+            )
+        if ctx.constants_by_name is None:
+            raise LiftCheckError(
+                f"{path}: encountered CStringLit but no `program=` was "
+                f"supplied to walk_lift — string-value verification "
+                f"requires the program's constants table"
+            )
+        actual = ctx.constants_by_name.get(b.name)
+        if actual is None:
+            raise LiftCheckError(
+                f"{path}: layer-B StringRef points at {b.name!r} but "
+                f"the program has no StringConstant with that name"
+            )
+        if actual != a.value:
+            raise LiftCheckError(
+                f"{path}: layer-A string {a.value!r} vs layer-B "
+                f"StringConstant {b.name!r} value {actual!r}"
             )
         return {
             "kind": "string_lit ↔ string_ref",
@@ -490,9 +580,31 @@ def _check_expr(a, b, *, path: str) -> dict[str, Any]:
             "kind": "call ↔ call",
             "callee": a.callee,
             "args": [
-                _check_expr(aa, ba, path=f"{path}.args[{i}]")
+                _check_expr(aa, ba, path=f"{path}.args[{i}]", ctx=ctx)
                 for i, (aa, ba) in enumerate(zip(a.args, b.args))
             ],
+        }
+
+    if isinstance(a, CAddressOf):
+        # `&p[k]` is C's pointer-arithmetic spelling — equivalent to
+        # `p + k` for char* (and any pointer type, modulo the byte
+        # vs element-size scaling that v6 limits to char-stride). The
+        # layer-B side is always `PtrOffset(base, offset)`.
+        if not isinstance(b, PtrOffset):
+            raise LiftCheckError(
+                f"{path}: layer-A CAddressOf vs layer-B {type(b).__name__}"
+            )
+        if not isinstance(a.target, CArraySubscript):
+            raise LiftCheckError(
+                f"{path}: layer-A CAddressOf target is "
+                f"{type(a.target).__name__}; v6 only allows CArraySubscript"
+            )
+        sub = a.target
+        return {
+            "kind": "&p[k] ↔ ptr_offset",
+            "a_id": a.id,
+            "base": _check_expr(sub.base, b.base, path=f"{path}.target.base", ctx=ctx),
+            "offset": _check_offset_expr(sub.index, b.offset, path=f"{path}.target.index", ctx=ctx),
         }
 
     raise LiftCheckError(
@@ -500,8 +612,72 @@ def _check_expr(a, b, *, path: str) -> dict[str, Any]:
     )
 
 
-def _type_a_repr(t: CType) -> str:
-    return t.name
+def _check_pointer_arith(
+    a_lhs, a_rhs, b: PtrOffset, *, path: str, ctx: "_Ctx",
+) -> dict[str, Any]:
+    """Layer-A `lhs + rhs` ↔ layer-B `PtrOffset(base, offset)`.
+
+    The `+` operator is commutative for pointer arithmetic in C:
+    `p + n` and `n + p` both produce the same address. The lifter
+    walks LHS-then-RHS and identifies which operand is the pointer
+    via libclang's type info, so the layer-B `base` corresponds to
+    whichever layer-A operand was the pointer.
+
+    The structural walk doesn't have type info; we don't try to
+    reverse-engineer which side was the pointer. Instead, we pair
+    layer-A LHS with layer-B base and layer-A RHS with layer-B
+    offset. For the v6 corpus (`string_offset.c` only), this is
+    consistent because the lifter never swaps operand order.
+    """
+    return {
+        "kind": "p + n ↔ ptr_offset",
+        "base": _check_expr(a_lhs, b.base, path=f"{path}.lhs", ctx=ctx),
+        "offset": _check_offset_expr(a_rhs, b.offset, path=f"{path}.rhs", ctx=ctx),
+    }
+
+
+def _check_offset_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
+    """Layer-B pointer offsets are i64-typed: a literal becomes
+    `IntLit(I64, N)`; a non-literal gets wrapped in `Widen(value,
+    target=I64, signed=True)`. Both shapes correspond to a single
+    layer-A `CExpr`.
+
+    Literal: `CIntLit(N) ↔ IntLit(I64, N)`.
+    Variable: `expr ↔ Widen(expr', target=I64, signed=True)`.
+    """
+    if isinstance(b, IntLit):
+        if not isinstance(b.type, I64Type):
+            raise LiftCheckError(
+                f"{path}: layer-B offset literal is {b.type.kind!r}, expected i64"
+            )
+        if not isinstance(a, CIntLit):
+            raise LiftCheckError(
+                f"{path}: layer-A {type(a).__name__} vs layer-B literal offset "
+                f"({b.value}); expected CIntLit"
+            )
+        if a.value != b.value:
+            raise LiftCheckError(
+                f"{path}: offset value {a.value} vs {b.value}"
+            )
+        return {"kind": "offset_lit", "value": a.value}
+    if isinstance(b, Widen):
+        if not isinstance(b.target, I64Type) or not b.signed:
+            raise LiftCheckError(
+                f"{path}: layer-B offset Widen has unexpected shape "
+                f"(target={b.target}, signed={b.signed})"
+            )
+        return {
+            "kind": "offset ↔ widen(i64)",
+            "value": _check_expr(a, b.value, path=path, ctx=ctx),
+        }
+    raise LiftCheckError(
+        f"{path}: layer-B offset is {type(b).__name__}; expected IntLit(i64) or Widen"
+    )
+
+
+def _type_a_repr(t) -> str:
+    """Human-readable layer-A type rendering for the artifact."""
+    return _format_c_type_str(t)
 
 
 def _type_b_repr(t) -> str:
@@ -586,7 +762,7 @@ def prove_lifts(program, *, write_dir, rel_prefix: str = "proofs/lift", write: b
             new_a_to_b_claims.append(eq)
             continue
 
-        artifact_bytes = lift_check_artifact(cfn, fn)
+        artifact_bytes = lift_check_artifact(cfn, fn, program=program)
         artifact_hash = hashlib.sha256(artifact_bytes).hexdigest()
         artifact_path_rel = f"{rel_prefix}/{fn.name}.txt"
 

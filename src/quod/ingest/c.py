@@ -47,6 +47,8 @@ from quod.model import (
     BinOp,
     Block,
     Call,
+    CAddressOf,
+    CArraySubscript,
     CAssign,
     CBinOp,
     CCall,
@@ -57,7 +59,9 @@ from quod.model import (
     CForInit,
     CIf,
     CIntLit,
+    CNamedType,
     CParam,
+    CPointerType,
     CReturn,
     CStmt,
     CStringLit,
@@ -751,6 +755,21 @@ class _LayerATranslator:
                 raise _refuse(c, f"string literal decoded to non-str ({type(value).__name__})")
             return CStringLit(id=self._mint("clitstr"), value=value)
         if k == cx.CursorKind.DECL_REF_EXPR:
+            # Enum constants resolve to integer values at layer B
+            # (`CURLOPT_URL` → `IntLit(10002)`). Layer A doesn't yet
+            # have a node for "enum constant by name" — that lands in
+            # the next commit. Until then, refuse so the all-or-
+            # nothing fallback preserves layer-B behavior for files
+            # that use enum constants (e.g. curl_fetch.c).
+            referenced = c.referenced
+            if referenced is not None and referenced.kind == cx.CursorKind.ENUM_CONSTANT_DECL:
+                raise _refuse(
+                    c,
+                    f"layer A: enum constants ({c.spelling!r}) not "
+                    f"supported in v6 — use the enum's resolved "
+                    f"integer value at layer B until CEnumConstRef "
+                    f"lands"
+                )
             return CVarRef(name=c.spelling)
         if k == cx.CursorKind.CALL_EXPR:
             children = list(c.get_children())
@@ -782,6 +801,26 @@ class _LayerATranslator:
             if not tokens:
                 raise _refuse(c, "unary operator with no tokens")
             op = tokens[0]
+            # `&buf[k]` — array-subscript address-of. Layer A preserves
+            # both operators (CAddressOf wrapping CArraySubscript); the
+            # lift-checker pairs the composed shape with the layer-B
+            # `PtrOffset(buf, k)`.
+            if op == "&":
+                inner_cur = _unwrap(children[0])
+                if inner_cur.kind == cx.CursorKind.ARRAY_SUBSCRIPT_EXPR:
+                    sub_children = list(inner_cur.get_children())
+                    if len(sub_children) != 2:
+                        raise _refuse(inner_cur, "layer A: array subscript with non-2 children")
+                    base, index = sub_children
+                    return CAddressOf(
+                        id=self._mint("caddrof"),
+                        target=CArraySubscript(
+                            id=self._mint("carrsub"),
+                            base=self.expr(base),
+                            index=self.expr(index),
+                        ),
+                    )
+                raise _refuse(c, "layer A: address-of only supported for array subscripts (e.g. `&buf[k]`)")
             inner = self.expr(children[0])
             # Layer A: preserve unary minus / plus as-is. v3 treats `-x`
             # as `0 - x` (mirrors the layer-B fold) so we don't need a
@@ -914,13 +953,38 @@ class _LayerATranslator:
 
 
 def _c_source_type(cursor: cx.Cursor, t: cx.Type) -> CType:
-    """Map a clang Type to a layer-A `CType`. v3 supports only `int`
-    (sum.c is the worked example); broaden as the supported subset
-    grows. Kept narrow so the layer-A surface stays a clear contract."""
+    """Map a clang Type to a layer-A `CType` — a `CNamedType` for
+    scalar types (int, char) or a `CPointerType` wrapping the
+    pointee. The pointee can recurse for `int**`, `char**`, etc.
+
+    For typedef'd pointer aliases (`CURL*` is `struct Curl_easy *`
+    canonically), we use the *declaration's* spelling so the
+    source-level typedef name survives at layer A. The lift-check
+    treats any `CPointerType` as corresponding to layer-B's
+    `I8PtrType` regardless of pointee — the name is informational.
+    """
+    if t.kind == cx.TypeKind.POINTER:
+        # Use the source-level pointee spelling when possible (a
+        # typedef'd `CURL*`'s pointee spells `CURL`, not `struct
+        # Curl_easy`). When we can't recover that, fall back to the
+        # canonical pointee.
+        pointee_t = t.get_pointee()
+        return CPointerType(pointee=_c_source_type(cursor, pointee_t))
     canon = t.get_canonical()
     if canon.kind == cx.TypeKind.INT:
-        return CType(name="int")
-    raise _refuse(cursor, f"layer A: unsupported type {t.spelling!r} (only `int` in v3)")
+        return CNamedType(name="int")
+    if canon.kind in _CHAR_POINTEE_KINDS:
+        # SCHAR / UCHAR distinction is a signedness convention — preserve
+        # the source spelling so `signed char` and `unsigned char` show
+        # up distinctly in layer A.
+        return CNamedType(name=t.spelling)
+    if canon.kind == cx.TypeKind.RECORD:
+        # Opaque struct (e.g. `struct Curl_easy` behind `CURL`). Use the
+        # source spelling so typedef aliases survive.
+        return CNamedType(name=t.spelling)
+    if canon.kind == cx.TypeKind.VOID:
+        return CNamedType(name="void")
+    raise _refuse(cursor, f"layer A: unsupported type {t.spelling!r}")
 
 
 def _translate_function_layer_a(
@@ -946,7 +1010,7 @@ def _translate_function_layer_a(
     return CFn(
         id=f"@cfn_c_{cursor.spelling}",
         name=cursor.spelling,
-        return_type=CType(name="int"),
+        return_type=CNamedType(name="int"),
         params=tuple(params),
         body=body,
     )

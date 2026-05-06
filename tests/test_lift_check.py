@@ -33,7 +33,7 @@ from quod.model import (
     CIntLit,
     CParam,
     CReturn,
-    CType,
+    CNamedType,
     CVarDecl,
     CVarRef,
     Equivalence,
@@ -83,7 +83,7 @@ def test_lift_check_artifact_is_deterministic():
 def _trivial_pair():
     """A minimal (CFn, Function) pair that walks cleanly: `int f(int x)
     { return x; }`."""
-    int_t = CType(name="int")
+    int_t = CNamedType(name="int")
     cfn = CFn(
         id="@cfn_x", name="f", return_type=int_t,
         params=(CParam(name="x", type=int_t),),
@@ -119,7 +119,7 @@ def test_walk_lift_rejects_param_name_mismatch():
 
 
 def test_walk_lift_rejects_int_lit_value_mismatch():
-    int_t = CType(name="int")
+    int_t = CNamedType(name="int")
     cfn = CFn(
         id="@cfn_z", name="z", return_type=int_t,
         body=(CReturn(value=CIntLit(value=42)),),
@@ -134,7 +134,7 @@ def test_walk_lift_rejects_int_lit_value_mismatch():
 
 def test_walk_lift_rejects_operator_mismatch():
     """`+` in layer A must map to `add` in layer B; `sub` would fail."""
-    int_t = CType(name="int")
+    int_t = CNamedType(name="int")
     cfn = CFn(
         id="@cfn_q", name="q", return_type=int_t,
         params=(CParam(name="x", type=int_t),),
@@ -156,7 +156,7 @@ def test_walk_lift_rejects_operator_mismatch():
 
 def test_walk_lift_rejects_kind_mismatch():
     """A layer-A `return e` must map to layer-B ReturnExpr, not Assign."""
-    int_t = CType(name="int")
+    int_t = CNamedType(name="int")
     cfn = CFn(
         id="@cfn_r", name="r", return_type=int_t,
         body=(CReturn(value=CIntLit(value=0)),),
@@ -175,7 +175,7 @@ def test_walk_lift_strips_synthesized_fall_through():
     semantics), the walk should match the layer-A body against the
     layer-B body minus the synthesized stub."""
     from quod.model import Unreachable
-    int_t = CType(name="int")
+    int_t = CNamedType(name="int")
     cfn = CFn(
         id="@cfn_t", name="t", return_type=int_t,
         body=(CReturn(value=CIntLit(value=1)),),
@@ -305,7 +305,7 @@ def test_prove_lifts_skips_orphaned_pairs(tmp_path):
     the program (e.g. corpus drift after a manual edit), prove_lifts
     leaves the claim alone — `equiv verify` reports the broken pair
     separately."""
-    int_t = CType(name="int")
+    int_t = CNamedType(name="int")
     cfn = CFn(id="@cfn_real", name="real", return_type=int_t,
               body=(CReturn(value=CIntLit(value=0)),))
     fn = Function(id="@fn_real", name="real", return_type=I32Type(),
