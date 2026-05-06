@@ -88,6 +88,24 @@ class ShortCircuitOr(_Node):
     rhs: "Expr"
 
 
+class IfExpr(_Node):
+    """Expression-level `if`: evaluate `cond` (i1), then evaluate exactly
+    one of `then_value` / `else_value` and yield it as the expression's
+    value. Both branches must produce values of the same type.
+
+    Used by the C ingester to lift the ternary operator (`cond ? a : b`)
+    and by any language whose front-end produces expression-level
+    conditionals. Lowered to branch + phi (the same shape as
+    `ShortCircuitAnd` / `ShortCircuitOr`); only the branch whose
+    condition matches is evaluated, so side-effecting branches are
+    correctly sequenced.
+    """
+    kind: Literal["quod.if_expr"] = "quod.if_expr"
+    cond: "Expr"        # must lower to i1
+    then_value: "Expr"
+    else_value: "Expr"  # same type as then_value
+
+
 class ShortCircuitAnd(_Node):
     """`lhs && rhs` with C-style short-circuit. If `lhs` is false, `rhs` is
     not evaluated. Lowered to branch + phi."""
@@ -377,6 +395,7 @@ class CharLit(_Node):
 Expr = Annotated[
     Union[
         IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
+        IfExpr,
         Call, StringRef, FieldRead, LoadField, StructInit, PtrOffset, Widen,
         Load, NullPtr, CharLit, EnumInit, SizeOf, TryExpr, TraitCall,
     ],
@@ -1777,6 +1796,20 @@ class CAddressOf(_Node):
     target: "CExpr"
 
 
+class CTernary(_Node):
+    """`cond ? then_value : else_value` — the C ternary operator.
+
+    Layer A preserves the source-form ternary; the lift maps each
+    layer-A CTernary to a layer-B `IfExpr` with the same three sub-
+    expressions. The lift-checker pairs the two 1:1.
+    """
+    kind: Literal["c.ternary"] = "c.ternary"
+    id: str = Field(default_factory=lambda: _mint_node_id("cternary"))
+    cond: "CExpr"
+    then_value: "CExpr"
+    else_value: "CExpr"
+
+
 class CUnary(_Node):
     """Unary prefix operator on an expression: `-x`, `!x`, `~x`.
 
@@ -1800,7 +1833,7 @@ class CUnary(_Node):
 
 CExpr = Annotated[
     Union[CIntLit, CVarRef, CEnumConstRef, CBinOp, CStringLit, CCall,
-          CArraySubscript, CAddressOf, CUnary],
+          CArraySubscript, CAddressOf, CUnary, CTernary],
     Field(discriminator="kind"),
 ]
 

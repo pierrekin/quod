@@ -55,6 +55,7 @@ from quod.model import (
     UsizeType,
     I8PtrType,
     If,
+    IfExpr,
     IntLit,
     IntRangeClaim,
     Let,
@@ -284,6 +285,16 @@ def _expr_spans(expr) -> tuple[Span, ...]:
                 *_expr_spans(l),
                 Span(" ", "ws"), Span("&&", "op"), Span(" ", "ws"),
                 *_expr_spans(r),
+                Span(")", "punct"),
+            )
+        case IfExpr(cond=cond, then_value=t, else_value=e):
+            return (
+                Span("(", "punct"),
+                *_expr_spans(cond),
+                Span(" ", "ws"), Span("?", "op"), Span(" ", "ws"),
+                *_expr_spans(t),
+                Span(" ", "ws"), Span(":", "op"), Span(" ", "ws"),
+                *_expr_spans(e),
                 Span(")", "punct"),
             )
         case Call(function=fn_name, args=args):

@@ -83,6 +83,7 @@ from quod.model import (
     CScopedBlock,
     CStringLit,
     CStyleFor,
+    CTernary,
     CUnary,
     CVarDecl,
     CVarRef,
@@ -93,6 +94,7 @@ from quod.model import (
     I32Type,
     I64Type,
     If,
+    IfExpr,
     IntLit,
     Let,
     LocalRef,
@@ -731,6 +733,41 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
                 _check_expr(aa, ba, path=f"{path}.args[{i}]", ctx=ctx)
                 for i, (aa, ba) in enumerate(zip(a.args, b.args))
             ],
+        }
+
+    if isinstance(a, CTernary):
+        # `cond ? a : b` ↔ `IfExpr(cond', a', b')`. The layer-B side
+        # may wrap the cond in `ne(cond, 0)` when the source cond was
+        # an integer expression (rather than a comparison) — we accept
+        # either: a direct cond match or the i1-widened form.
+        if not isinstance(b, IfExpr):
+            raise LiftCheckError(
+                f"{path}: layer-A CTernary vs layer-B {type(b).__name__}"
+            )
+        # Cond pairing: try direct first; fall back to the ne-widening
+        # form if the layer-B cond is `BinOp(ne, _, 0)` and the layer-A
+        # cond isn't already i1-typed.
+        cond_record: dict[str, Any]
+        try:
+            cond_record = _check_expr(a.cond, b.cond, path=f"{path}.cond", ctx=ctx)
+        except LiftCheckError:
+            if (
+                isinstance(b.cond, BinOp) and b.cond.op == "ne"
+                and isinstance(b.cond.rhs, IntLit) and b.cond.rhs.value == 0
+                and not _is_layer_a_i1_typed(a.cond)
+            ):
+                cond_record = _check_expr(
+                    a.cond, b.cond.lhs, path=f"{path}.cond", ctx=ctx,
+                )
+                cond_record = {"kind": "ternary cond i1-widen", "inner": cond_record}
+            else:
+                raise
+        return {
+            "kind": "ternary ↔ if_expr",
+            "a_id": a.id,
+            "cond": cond_record,
+            "then": _check_expr(a.then_value, b.then_value, path=f"{path}.then", ctx=ctx),
+            "else": _check_expr(a.else_value, b.else_value, path=f"{path}.else", ctx=ctx),
         }
 
     if isinstance(a, CUnary):

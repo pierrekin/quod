@@ -69,6 +69,7 @@ from quod.model import (
     CStmt,
     CStringLit,
     CStyleFor,
+    CTernary,
     CType,
     CUnary,
     CUnit,
@@ -84,6 +85,7 @@ from quod.model import (
     I32Type,
     I64Type,
     If,
+    IfExpr,
     IntLit,
     LibcLinkage,
     Let,
@@ -523,6 +525,29 @@ class _FunctionTranslator:
             args = tuple(self.expr(a) for a in children[1:])
             return Call(function=callee.spelling, args=args)
 
+        if k == cx.CursorKind.CONDITIONAL_OPERATOR:
+            # `cond ? a : b` lifts to layer-B IfExpr. The condition's
+            # type must lower to i1 — comparisons / short-circuits do
+            # so naturally; an integer cond gets the C "nonzero ⇒ true"
+            # widening, which we represent as an explicit `cond != 0`
+            # binop so the layer-B i1-type is visible to the validator.
+            children = list(c.get_children())
+            if len(children) != 3:
+                raise _refuse(c, f"ternary with {len(children)} children")
+            cond_expr = self.expr(children[0])
+            if not _is_i1_typed(cond_expr):
+                cond_expr = BinOp(
+                    op="ne", lhs=cond_expr,
+                    rhs=IntLit(type=_I32, value=0),
+                )
+            then_expr = self.expr(children[1])
+            else_expr = self.expr(children[2])
+            return IfExpr(
+                cond=cond_expr,
+                then_value=then_expr,
+                else_value=else_expr,
+            )
+
         raise _refuse(c, f"unsupported expression kind: {k.name}")
 
     def stmt(self, cursor: cx.Cursor) -> Statement:
@@ -940,6 +965,16 @@ class _LayerATranslator:
                 # CUnary("+") which has no observable effect).
                 return inner
             raise _refuse(c, f"layer A: unsupported unary operator {op!r}")
+        if k == cx.CursorKind.CONDITIONAL_OPERATOR:
+            children = list(c.get_children())
+            if len(children) != 3:
+                raise _refuse(c, f"layer A: ternary with {len(children)} children")
+            return CTernary(
+                id=self._mint("cternary"),
+                cond=self.expr(children[0]),
+                then_value=self.expr(children[1]),
+                else_value=self.expr(children[2]),
+            )
         raise _refuse(c, f"layer A: unsupported expression kind: {k.name}")
 
     def stmt(self, cursor: cx.Cursor) -> CStmt:

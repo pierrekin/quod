@@ -455,6 +455,54 @@ def test_compound_assign_to_parameter_refuses(tmp_path):
         ingest_c(src)
 
 
+TERNARY_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/ternary/ternary.c"
+
+
+def test_ternary_lifts_to_ifexpr_at_layer_b():
+    """`cond ? a : b` lifts to layer-A CTernary (preserving source) and
+    layer-B IfExpr (a core node). The lift-checker pairs them 1:1."""
+    from quod.model import CTernary, IfExpr
+    p = ingest_c(TERNARY_C)
+
+    abs_a = next(cf for cf in p.source_units[0].functions if cf.name == "abs_val")
+    ret_a = abs_a.body[0]
+    assert isinstance(ret_a.value, CTernary)
+
+    abs_b = next(fn for fn in p.structured_functions if fn.name == "abs_val")
+    ret_b = abs_b.body.stmts[0]
+    assert isinstance(ret_b.value, IfExpr)
+
+
+def test_ternary_with_integer_cond_widens_to_ne_zero():
+    """A ternary whose `cond` is an integer expression (not a comparison)
+    gets the C "nonzero ⇒ true" widening — the lift wraps it as
+    `BinOp("ne", cond, IntLit(0))` on the layer-B side."""
+    from quod.model import IfExpr, BinOp
+    p = ingest_c(TERNARY_C)
+    sign_b = next(fn for fn in p.structured_functions if fn.name == "sign_or_zero")
+    ret_b = sign_b.body.stmts[0]
+    outer = ret_b.value
+    assert isinstance(outer, IfExpr)
+    # Outer cond was just `x` in source — layer B wraps it as `x != 0`.
+    assert isinstance(outer.cond, BinOp) and outer.cond.op == "ne"
+
+
+def test_ternary_example_compiles_and_runs(tmp_path):
+    import subprocess
+    from quod.lower import compile_program
+    p = ingest_c(TERNARY_C)
+    res = compile_program(
+        p, build_dir=tmp_path, bins=(("ternary", "main"),),
+        profile=2, link=True,
+    )
+    out = subprocess.run([str(res.bins[0].binary)], capture_output=True, text=True, timeout=10)
+    assert out.returncode == 0
+    assert "abs_val(-7)         = 7" in out.stdout
+    assert "max3(2, 9, 4)       = 9" in out.stdout
+    assert "sign_or_zero(-3)    = -1" in out.stdout
+    assert "sign_or_zero(42)    = 1" in out.stdout
+
+
 def test_every_c_corpus_example_emits_layer_a():
     """Coverage sweep: every example now produces a `source_units`
     entry. The layer-A widening landed in three steps (calls /

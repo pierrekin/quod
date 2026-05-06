@@ -51,6 +51,7 @@ from .model import (
     IsizeType,
     UsizeType,
     If,
+    IfExpr,
     ImplDef,
     IntLit,
     Let,
@@ -247,6 +248,12 @@ def _walk_types_in_expr(expr, fn):
         return expr.model_copy(update={
             "lhs": _walk_types_in_expr(expr.lhs, fn),
             "rhs": _walk_types_in_expr(expr.rhs, fn),
+        })
+    if isinstance(expr, IfExpr):
+        return expr.model_copy(update={
+            "cond": _walk_types_in_expr(expr.cond, fn),
+            "then_value": _walk_types_in_expr(expr.then_value, fn),
+            "else_value": _walk_types_in_expr(expr.else_value, fn),
         })
     if isinstance(expr, Call):
         new_args = tuple(_walk_types_in_expr(a, fn) for a in expr.args)
@@ -466,6 +473,10 @@ def _collect_in_expr(expr, sink: set):
     elif isinstance(expr, ShortCircuitAnd):
         _collect_in_expr(expr.lhs, sink)
         _collect_in_expr(expr.rhs, sink)
+    elif isinstance(expr, IfExpr):
+        _collect_in_expr(expr.cond, sink)
+        _collect_in_expr(expr.then_value, sink)
+        _collect_in_expr(expr.else_value, sink)
     elif isinstance(expr, Call):
         if expr.type_args:
             sink.add((expr.function, tuple(_type_key(a) for a in expr.type_args)))
@@ -772,6 +783,12 @@ def _resolve_trait_calls_in_expr(expr, impl_index):
         return expr.model_copy(update={
             "lhs": _resolve_trait_calls_in_expr(expr.lhs, impl_index),
             "rhs": _resolve_trait_calls_in_expr(expr.rhs, impl_index),
+        })
+    if isinstance(expr, IfExpr):
+        return expr.model_copy(update={
+            "cond": _resolve_trait_calls_in_expr(expr.cond, impl_index),
+            "then_value": _resolve_trait_calls_in_expr(expr.then_value, impl_index),
+            "else_value": _resolve_trait_calls_in_expr(expr.else_value, impl_index),
         })
     if isinstance(expr, Call):
         return expr.model_copy(update={

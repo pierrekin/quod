@@ -26,6 +26,7 @@ from quod.model import (
     FieldSet,
     For,
     If,
+    IfExpr,
     IntLit,
     IntRangeClaim,
     Let,
@@ -158,6 +159,10 @@ def _walk_calls_in_expr(expr) -> Iterator[Call]:
         case BinOp(lhs=l, rhs=r) | ShortCircuitOr(lhs=l, rhs=r) | ShortCircuitAnd(lhs=l, rhs=r):
             yield from _walk_calls_in_expr(l)
             yield from _walk_calls_in_expr(r)
+        case IfExpr(cond=cond, then_value=t, else_value=e):
+            yield from _walk_calls_in_expr(cond)
+            yield from _walk_calls_in_expr(t)
+            yield from _walk_calls_in_expr(e)
         case FieldRead(value=inner):
             yield from _walk_calls_in_expr(inner)
         case StructInit(fields=field_inits):

@@ -48,6 +48,7 @@ from quod.model import (
     IsizeType,
     UsizeType,
     If,
+    IfExpr,
     IntLit,
     IntRangeClaim,
     IntType,
@@ -149,6 +150,11 @@ def _expr_to_smt(expr, state: _SmtState) -> str:
             raise NotImplementedError(
                 "can't lower short-circuit Or/And for SMT in this round; "
                 "rewrite as nested If if you need a proof"
+            )
+        case IfExpr():
+            raise NotImplementedError(
+                "can't lower IfExpr (ternary) for SMT in this round; "
+                "rewrite as a statement-level If if you need a proof"
             )
         case BinOp(op=op, lhs=l, rhs=r) if op in _SMT_BINOP:
             return f"({_SMT_BINOP[op]} {_expr_to_smt(l, state)} {_expr_to_smt(r, state)})"

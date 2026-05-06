@@ -51,6 +51,7 @@ from quod.model import (
     IsizeType,
     UsizeType,
     If,
+    IfExpr,
     IntLit,
     Let,
     Load,
@@ -613,6 +614,10 @@ def _check_expr(ctx: _Ctx, expr) -> None:
         case ShortCircuitAnd(lhs=a, rhs=b) | ShortCircuitOr(lhs=a, rhs=b):
             _check_expr(ctx, a)
             _check_expr(ctx, b)
+        case IfExpr(cond=cond, then_value=t, else_value=e):
+            _check_expr(ctx, cond)
+            _check_expr(ctx, t)
+            _check_expr(ctx, e)
         case TryExpr(value=v):
             _check_expr(ctx, v)
             _check_try(ctx, v)
@@ -733,6 +738,10 @@ def _infer_type(ctx: _Ctx, expr) -> object | None:
             return t
         case ShortCircuitAnd() | ShortCircuitOr():
             return I1Type()
+        case IfExpr(then_value=t, else_value=e):
+            # Both branches must agree by validation; pick the first
+            # one that infers a type.
+            return _infer_type(ctx, t) or _infer_type(ctx, e)
         case BinOp(op=op, lhs=l, rhs=r):
             # Comparisons return i1; arithmetic propagates the LHS type.
             if op in ("eq", "ne", "slt", "sle", "sgt", "sge", "ult", "ule", "ugt", "uge"):

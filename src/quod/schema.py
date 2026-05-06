@@ -48,6 +48,7 @@ from quod.model import (
     CScopedBlock,
     CStringLit,
     CStyleFor,
+    CTernary,
     CUnary,
     CUnit,
     CVarDecl,
@@ -83,6 +84,7 @@ from quod.model import (
     IsizeType,
     UsizeType,
     If,
+    IfExpr,
     IntLit,
     IntRangeClaim,
     Let,
@@ -244,6 +246,25 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
                     "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 100}},
         },
         "see_also": ["llvm.binop", "quod.sc_or"],
+    },
+    "quod.if_expr": {
+        "class": IfExpr,
+        "summary": (
+            "Expression-level conditional (`cond ? a : b`). cond must "
+            "lower to i1; then_value and else_value must have the same "
+            "type. Lowered to branch + phi — only the selected branch "
+            "is evaluated, so side effects in the unselected branch are "
+            "skipped."
+        ),
+        "example": {
+            "kind": "quod.if_expr",
+            "cond": {"kind": "llvm.binop", "op": "slt",
+                     "lhs": {"kind": "llvm.param_ref", "name": "x"},
+                     "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}},
+            "then_value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": -1},
+            "else_value": {"kind": "llvm.param_ref", "name": "x"},
+        },
+        "see_also": ["quod.if", "quod.sc_or", "quod.sc_and"],
     },
     "llvm.call": {
         "class": Call,
@@ -1063,6 +1084,24 @@ _KIND_INFO["c.array_subscript"] = {
     },
 }
 
+_KIND_INFO["c.ternary"] = {
+    "class": CTernary,
+    "summary": (
+        "`cond ? then_value : else_value` — the C ternary operator. "
+        "Layer A preserves source form; the lift maps each CTernary "
+        "to a layer-B `IfExpr` with the same three sub-expressions."
+    ),
+    "example": {
+        "kind": "c.ternary",
+        "cond": {"kind": "c.binop", "op": "<",
+                 "lhs": {"kind": "c.var_ref", "name": "x"},
+                 "rhs": {"kind": "c.lit_int", "value": 0}},
+        "then_value": {"kind": "c.unary", "op": "-",
+                       "value": {"kind": "c.var_ref", "name": "x"}},
+        "else_value": {"kind": "c.var_ref", "name": "x"},
+    },
+}
+
 _KIND_INFO["c.unary"] = {
     "class": CUnary,
     "summary": (
@@ -1305,7 +1344,8 @@ _KIND_INFO["c.for_general"] = {
 _CATEGORIES: dict[str, list[str]] = {
     "expression": [
         "llvm.const_int", "llvm.param_ref", "quod.local_ref", "llvm.binop",
-        "quod.sc_or", "quod.sc_and", "llvm.call", "quod.string_ref",
+        "quod.sc_or", "quod.sc_and", "quod.if_expr",
+        "llvm.call", "quod.string_ref",
         "quod.struct_init", "quod.field", "quod.load_field",
         "quod.ptr_offset", "quod.widen", "quod.load", "quod.null_ptr",
         "quod.char_lit", "quod.enum_init", "quod.sizeof", "quod.try",
@@ -1341,7 +1381,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "c.return", "c.for", "c.if", "c.while", "c.expr_stmt",
         "c.binop", "c.lit_int", "c.lit_str", "c.var_ref",
         "c.enum_const_ref", "c.call",
-        "c.array_subscript", "c.addr_of", "c.unary",
+        "c.array_subscript", "c.addr_of", "c.unary", "c.ternary",
     ],
     # Layer-B `c.*` extensions — constructs core quod can't represent;
     # lowered to core by lower/c_family.py (step 5).

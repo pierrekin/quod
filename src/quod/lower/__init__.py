@@ -50,6 +50,7 @@ from quod.model import (
     IsizeType,
     UsizeType,
     If,
+    IfExpr,
     IntLit,
     IntRangeClaim,
     int_type_width,
@@ -265,6 +266,8 @@ def _lower_expr(
             return _lower_short_circuit(builder, l, r, kind="or", lower=go)
         case ShortCircuitAnd(lhs=l, rhs=r):
             return _lower_short_circuit(builder, l, r, kind="and", lower=go)
+        case IfExpr(cond=cond, then_value=t, else_value=e):
+            return _lower_if_expr(builder, cond, t, e, lower=go)
         case StringRef(name=n):
             gv = constants[n]
             return builder.bitcast(gv, I8.as_pointer())
@@ -612,6 +615,42 @@ def _align_to(offset: int, alignment: int) -> int:
     """Round `offset` up to the next multiple of `alignment`."""
     rem = offset % alignment
     return offset if rem == 0 else offset + (alignment - rem)
+
+
+def _lower_if_expr(builder: ir.IRBuilder, cond, then_value, else_value, *, lower) -> ir.Value:
+    """Lower an `IfExpr` (ternary `cond ? a : b`) via branch + phi.
+    Both arms must produce values of the same LLVM type; only the
+    arm whose condition matches is evaluated, so side effects in the
+    unselected arm are correctly skipped."""
+    fn = builder.block.parent
+    then_bb = fn.append_basic_block("ifexpr.then")
+    else_bb = fn.append_basic_block("ifexpr.else")
+    end_bb = fn.append_basic_block("ifexpr.end")
+
+    cond_val = lower(cond)
+    builder.cbranch(cond_val, then_bb, else_bb)
+
+    builder.position_at_end(then_bb)
+    then_val = lower(then_value)
+    then_block = builder.block  # nested branches may have repositioned
+    builder.branch(end_bb)
+
+    builder.position_at_end(else_bb)
+    else_val = lower(else_value)
+    else_block = builder.block
+    builder.branch(end_bb)
+
+    builder.position_at_end(end_bb)
+    if then_val.type != else_val.type:
+        raise ValueError(
+            f"if_expr branches produced mismatched LLVM types: "
+            f"{then_val.type} vs {else_val.type} — quod.validate should "
+            f"have caught this"
+        )
+    phi = builder.phi(then_val.type)
+    phi.add_incoming(then_val, then_block)
+    phi.add_incoming(else_val, else_block)
+    return phi
 
 
 def _lower_short_circuit(builder: ir.IRBuilder, lhs, rhs, *, kind: str, lower) -> ir.Value:
