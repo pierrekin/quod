@@ -65,12 +65,14 @@ from quod.model import (
     CLAIM_KINDS,
     PARAM_CLAIM_KINDS,
     RETURN_CLAIM_KINDS,
+    CFn,
     Claim,
     DerivedJustification,
     Equivalence,
     ExternFunction,
     FamilyLowering,
     Function,
+    format_c_fn,
     I1Type,
     I8PtrType,
     I8Type,
@@ -968,10 +970,50 @@ def fn_ls(
 def fn_show(
     ref: str = typer.Argument(..., autocompletion=_comp.function_or_hash),
     json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
+    source: bool = typer.Option(
+        False, "--source",
+        help="Render the layer-A C-source subtree from "
+             "Program.source_units (the original C, preserved as quod "
+             "nodes). Only available for C-derived programs.",
+    ),
+    structured: bool = typer.Option(
+        False, "--structured",
+        help="Render the layer-B structured form from "
+             "Program.structured_functions (extension-bearing, with "
+             "constructs like c.for_general). Only available for "
+             "C-derived programs.",
+    ),
 ) -> None:
-    """Print a single function. Accepts a name or a content-hash prefix."""
+    """Print a single function. Accepts a name or a content-hash prefix.
+
+    By default prints the canonical core form from `Program.functions`
+    — the lowered, lower.py-bound version. `--source` and `--structured`
+    select alternate views for C-derived programs (mutually exclusive
+    with each other; `--json` works with any of the three)."""
+    if source and structured:
+        typer.echo("error: --source and --structured are mutually exclusive", err=True)
+        raise typer.Exit(2)
+
+    program = _load()
+
+    if source:
+        cfn = _find_csource_fn_ref(program, ref)
+        if json_output:
+            _emit_json(cfn)
+            return
+        typer.echo(format_c_fn(cfn))
+        return
+
+    if structured:
+        fn = _find_structured_fn_ref(program, ref)
+        if json_output:
+            _emit_json(fn)
+            return
+        typer.echo(render(format_function_lines(fn), theme=_theme(), mode="columnar"))
+        return
+
     try:
-        fn = find_function_ref(_load(), ref)
+        fn = find_function_ref(program, ref)
     except (KeyError, ValueError) as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
@@ -979,6 +1021,70 @@ def fn_show(
         _emit_json(fn)
         return
     typer.echo(render(format_function_lines(fn), theme=_theme(), mode="columnar"))
+
+
+def _find_csource_fn_ref(program: Program, ref: str) -> CFn:
+    """Resolve a function ref against `Program.source_units` (layer A).
+    Refs are matched first by name, then by `id` prefix — paralleling
+    the canonical-form `find_function_ref` but for layer-A `CFn` nodes
+    which don't have content-hash refs (yet)."""
+    cfns = [cfn for unit in program.source_units for cfn in unit.functions]
+    by_name = [cfn for cfn in cfns if cfn.name == ref]
+    if by_name:
+        if len(by_name) > 1:
+            raise typer.Exit(
+                _echo_err(f"ref {ref!r} is ambiguous across source_units: "
+                          f"{[cfn.id for cfn in by_name]}")
+            )
+        return by_name[0]
+    by_id = [cfn for cfn in cfns if cfn.id.startswith(ref)]
+    if not by_id:
+        raise typer.Exit(_echo_err(
+            f"no layer-A function matches {ref!r} — either the program "
+            f"isn't C-derived (no source_units), or the function uses "
+            f"constructs outside the v6 layer-A subset (and hit the "
+            f"all-or-nothing fallback)"
+        ))
+    if len({cfn.id for cfn in by_id}) > 1:
+        raise typer.Exit(_echo_err(
+            f"ref {ref!r} is an ambiguous id prefix: "
+            f"{[cfn.id for cfn in by_id]}"
+        ))
+    return by_id[0]
+
+
+def _find_structured_fn_ref(program: Program, ref: str) -> Function:
+    """Resolve a function ref against `Program.structured_functions`
+    (layer B). Same name-or-id-prefix matching as the layer-A and
+    canonical helpers."""
+    by_name = [fn for fn in program.structured_functions if fn.name == ref]
+    if by_name:
+        if len(by_name) > 1:
+            raise typer.Exit(_echo_err(
+                f"ref {ref!r} is ambiguous in structured_functions: "
+                f"{[fn.id for fn in by_name]}"
+            ))
+        return by_name[0]
+    by_id = [fn for fn in program.structured_functions if fn.id.startswith(ref)]
+    if not by_id:
+        raise typer.Exit(_echo_err(
+            f"no layer-B function matches {ref!r} — either the program "
+            f"isn't C-derived (no structured_functions) or the ref doesn't "
+            f"match any function name or id prefix"
+        ))
+    if len({fn.id for fn in by_id}) > 1:
+        raise typer.Exit(_echo_err(
+            f"ref {ref!r} is an ambiguous id prefix: "
+            f"{[fn.id for fn in by_id]}"
+        ))
+    return by_id[0]
+
+
+def _echo_err(msg: str) -> int:
+    """Helper: print to stderr and return exit code 1. Lets call sites
+    write `raise typer.Exit(_echo_err(...))` as one expression."""
+    typer.echo(f"error: {msg}", err=True)
+    return 1
 
 
 @fn_app.command("add")

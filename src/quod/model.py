@@ -2432,12 +2432,15 @@ def _format_c_unit(unit: "CUnit", *, label: NodeLabel) -> str:
     head = f'{label(unit)}c_unit "{unit.source_path}" {{'
     lines = [head]
     for fn in unit.functions:
-        lines.extend("  " + line for line in _format_c_fn(fn, label=label).splitlines())
+        lines.extend("  " + line for line in format_c_fn(fn, label=label).splitlines())
     lines.append("}")
     return "\n".join(lines)
 
 
-def _format_c_fn(fn: "CFn", *, label: NodeLabel) -> str:
+def format_c_fn(fn: "CFn", *, label: NodeLabel = _NO_LABEL) -> str:
+    """Render a layer-A `CFn` as C-flavored text. Used by
+    `format_program` for the `source_units` section and by the CLI's
+    `quod fn show --source` for single-function rendering."""
     params = ", ".join(f"{_format_c_type(p.type)} {p.name}" for p in fn.params)
     head = f"{label(fn)}{_format_c_type(fn.return_type)} {fn.name}({params}) {{"
     lines = [head]

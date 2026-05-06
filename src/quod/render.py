@@ -27,7 +27,9 @@ from quod.hashing import HASH_DISPLAY_LEN, short_hash
 from quod.model import (
     Assign,
     BinOp,
+    Block,
     Call,
+    CStyleFor,
     ExprStmt,
     ExternFunction,
     FieldRead,
@@ -505,8 +507,37 @@ def _stmt_lines(stmt, indent: int) -> Iterator[Line]:
                     yield from _stmt_lines(s, indent + 4)
                 yield Line(None, indent + 2, (Span("}", "punct"),))
             yield Line(None, indent, (Span("}", "punct"),))
+        case CStyleFor(init=init, cond=cond, inc=inc, body=body):
+            # Layer-B `c.for_general` — a structured-form C-style for
+            # loop. Renders header on one line, body indented. The
+            # init/inc statement spans come from a recursive single-
+            # line call into _stmt_lines stripped of indent.
+            init_spans = _stmt_inline_spans(init) if init is not None else ()
+            inc_spans = _stmt_inline_spans(inc) if inc is not None else ()
+            cond_spans = _expr_spans(cond) if cond is not None else ()
+            inner = body if isinstance(body, Block) else body.block
+            yield Line(stmt, indent, (
+                Span("c.for_general", "keyword"), Span(" (", "punct"),
+                *init_spans, Span("; ", "punct"),
+                *cond_spans, Span("; ", "punct"),
+                *inc_spans, Span(") {", "punct"),
+            ))
+            for s in inner.stmts:
+                yield from _stmt_lines(s, indent + 2)
+            yield Line(None, indent, (Span("}", "punct"),))
         case _:
             raise ValueError(f"unhandled stmt: {stmt!r}")
+
+
+def _stmt_inline_spans(stmt) -> tuple:
+    """Collect a statement's spans for inline rendering inside a
+    for-header. We strip the leading indent and trailing newline by
+    grabbing the first line's spans only — works for the simple
+    Let/Assign cases that occupy a for-loop's init / inc slots."""
+    lines = list(_stmt_lines(stmt, 0))
+    if not lines:
+        return ()
+    return lines[0].spans
 
 
 # ---------- Claim / meta-column spans ----------
