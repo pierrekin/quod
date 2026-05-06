@@ -53,7 +53,9 @@ from quod.model import (
     FamilyLowering,
     For,
     Function,
+    I1Type,
     If,
+    IntLit,
     Match,
     MatchArm,
     ProvenanceEdge,
@@ -233,16 +235,6 @@ def _lower_statement(stmt: Statement, ctx: _LowerContext) -> tuple[Statement, ..
         inc_stmts = _lower_statement(stmt.inc, ctx) if stmt.inc is not None else ()
         # Body lowers via the block path (handles CScopedBlock too).
         body_block = _lower_block_or_scoped(stmt.body, ctx)
-        # Append `inc` to every iteration. If `cond` is None, we'd need
-        # `while (true)` which v5 doesn't model — refuse rather than
-        # silently miscompile. (Sum.c always has a cond.)
-        if stmt.cond is None:
-            raise ValueError(
-                "c.for_general lowering: `cond` is None — `for (init;;inc)` "
-                "form requires a `while (true)` analogue at layer C, which "
-                "v5 doesn't model. Add a CStyleFor refusal at ingest time "
-                "or extend the lowering rule to emit a constant-true cond."
-            )
         # Append `inc` statements at the end of body. New block ID
         # since we materially changed the contents — keeps the edge
         # graph honest about which contents go with which ID.
@@ -252,7 +244,14 @@ def _lower_statement(stmt: Statement, ctx: _LowerContext) -> tuple[Statement, ..
             id=with_inc_id,
             stmts=body_block.stmts + tuple(inc_stmts),
         )
-        return (*init_stmts, While(cond=stmt.cond, body=with_inc))
+        # An absent cond (`for (init;;inc) body`) means "loop forever
+        # unless body breaks out" — we model it as `while (true)` with
+        # an i1-typed `IntLit(1)` cond. The while-loop preserves the
+        # for-form's per-iteration semantics; the equivalence proof
+        # is identical to the cond-present case at the per-iteration
+        # level.
+        cond = stmt.cond if stmt.cond is not None else IntLit(type=I1Type(), value=1)
+        return (*init_stmts, While(cond=cond, body=with_inc))
 
     # ----- Recursive cases — extensions may live inside body slots. -----
     if isinstance(stmt, While):

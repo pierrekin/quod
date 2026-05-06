@@ -205,14 +205,12 @@ def test_lower_is_deterministic_and_idempotent_on_layer_c():
     assert lower_c_family(pure_program) == pure_program
 
 
-def test_unknown_c_extension_refuses():
-    """Defensive check: if a future `c.*` extension reaches the
-    lowering pass without a registered rule, surface a clear error
-    naming the offending kind."""
-    import pytest
+def test_for_general_with_no_cond_lowers_to_while_true():
+    """Sparse for-loops with `cond` absent (`for (init;;inc) body`)
+    lower to `init; while (true) { body; inc; }`. The constant-true
+    cond is an i1-typed `IntLit(1)` — directly lowerable to LLVM."""
+    from quod.model import I1Type
 
-    # Build a CStyleFor with cond=None — the rule explicitly refuses
-    # this case (v5 doesn't model `while (true)`).
     body = Block(
         id="@blk_x",
         stmts=(CStyleFor(
@@ -223,5 +221,13 @@ def test_unknown_c_extension_refuses():
         ),),
     )
     fn = Function(id="@fn_b_x", name="x", return_type=I32Type(), body=body)
-    with pytest.raises(ValueError, match="cond.*None"):
-        lower_c_family(Program(structured_functions=(fn,)))
+    out = lower_c_family(Program(structured_functions=(fn,)))
+
+    fn_c = out.functions[0]
+    let_i, while_loop = fn_c.body.stmts
+    assert isinstance(let_i, Let) and let_i.name == "i"
+    assert isinstance(while_loop, While)
+    # Cond is `IntLit(I1Type, 1)` — i.e., `true`.
+    assert isinstance(while_loop.cond, IntLit)
+    assert isinstance(while_loop.cond.type, I1Type)
+    assert while_loop.cond.value == 1

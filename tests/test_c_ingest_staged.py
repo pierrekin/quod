@@ -553,6 +553,58 @@ def test_uninit_local_read_before_write_refuses(tmp_path):
         )
 
 
+SPARSE_FOR_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/sparse_for/sparse_for.c"
+
+
+def test_sparse_for_init_absent():
+    """`for (; cond; inc)` lifts with init=None on both layers."""
+    from quod.model import CFor, CStyleFor
+    p = ingest_c(SPARSE_FOR_C)
+    cfn = next(cf for cf in p.source_units[0].functions if cf.name == "sum_no_init")
+    cfor = next(s for s in cfn.body if isinstance(s, CFor))
+    assert cfor.init is None
+    assert cfor.cond is not None
+    assert cfor.inc is not None
+
+    fn_b = next(f for f in p.structured_functions if f.name == "sum_no_init")
+    cfor_b = next(s for s in fn_b.body.stmts if isinstance(s, CStyleFor))
+    assert cfor_b.init is None
+
+
+def test_sparse_for_cond_absent_lowers_to_while_true():
+    """`for (init; ; inc)` lifts cond=None and lowers to while(true).
+    The example uses an early return inside the body to terminate."""
+    from quod.model import CStyleFor, While, IntLit, I1Type
+    p = ingest_c(SPARSE_FOR_C)
+    fn_b = next(f for f in p.structured_functions if f.name == "sum_no_cond")
+    cfor_b = fn_b.body.stmts[1]
+    assert isinstance(cfor_b, CStyleFor)
+    assert cfor_b.cond is None
+
+    # Layer C: while-loop with constant-true cond.
+    fn_c = next(f for f in p.functions if f.name == "sum_no_cond")
+    # body: Let total = 0; Let i = 0 (hoisted from for-init); while (true) { ... }
+    while_loop = next(s for s in fn_c.body.stmts if isinstance(s, While))
+    assert isinstance(while_loop.cond, IntLit)
+    assert isinstance(while_loop.cond.type, I1Type)
+    assert while_loop.cond.value == 1
+
+
+def test_sparse_for_example_compiles_and_runs(tmp_path):
+    import subprocess
+    from quod.lower import compile_program
+    p = ingest_c(SPARSE_FOR_C)
+    res = compile_program(
+        p, build_dir=tmp_path, bins=(("sparse_for", "main"),),
+        profile=2, link=True,
+    )
+    out = subprocess.run([str(res.bins[0].binary)], capture_output=True, text=True, timeout=10)
+    assert out.returncode == 0
+    assert "sum_no_init(5)  = 10" in out.stdout
+    assert "sum_no_inc(5)   = 10" in out.stdout
+    assert "sum_no_cond(5)  = 10" in out.stdout
+
+
 def test_every_c_corpus_example_emits_layer_a():
     """Coverage sweep: every example now produces a `source_units`
     entry. The layer-A widening landed in three steps (calls /

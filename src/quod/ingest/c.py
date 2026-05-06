@@ -249,6 +249,69 @@ def _unwrap(cursor: cx.Cursor) -> cx.Cursor:
     return cursor
 
 
+def _split_for_children(c: cx.Cursor) -> tuple[
+    cx.Cursor | None, cx.Cursor | None, cx.Cursor | None, cx.Cursor,
+]:
+    """Bucket a FOR_STMT cursor's children into (init, cond, inc, body).
+
+    libclang omits absent slots from the child list, so a 3-child
+    FOR_STMT could be missing init, cond, OR inc. We recover the slot
+    layout by scanning tokens for the two `;` separators in the for-
+    header and bucketing each child by its source-offset position
+    relative to those separators.
+    """
+    children = list(c.get_children())
+    if not children:
+        raise _refuse(c, "for-stmt with no children")
+    body_cursor = children[-1]
+    header_children = children[:-1]
+
+    # Find the two `;` token offsets inside the for-header. Tokens
+    # before the first `(` and after the matching `)` are out of scope.
+    paren_depth = 0
+    semicolon_offsets: list[int] = []
+    header_start: int | None = None
+    header_end: int | None = None
+    for tok in c.get_tokens():
+        s = tok.spelling
+        if s == "(":
+            if header_start is None:
+                header_start = tok.extent.start.offset
+            paren_depth += 1
+            continue
+        if s == ")":
+            paren_depth -= 1
+            if paren_depth == 0:
+                header_end = tok.extent.start.offset
+                break
+            continue
+        if paren_depth >= 1 and s == ";" and paren_depth == 1:
+            semicolon_offsets.append(tok.extent.start.offset)
+
+    if len(semicolon_offsets) != 2 or header_start is None or header_end is None:
+        raise _refuse(
+            c,
+            f"for-stmt: expected exactly two `;` separators in header, "
+            f"found {len(semicolon_offsets)} — supported shapes are "
+            f"`for (init?; cond?; inc?) body`."
+        )
+
+    sem1, sem2 = semicolon_offsets
+    init_cursor: cx.Cursor | None = None
+    cond_cursor: cx.Cursor | None = None
+    inc_cursor: cx.Cursor | None = None
+    for child in header_children:
+        off = child.extent.start.offset
+        if off < sem1:
+            init_cursor = child
+        elif off < sem2:
+            cond_cursor = child
+        else:
+            inc_cursor = child
+
+    return init_cursor, cond_cursor, inc_cursor, body_cursor
+
+
 def _binop_token(cursor: cx.Cursor) -> str:
     """Pull the operator token out of a BINARY_OPERATOR cursor's extent.
 
@@ -627,27 +690,18 @@ class _FunctionTranslator:
 
         if k == cx.CursorKind.FOR_STMT:
             # Layer B: emit `c.for_general` (CStyleFor). The c-family
-            # lowering pass (step 5) rewrites this to `Let + While +
-            # Assign`; until then `lower.py` refuses to consume it.
+            # lowering pass rewrites this to `Let + While + Assign`.
             #
             # libclang exposes FOR_STMT children in source order with
-            # missing slots simply omitted from the children list. v3
-            # supports only the all-four-slots case `for (init; cond;
-            # inc) body` (sum.c uses this); sparse forms refuse so the
-            # supported subset stays a single, clearly-defined shape.
-            children = list(c.get_children())
-            if len(children) != 4:
-                raise _refuse(
-                    c,
-                    f"for-stmt with {len(children)} children — v3 only "
-                    f"supports fully-populated `for (init; cond; inc) body`. "
-                    f"Sparse forms (`for (;;)`, `for (init;;)`, etc.) refuse "
-                    f"until the supported subset grows."
-                )
-            init_cursor, cond_cursor, inc_cursor, body_cursor = children
-            init_stmt = self.stmt(init_cursor)
-            cond_expr = self.expr(cond_cursor)
-            inc_stmt = self.stmt(inc_cursor)
+            # missing slots simply omitted from the children list, so
+            # `for (;;) body` produces just one child (the body) and
+            # `for (init;;inc) body` produces three. We bucket each
+            # child by its source position relative to the two `;`
+            # tokens to recover which slot it fills.
+            init_cursor, cond_cursor, inc_cursor, body_cursor = _split_for_children(c)
+            init_stmt = self.stmt(init_cursor) if init_cursor is not None else None
+            cond_expr = self.expr(cond_cursor) if cond_cursor is not None else None
+            inc_stmt = self.stmt(inc_cursor) if inc_cursor is not None else None
             body = self._block(body_cursor)
             return (CStyleFor(
                 id=self._state.mint_cstyle_for_id(),
@@ -1058,19 +1112,12 @@ class _LayerATranslator:
             )
 
         if k == cx.CursorKind.FOR_STMT:
-            children = list(c.get_children())
-            if len(children) != 4:
-                raise _refuse(
-                    c,
-                    f"layer A: for-stmt with {len(children)} children — v3 "
-                    f"only supports fully-populated `for (init; cond; inc) body`."
-                )
-            init_cursor, cond_cursor, inc_cursor, body_cursor = children
+            init_cursor, cond_cursor, inc_cursor, body_cursor = _split_for_children(c)
             return CFor(
                 id=self._mint("cfor"),
-                init=self._for_init(init_cursor),
-                cond=self.expr(cond_cursor),
-                inc=self._for_init(inc_cursor),
+                init=(self._for_init(init_cursor) if init_cursor is not None else None),
+                cond=(self.expr(cond_cursor) if cond_cursor is not None else None),
+                inc=(self._for_init(inc_cursor) if inc_cursor is not None else None),
                 body=tuple(self.stmt(s) for s in self._compound_children(body_cursor)),
             )
 
