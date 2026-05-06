@@ -67,6 +67,7 @@ from .model import (
     PtrOffset,
     Break,
     Continue,
+    DoWhile,
     Return,
     ReturnExpr,
     ShortCircuitAnd,
@@ -339,6 +340,13 @@ def _walk_types_in_stmt(stmt, fn):
                 "stmts": tuple(_walk_types_in_stmt(s, fn) for s in stmt.body.stmts),
             }),
         })
+    if isinstance(stmt, DoWhile):
+        return stmt.model_copy(update={
+            "cond": _walk_types_in_expr(stmt.cond, fn),
+            "body": stmt.body.model_copy(update={
+                "stmts": tuple(_walk_types_in_stmt(s, fn) for s in stmt.body.stmts),
+            }),
+        })
     if isinstance(stmt, For):
         return stmt.model_copy(update={
             "lo":   _walk_types_in_expr(stmt.lo, fn),
@@ -526,6 +534,10 @@ def _collect_in_stmt(stmt, sink: set):
         _collect_in_expr(stmt.cond, sink)
         for s in stmt.body.stmts:
             _collect_in_stmt(s, sink)
+    elif isinstance(stmt, DoWhile):
+        for s in stmt.body.stmts:
+            _collect_in_stmt(s, sink)
+        _collect_in_expr(stmt.cond, sink)
     elif isinstance(stmt, For):
         _collect_in_expr(stmt.lo, sink)
         _collect_in_expr(stmt.hi, sink)
@@ -845,6 +857,13 @@ def _resolve_trait_calls_in_stmt(stmt, impl_index):
             "value": _resolve_trait_calls_in_expr(stmt.value, impl_index),
         })
     if isinstance(stmt, While):
+        return stmt.model_copy(update={
+            "cond": _resolve_trait_calls_in_expr(stmt.cond, impl_index),
+            "body": stmt.body.model_copy(update={
+                "stmts": tuple(_resolve_trait_calls_in_stmt(s, impl_index) for s in stmt.body.stmts),
+            }),
+        })
+    if isinstance(stmt, DoWhile):
         return stmt.model_copy(update={
             "cond": _resolve_trait_calls_in_expr(stmt.cond, impl_index),
             "body": stmt.body.model_copy(update={

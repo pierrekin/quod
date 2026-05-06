@@ -77,6 +77,7 @@ from quod.model import (
     StructType,
     Break,
     Continue,
+    DoWhile,
     TraitCall,
     TryExpr,
     Unreachable,
@@ -468,6 +469,14 @@ def _check_stmt(ctx: _Ctx, stmt) -> None:
                     _check_stmt(ctx, s)
             finally:
                 ctx.loop_depth -= 1
+        case DoWhile(cond=cond, body=body):
+            ctx.loop_depth += 1
+            try:
+                for s in body.stmts:
+                    _check_stmt(ctx, s)
+            finally:
+                ctx.loop_depth -= 1
+            _check_expr(ctx, cond)
         case For(lo=lo, hi=hi, body=body):
             _check_expr(ctx, lo)
             _check_expr(ctx, hi)
@@ -564,6 +573,18 @@ def _check_stmt_init(ctx: _Ctx, stmt, defined: set[str]) -> set[str] | None:
             # check reads inside the body against `defined`.
             _walk_definite_init(ctx, b, set(defined))
             return defined
+        case DoWhile(cond=cond, body=b):
+            # Body always runs at least once, so writes inside *can*
+            # count toward definite-init for reads of cond and after.
+            # But subsequent iterations re-execute body in arbitrary
+            # order, so we conservatively merge: defined-after-body
+            # if it falls through, else just `defined`.
+            after_body = _walk_definite_init(ctx, b, set(defined))
+            if after_body is None:
+                # body never falls through (every path returns/breaks)
+                return defined
+            _check_expr_reads(ctx, cond, after_body)
+            return after_body
         case For(var=var, lo=lo, hi=hi, body=b):
             _check_expr_reads(ctx, lo, defined)
             _check_expr_reads(ctx, hi, defined)

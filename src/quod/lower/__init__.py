@@ -51,6 +51,7 @@ from quod.model import (
     UsizeType,
     Break,
     Continue,
+    DoWhile,
     If,
     IfExpr,
     IntLit,
@@ -722,7 +723,7 @@ def _collect_local_bindings(
                     visit(for_body)
                 case If(then_body=t, else_body=e):
                     visit(t); visit(e)
-                case While(body=w_body):
+                case While(body=w_body) | DoWhile(body=w_body):
                     visit(w_body)
                 case Match(arms=arms):
                     # Match bindings are NOT pre-collected here — they're
@@ -960,6 +961,30 @@ def _lower_stmt(
                 loop_stack.pop()
             if not builder.block.is_terminated:
                 builder.branch(header_bb)
+
+            builder.position_at_end(exit_bb)
+            return
+        case DoWhile(body=body, cond=cond):
+            # Body runs unconditionally first, then we test cond and
+            # loop back. `continue` jumps to the cond block (per C
+            # semantics); `break` jumps to the exit.
+            body_bb = llvm_fn.append_basic_block("dowhile.body")
+            cond_bb = llvm_fn.append_basic_block("dowhile.cond")
+            exit_bb = llvm_fn.append_basic_block("dowhile.exit")
+            builder.branch(body_bb)
+
+            builder.position_at_end(body_bb)
+            loop_stack.append((cond_bb, exit_bb))
+            try:
+                lower_body(body)
+            finally:
+                loop_stack.pop()
+            if not builder.block.is_terminated:
+                builder.branch(cond_bb)
+
+            builder.position_at_end(cond_bb)
+            cond_val = lower_expr(cond)
+            builder.cbranch(cond_val, body_bb, exit_bb)
 
             builder.position_at_end(exit_bb)
             return
@@ -1360,7 +1385,7 @@ def _stmt_contains_with_arena(s) -> bool:
             return True
         case If(then_body=t, else_body=e):
             return any(_stmt_contains_with_arena(x) for x in (*t.stmts, *e.stmts))
-        case While(body=b) | For(body=b):
+        case While(body=b) | DoWhile(body=b) | For(body=b):
             return any(_stmt_contains_with_arena(x) for x in b.stmts)
     return False
 
@@ -1399,7 +1424,7 @@ def _desugar_stmts(stmts, return_type, next_id) -> tuple:
                         "stmts": _desugar_stmts(e.stmts, return_type, next_id),
                     }),
                 }))
-            case While(body=b):
+            case While(body=b) | DoWhile(body=b):
                 out.append(s.model_copy(update={
                     "body": b.model_copy(update={
                         "stmts": _desugar_stmts(b.stmts, return_type, next_id),
@@ -1455,7 +1480,7 @@ def _prepend_drop_before_returns(stmts, drop_stmt, return_type, next_id) -> tupl
                         "stmts": _prepend_drop_before_returns(e.stmts, drop_stmt, return_type, next_id),
                     }),
                 }))
-            case While(body=b):
+            case While(body=b) | DoWhile(body=b):
                 out.append(s.model_copy(update={
                     "body": b.model_copy(update={
                         "stmts": _prepend_drop_before_returns(b.stmts, drop_stmt, return_type, next_id),

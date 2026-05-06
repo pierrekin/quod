@@ -72,8 +72,10 @@ from quod.model import (
     CCall,
     CCompoundAssign,
     CContinue,
+    CDoWhile,
     CEnumConstRef,
     Continue,
+    DoWhile,
     CExprStmt,
     CFn,
     CFor,
@@ -571,6 +573,17 @@ def _check_stmt(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
             "a_id": a.id,
             "cond": _check_expr(a.cond, b.cond, path=f"{path}.cond", ctx=ctx),
             "body": _check_body(a.body, b_body_block, path=f"{path}.body", ctx=ctx),
+        }
+
+    if isinstance(a, CDoWhile):
+        if not isinstance(b, DoWhile):
+            raise LiftCheckError(f"{path}: layer-A CDoWhile vs layer-B {type(b).__name__}")
+        b_body_block = b.body.block if isinstance(b.body, CScopedBlock) else b.body
+        return {
+            "kind": "c.do_while ↔ do_while",
+            "a_id": a.id,
+            "body": _check_body(a.body, b_body_block, path=f"{path}.body", ctx=ctx),
+            "cond": _check_expr(a.cond, b.cond, path=f"{path}.cond", ctx=ctx),
         }
 
     if isinstance(a, CExprStmt):

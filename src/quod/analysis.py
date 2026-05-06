@@ -24,6 +24,7 @@ from quod.model import (
     ExprStmt,
     FieldRead,
     FieldSet,
+    DoWhile,
     For,
     If,
     IfExpr,
@@ -131,7 +132,7 @@ def _walk_calls_in_stmt(stmt) -> Iterator[Call]:
         case Store(ptr=p, value=v):
             yield from _walk_calls_in_expr(p)
             yield from _walk_calls_in_expr(v)
-        case While(cond=cond, body=body):
+        case While(cond=cond, body=body) | DoWhile(cond=cond, body=body):
             yield from _walk_calls_in_expr(cond)
             for s in body.stmts:
                 yield from _walk_calls_in_stmt(s)

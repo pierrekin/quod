@@ -56,6 +56,7 @@ from quod.model import (
     CCall,
     CCompoundAssign,
     CContinue,
+    CDoWhile,
     CEnumConstRef,
     Continue,
     CExpr,
@@ -64,6 +65,7 @@ from quod.model import (
     CFor,
     CForInit,
     CIf,
+    DoWhile,
     CIntLit,
     CMultiVarDecl,
     CNamedType,
@@ -692,6 +694,15 @@ class _FunctionTranslator:
             body = self._block(children[1])
             return (While(cond=cond, body=body),)
 
+        if k == cx.CursorKind.DO_STMT:
+            # DO_STMT children are (body, cond) in source order.
+            children = list(c.get_children())
+            if len(children) != 2:
+                raise _refuse(c, f"do-while with {len(children)} children")
+            body = self._block(children[0])
+            cond = self.expr(children[1])
+            return (DoWhile(body=body, cond=cond),)
+
         if k == cx.CursorKind.FOR_STMT:
             # Layer B: emit `c.for_general` (CStyleFor). The c-family
             # lowering pass rewrites this to `Let + While + Assign`.
@@ -1156,6 +1167,17 @@ class _LayerATranslator:
             return CWhile(
                 id=self._mint("cwhile"),
                 cond=cond, body=body,
+            )
+
+        if k == cx.CursorKind.DO_STMT:
+            children = list(c.get_children())
+            if len(children) != 2:
+                raise _refuse(c, f"layer A: do-while with {len(children)} children")
+            body = tuple(self.stmt(s) for s in self._compound_children(children[0]))
+            cond = self.expr(children[1])
+            return CDoWhile(
+                id=self._mint("cdowhile"),
+                body=body, cond=cond,
             )
 
         if k == cx.CursorKind.CALL_EXPR:

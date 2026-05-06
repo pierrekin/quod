@@ -1,0 +1,1269 @@
+{
+  "constants": [
+    {
+      "name": ".str.do_while.0",
+      "value": "count_down(5)   = %d\n"
+    },
+    {
+      "name": ".str.do_while.1",
+      "value": "count_down(-3)  = %d\n"
+    },
+    {
+      "name": ".str.do_while.2",
+      "value": "sum_until(10)   = %d\n"
+    }
+  ],
+  "functions": [
+    {
+      "id": "@fn_c_lowered_count_down",
+      "name": "count_down",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_lowered_count_down_1",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "i",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.param_ref",
+              "name": "n"
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "iters",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          {
+            "kind": "quod.do_while",
+            "body": {
+              "id": "@blk_c_1",
+              "stmts": [
+                {
+                  "kind": "quod.assign",
+                  "name": "iters",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "iters"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 1
+                    }
+                  }
+                },
+                {
+                  "kind": "quod.assign",
+                  "name": "i",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "sub",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 1
+                    }
+                  }
+                }
+              ]
+            },
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "sgt",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "i"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 0
+              }
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "iters"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from do_while.c:7"
+      ]
+    },
+    {
+      "id": "@fn_c_lowered_sum_until",
+      "name": "sum_until",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_lowered_sum_until_1",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "i",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "total",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          {
+            "kind": "quod.do_while",
+            "body": {
+              "id": "@blk_c_3",
+              "stmts": [
+                {
+                  "kind": "quod.assign",
+                  "name": "i",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 1
+                    }
+                  }
+                },
+                {
+                  "kind": "quod.if",
+                  "cond": {
+                    "kind": "llvm.binop",
+                    "op": "eq",
+                    "lhs": {
+                      "kind": "llvm.binop",
+                      "op": "srem",
+                      "lhs": {
+                        "kind": "quod.local_ref",
+                        "name": "i"
+                      },
+                      "rhs": {
+                        "kind": "llvm.const_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
+                        "value": 3
+                      }
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 0
+                    }
+                  },
+                  "then_body": {
+                    "id": "@blk_c_4",
+                    "stmts": [
+                      {
+                        "kind": "quod.continue"
+                      }
+                    ]
+                  },
+                  "else_body": {
+                    "id": "@blk_c_5",
+                    "stmts": []
+                  }
+                },
+                {
+                  "kind": "quod.assign",
+                  "name": "total",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "total"
+                    },
+                    "rhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    }
+                  }
+                }
+              ]
+            },
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "slt",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "i"
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "n"
+              }
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "total"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from do_while.c:18"
+      ]
+    },
+    {
+      "id": "@fn_c_lowered_main",
+      "name": "main",
+      "params": [],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_lowered_main_1",
+        "stmts": [
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.do_while.0"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "count_down",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 5
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.do_while.1"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "count_down",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": -3
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.do_while.2"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "sum_until",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 10
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from do_while.c:33"
+      ]
+    }
+  ],
+  "externs": [
+    {
+      "name": "printf",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ],
+      "varargs": true,
+      "linkage": {
+        "kind": "linkage.libc"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_count_down",
+      "target": "@fn_c_count_down"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_sum_until",
+      "target": "@fn_c_sum_until"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_main",
+      "target": "@fn_c_main"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_2",
+      "target": "@blk_c_lowered_count_down_1"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@fn_c_count_down",
+      "target": "@fn_c_lowered_count_down"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_6",
+      "target": "@blk_c_lowered_sum_until_1"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@fn_c_sum_until",
+      "target": "@fn_c_lowered_sum_until"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_7",
+      "target": "@blk_c_lowered_main_1"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@fn_c_main",
+      "target": "@fn_c_lowered_main"
+    }
+  ],
+  "equivalences": [
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@fn_c_count_down",
+      "b_node_id": "@fn_c_lowered_count_down",
+      "regime": "witness",
+      "justification": {
+        "kind": "family_lowering",
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@fn_c_sum_until",
+      "b_node_id": "@fn_c_lowered_sum_until",
+      "regime": "witness",
+      "justification": {
+        "kind": "family_lowering",
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@fn_c_main",
+      "b_node_id": "@fn_c_lowered_main",
+      "regime": "witness",
+      "justification": {
+        "kind": "family_lowering",
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_count_down",
+      "b_node_id": "@fn_c_count_down",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/count_down.txt",
+        "artifact_hash": "cda0080b44c686b452536d9f601a280e91a1570ffc8b54af69448e91e505fdbb"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_sum_until",
+      "b_node_id": "@fn_c_sum_until",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/sum_until.txt",
+        "artifact_hash": "343b204b5d1991becd245c88851121c1e3a3073f6a1187da0fe836880d666a24"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_main",
+      "b_node_id": "@fn_c_main",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/main.txt",
+        "artifact_hash": "07b6fbda2e803ea34620206f9e9dd51b8753a032a26e2f617124322c918cb699"
+      }
+    }
+  ],
+  "source_units": [
+    {
+      "kind": "c_unit",
+      "id": "@cunit_c_do_while",
+      "source_path": "do_while.c",
+      "functions": [
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_count_down",
+          "name": "count_down",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [
+            {
+              "kind": "c.param",
+              "name": "n",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            }
+          ],
+          "body": [
+            {
+              "kind": "c.var_decl",
+              "id": "@cvardecl_c_count_down_1",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              },
+              "name": "i",
+              "init": {
+                "kind": "c.var_ref",
+                "name": "n"
+              }
+            },
+            {
+              "kind": "c.var_decl",
+              "id": "@cvardecl_c_count_down_2",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              },
+              "name": "iters",
+              "init": {
+                "kind": "c.lit_int",
+                "value": 0
+              }
+            },
+            {
+              "kind": "c.do_while",
+              "id": "@cdowhile_c_count_down_1",
+              "body": [
+                {
+                  "kind": "c.assign",
+                  "id": "@cassign_c_count_down_1",
+                  "target": "iters",
+                  "value": {
+                    "kind": "c.binop",
+                    "id": "@cbinop_c_count_down_1",
+                    "op": "+",
+                    "lhs": {
+                      "kind": "c.var_ref",
+                      "name": "iters"
+                    },
+                    "rhs": {
+                      "kind": "c.lit_int",
+                      "value": 1
+                    }
+                  }
+                },
+                {
+                  "kind": "c.assign",
+                  "id": "@cassign_c_count_down_2",
+                  "target": "i",
+                  "value": {
+                    "kind": "c.binop",
+                    "id": "@cbinop_c_count_down_2",
+                    "op": "-",
+                    "lhs": {
+                      "kind": "c.var_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "c.lit_int",
+                      "value": 1
+                    }
+                  }
+                }
+              ],
+              "cond": {
+                "kind": "c.binop",
+                "id": "@cbinop_c_count_down_3",
+                "op": ">",
+                "lhs": {
+                  "kind": "c.var_ref",
+                  "name": "i"
+                },
+                "rhs": {
+                  "kind": "c.lit_int",
+                  "value": 0
+                }
+              }
+            },
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_count_down_1",
+              "value": {
+                "kind": "c.var_ref",
+                "name": "iters"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_sum_until",
+          "name": "sum_until",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [
+            {
+              "kind": "c.param",
+              "name": "n",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            }
+          ],
+          "body": [
+            {
+              "kind": "c.var_decl",
+              "id": "@cvardecl_c_sum_until_1",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              },
+              "name": "i",
+              "init": {
+                "kind": "c.lit_int",
+                "value": 0
+              }
+            },
+            {
+              "kind": "c.var_decl",
+              "id": "@cvardecl_c_sum_until_2",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              },
+              "name": "total",
+              "init": {
+                "kind": "c.lit_int",
+                "value": 0
+              }
+            },
+            {
+              "kind": "c.do_while",
+              "id": "@cdowhile_c_sum_until_1",
+              "body": [
+                {
+                  "kind": "c.assign",
+                  "id": "@cassign_c_sum_until_1",
+                  "target": "i",
+                  "value": {
+                    "kind": "c.binop",
+                    "id": "@cbinop_c_sum_until_1",
+                    "op": "+",
+                    "lhs": {
+                      "kind": "c.var_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "c.lit_int",
+                      "value": 1
+                    }
+                  }
+                },
+                {
+                  "kind": "c.if",
+                  "id": "@cif_c_sum_until_1",
+                  "cond": {
+                    "kind": "c.binop",
+                    "id": "@cbinop_c_sum_until_2",
+                    "op": "==",
+                    "lhs": {
+                      "kind": "c.binop",
+                      "id": "@cbinop_c_sum_until_3",
+                      "op": "%",
+                      "lhs": {
+                        "kind": "c.var_ref",
+                        "name": "i"
+                      },
+                      "rhs": {
+                        "kind": "c.lit_int",
+                        "value": 3
+                      }
+                    },
+                    "rhs": {
+                      "kind": "c.lit_int",
+                      "value": 0
+                    }
+                  },
+                  "then_body": [
+                    {
+                      "kind": "c.continue",
+                      "id": "@ccontinue_c_sum_until_1"
+                    }
+                  ],
+                  "else_body": []
+                },
+                {
+                  "kind": "c.assign",
+                  "id": "@cassign_c_sum_until_2",
+                  "target": "total",
+                  "value": {
+                    "kind": "c.binop",
+                    "id": "@cbinop_c_sum_until_4",
+                    "op": "+",
+                    "lhs": {
+                      "kind": "c.var_ref",
+                      "name": "total"
+                    },
+                    "rhs": {
+                      "kind": "c.var_ref",
+                      "name": "i"
+                    }
+                  }
+                }
+              ],
+              "cond": {
+                "kind": "c.binop",
+                "id": "@cbinop_c_sum_until_5",
+                "op": "<",
+                "lhs": {
+                  "kind": "c.var_ref",
+                  "name": "i"
+                },
+                "rhs": {
+                  "kind": "c.var_ref",
+                  "name": "n"
+                }
+              }
+            },
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_sum_until_1",
+              "value": {
+                "kind": "c.var_ref",
+                "name": "total"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_main",
+          "name": "main",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [],
+          "body": [
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_1",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_2",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_1",
+                    "value": "count_down(5)   = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_1",
+                    "callee": "count_down",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 5
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_2",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_4",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_2",
+                    "value": "count_down(-3)  = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_3",
+                    "callee": "count_down",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": -3
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_3",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_6",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_3",
+                    "value": "sum_until(10)   = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_5",
+                    "callee": "sum_until",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 10
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_main_1",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "structured_functions": [
+    {
+      "id": "@fn_c_count_down",
+      "name": "count_down",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_2",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "i",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.param_ref",
+              "name": "n"
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "iters",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          {
+            "kind": "quod.do_while",
+            "body": {
+              "id": "@blk_c_1",
+              "stmts": [
+                {
+                  "kind": "quod.assign",
+                  "name": "iters",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "iters"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 1
+                    }
+                  }
+                },
+                {
+                  "kind": "quod.assign",
+                  "name": "i",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "sub",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 1
+                    }
+                  }
+                }
+              ]
+            },
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "sgt",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "i"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 0
+              }
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "iters"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from do_while.c:7"
+      ]
+    },
+    {
+      "id": "@fn_c_sum_until",
+      "name": "sum_until",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_6",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "i",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          {
+            "kind": "quod.let",
+            "name": "total",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          {
+            "kind": "quod.do_while",
+            "body": {
+              "id": "@blk_c_3",
+              "stmts": [
+                {
+                  "kind": "quod.assign",
+                  "name": "i",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 1
+                    }
+                  }
+                },
+                {
+                  "kind": "quod.if",
+                  "cond": {
+                    "kind": "llvm.binop",
+                    "op": "eq",
+                    "lhs": {
+                      "kind": "llvm.binop",
+                      "op": "srem",
+                      "lhs": {
+                        "kind": "quod.local_ref",
+                        "name": "i"
+                      },
+                      "rhs": {
+                        "kind": "llvm.const_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
+                        "value": 3
+                      }
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 0
+                    }
+                  },
+                  "then_body": {
+                    "id": "@blk_c_4",
+                    "stmts": [
+                      {
+                        "kind": "quod.continue"
+                      }
+                    ]
+                  },
+                  "else_body": {
+                    "id": "@blk_c_5",
+                    "stmts": []
+                  }
+                },
+                {
+                  "kind": "quod.assign",
+                  "name": "total",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "quod.local_ref",
+                      "name": "total"
+                    },
+                    "rhs": {
+                      "kind": "quod.local_ref",
+                      "name": "i"
+                    }
+                  }
+                }
+              ]
+            },
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "slt",
+              "lhs": {
+                "kind": "quod.local_ref",
+                "name": "i"
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "n"
+              }
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "total"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from do_while.c:18"
+      ]
+    },
+    {
+      "id": "@fn_c_main",
+      "name": "main",
+      "params": [],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_7",
+        "stmts": [
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.do_while.0"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "count_down",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 5
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.do_while.1"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "count_down",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": -3
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.do_while.2"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "sum_until",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 10
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from do_while.c:33"
+      ]
+    }
+  ]
+}

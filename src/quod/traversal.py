@@ -49,6 +49,7 @@ from .model import (
     PtrOffset,
     Break,
     Continue,
+    DoWhile,
     Return,
     ReturnExpr,
     ShortCircuitAnd,
@@ -176,6 +177,13 @@ def substitute_in_stmt(stmt, type_fn: Callable):
     if isinstance(stmt, Assign):
         return stmt.model_copy(update={"value": substitute_in_expr(stmt.value, type_fn)})
     if isinstance(stmt, While):
+        return stmt.model_copy(update={
+            "cond": substitute_in_expr(stmt.cond, type_fn),
+            "body": stmt.body.model_copy(update={
+                "stmts": tuple(substitute_in_stmt(s, type_fn) for s in stmt.body.stmts),
+            }),
+        })
+    if isinstance(stmt, DoWhile):
         return stmt.model_copy(update={
             "cond": substitute_in_expr(stmt.cond, type_fn),
             "body": stmt.body.model_copy(update={

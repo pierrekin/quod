@@ -674,6 +674,40 @@ def test_break_outside_loop_refuses(tmp_path):
         )
 
 
+DO_WHILE_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/do_while/do_while.c"
+
+
+def test_do_while_lifts_to_core():
+    """`do { ... } while (cond);` lifts to layer-A CDoWhile and layer-B
+    DoWhile (core)."""
+    from quod.model import CDoWhile, DoWhile
+    p = ingest_c(DO_WHILE_C)
+    cfn = next(cf for cf in p.source_units[0].functions if cf.name == "count_down")
+    cdw = next(s for s in cfn.body if isinstance(s, CDoWhile))
+    assert cdw is not None
+
+    fn_b = next(f for f in p.structured_functions if f.name == "count_down")
+    dw = next(s for s in fn_b.body.stmts if isinstance(s, DoWhile))
+    assert dw is not None
+
+
+def test_do_while_example_compiles_and_runs(tmp_path):
+    import subprocess
+    from quod.lower import compile_program
+    p = ingest_c(DO_WHILE_C)
+    res = compile_program(
+        p, build_dir=tmp_path, bins=(("dw", "main"),),
+        profile=2, link=True,
+    )
+    out = subprocess.run([str(res.bins[0].binary)], capture_output=True, text=True, timeout=10)
+    assert out.returncode == 0
+    # count_down(-3) = 1 confirms the body always runs at least once.
+    assert "count_down(-3)  = 1" in out.stdout
+    # sum_until(10) = 37 confirms continue jumps to the cond check
+    # (skipping multiples of 3 in the accumulation).
+    assert "sum_until(10)   = 37" in out.stdout
+
+
 def test_every_c_corpus_example_emits_layer_a():
     """Coverage sweep: every example now produces a `source_units`
     entry. The layer-A widening landed in three steps (calls /

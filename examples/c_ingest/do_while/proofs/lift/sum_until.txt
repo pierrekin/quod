@@ -1,0 +1,143 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_sum_until",
+    "b_id": "@fn_c_sum_until",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_6",
+      "stmts": [
+        {
+          "a_id": "@cvardecl_c_sum_until_1",
+          "init": {
+            "kind": "int_lit",
+            "value": 0
+          },
+          "kind": "var_decl \u2194 let",
+          "name": "i"
+        },
+        {
+          "a_id": "@cvardecl_c_sum_until_2",
+          "init": {
+            "kind": "int_lit",
+            "value": 0
+          },
+          "kind": "var_decl \u2194 let",
+          "name": "total"
+        },
+        {
+          "a_id": "@cdowhile_c_sum_until_1",
+          "body": {
+            "a_block": "<inline>",
+            "b_block_id": "@blk_c_3",
+            "stmts": [
+              {
+                "a_id": "@cassign_c_sum_until_1",
+                "kind": "assign \u2194 assign",
+                "target": "i",
+                "value": {
+                  "kind": "binop(+) \u2194 binop(add)",
+                  "lhs": {
+                    "kind": "var_ref \u2194 local_ref",
+                    "name": "i"
+                  },
+                  "rhs": {
+                    "kind": "int_lit",
+                    "value": 1
+                  }
+                }
+              },
+              {
+                "a_id": "@cif_c_sum_until_1",
+                "cond": {
+                  "kind": "binop(==) \u2194 binop(eq)",
+                  "lhs": {
+                    "kind": "binop(%) \u2194 binop(srem)",
+                    "lhs": {
+                      "kind": "var_ref \u2194 local_ref",
+                      "name": "i"
+                    },
+                    "rhs": {
+                      "kind": "int_lit",
+                      "value": 3
+                    }
+                  },
+                  "rhs": {
+                    "kind": "int_lit",
+                    "value": 0
+                  }
+                },
+                "else_body": {
+                  "a_block": "<inline>",
+                  "b_block_id": "@blk_c_5",
+                  "stmts": []
+                },
+                "kind": "c.if \u2194 if",
+                "then_body": {
+                  "a_block": "<inline>",
+                  "b_block_id": "@blk_c_4",
+                  "stmts": [
+                    {
+                      "a_id": "@ccontinue_c_sum_until_1",
+                      "kind": "c.continue \u2194 continue"
+                    }
+                  ]
+                }
+              },
+              {
+                "a_id": "@cassign_c_sum_until_2",
+                "kind": "assign \u2194 assign",
+                "target": "total",
+                "value": {
+                  "kind": "binop(+) \u2194 binop(add)",
+                  "lhs": {
+                    "kind": "var_ref \u2194 local_ref",
+                    "name": "total"
+                  },
+                  "rhs": {
+                    "kind": "var_ref \u2194 local_ref",
+                    "name": "i"
+                  }
+                }
+              }
+            ]
+          },
+          "cond": {
+            "kind": "binop(<) \u2194 binop(slt)",
+            "lhs": {
+              "kind": "var_ref \u2194 local_ref",
+              "name": "i"
+            },
+            "rhs": {
+              "kind": "var_ref \u2194 param_ref",
+              "name": "n"
+            }
+          },
+          "kind": "c.do_while \u2194 do_while"
+        },
+        {
+          "a_id": "@creturn_c_sum_until_1",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "var_ref \u2194 local_ref",
+            "name": "total"
+          }
+        }
+      ]
+    },
+    "name": "sum_until",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "n"
+      }
+    ],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

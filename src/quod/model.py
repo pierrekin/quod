@@ -714,6 +714,16 @@ class While(_Node):
     body: Block
 
 
+class DoWhile(_Node):
+    """Post-test loop. Runs `body` unconditionally, then evaluates
+    `cond` and loops back if true. The body always executes at least
+    once. Inside `body`, `continue` jumps to the cond check (matching
+    C's `do { ... } while (...);` semantics)."""
+    kind: Literal["quod.do_while"] = "quod.do_while"
+    body: Block
+    cond: Expr  # must lower to i1
+
+
 class For(_Node):
     """Bounded iteration: `var` runs from `lo` (inclusive) to `hi` (exclusive),
     incrementing by 1 each iteration. `lo` and `hi` are evaluated once before
@@ -840,7 +850,8 @@ class Match(_Node):
 Statement = Annotated[
     Union[
         ReturnExpr, Return, Unreachable, Break, Continue, If, Let, Assign,
-        While, For, ExprStmt, FieldSet, Store, StoreField, WithArena, Match,
+        While, DoWhile, For, ExprStmt, FieldSet, Store, StoreField, WithArena,
+        Match,
         # Forward-declared `c.*` family extension. CStyleFor is defined
         # below near the staged-lift section; the union uses a string
         # forward-ref to keep its definition close to the other family
@@ -1944,6 +1955,16 @@ class CWhile(_Node):
     body: tuple["CStmt", ...] = ()
 
 
+class CDoWhile(_Node):
+    """`do { body } while (cond);` — post-test loop. Layer A preserves
+    the source statement; the lift produces a layer-B `DoWhile` (core).
+    The body always executes at least once."""
+    kind: Literal["c.do_while"] = "c.do_while"
+    id: str = Field(default_factory=lambda: _mint_node_id("cdowhile"))
+    body: tuple["CStmt", ...] = ()
+    cond: CExpr
+
+
 class CExprStmt(_Node):
     """An expression evaluated for its side effect — typically a call
     like `printf(...)`. v6 only emits `CExprStmt(CCall(...))`; bare
@@ -1998,7 +2019,7 @@ class CMultiVarDecl(_Node):
 
 CStmt = Annotated[
     Union[CVarDecl, CMultiVarDecl, CAssign, CCompoundAssign, CReturn,
-          CFor, CIf, CWhile, CExprStmt, CBreak, CContinue],
+          CFor, CIf, CWhile, CDoWhile, CExprStmt, CBreak, CContinue],
     Field(discriminator="kind"),
 ]
 

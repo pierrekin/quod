@@ -37,8 +37,10 @@ from quod.model import (
     CCall,
     CCompoundAssign,
     CContinue,
+    CDoWhile,
     Continue,
     CEnumConstRef,
+    DoWhile,
     CExprStmt,
     CFn,
     CFor,
@@ -537,7 +539,27 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
                                           "lhs": {"kind": "quod.local_ref", "name": "i"},
                                           "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}}]},
         },
-        "see_also": ["quod.for"],
+        "see_also": ["quod.do_while", "quod.for"],
+    },
+    "quod.do_while": {
+        "class": DoWhile,
+        "summary": (
+            "Post-test loop. Body runs unconditionally first, then cond "
+            "is evaluated; loops back if true. The body always executes "
+            "at least once. Inside the body, `continue` jumps to the "
+            "cond check (matches C `do { ... } while (...);`)."
+        ),
+        "example": {
+            "kind": "quod.do_while",
+            "body": {"stmts": [{"kind": "quod.assign", "name": "i",
+                                "value": {"kind": "llvm.binop", "op": "add",
+                                          "lhs": {"kind": "quod.local_ref", "name": "i"},
+                                          "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}}]},
+            "cond": {"kind": "llvm.binop", "op": "slt",
+                     "lhs": {"kind": "quod.local_ref", "name": "i"},
+                     "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 10}},
+        },
+        "see_also": ["quod.while", "quod.for"],
     },
     "quod.for": {
         "class": For,
@@ -1286,6 +1308,20 @@ _KIND_INFO["c.if"] = {
     },
 }
 
+_KIND_INFO["c.do_while"] = {
+    "class": CDoWhile,
+    "summary": (
+        "`do { body } while (cond);` — post-test loop. Layer A "
+        "preserves the source statement; lifts to layer-B `DoWhile` "
+        "(core)."
+    ),
+    "example": {
+        "kind": "c.do_while",
+        "body": [],
+        "cond": {"kind": "c.lit_int", "value": 1},
+    },
+}
+
 _KIND_INFO["c.while"] = {
     "class": CWhile,
     "summary": "`while (cond) { body }` — pre-test loop.",
@@ -1394,7 +1430,8 @@ _CATEGORIES: dict[str, list[str]] = {
     "statement": [
         "quod.return_expr", "quod.return", "quod.unreachable",
         "quod.break", "quod.continue", "quod.if",
-        "quod.let", "quod.assign", "quod.while", "quod.for", "quod.expr_stmt",
+        "quod.let", "quod.assign", "quod.while", "quod.do_while",
+        "quod.for", "quod.expr_stmt",
         "quod.field_set", "quod.store", "quod.store_field",
         "quod.with_arena", "quod.match",
     ],
@@ -1419,7 +1456,7 @@ _CATEGORIES: dict[str, list[str]] = {
     "source.c": [
         "c_unit", "c.fn", "c.param", "c.type", "c.type.ptr",
         "c.var_decl", "c.multi_var_decl", "c.assign", "c.compound_assign",
-        "c.return", "c.for", "c.if", "c.while", "c.expr_stmt",
+        "c.return", "c.for", "c.if", "c.while", "c.do_while", "c.expr_stmt",
         "c.break", "c.continue",
         "c.binop", "c.lit_int", "c.lit_str", "c.var_ref",
         "c.enum_const_ref", "c.call",
