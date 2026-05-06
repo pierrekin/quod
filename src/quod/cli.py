@@ -488,7 +488,9 @@ def ingest_callback(ctx: typer.Context) -> None:
                 raise typer.Exit(1)
             clang_args = _resolve_ingest_args(cfg, entry, source_path=source)
             ingested = _run_one_c_ingest(source, clang_args=clang_args)
-            program = merge_program(program, ingested)
+            program, warnings = merge_program(program, ingested)
+            for w in warnings:
+                typer.echo(f"warning: {w}", err=True)
             typer.echo(
                 f"ingested {source} ({len(ingested.functions)} function(s))"
             )
@@ -551,7 +553,9 @@ def ingest_c_cmd(
     with _exclusive_lock():
         program = _load_or_init_program(program_path)
         ingested = _run_one_c_ingest(source, clang_args=clang_args)
-        program = merge_program(program, ingested)
+        program, warnings = merge_program(program, ingested)
+        for w in warnings:
+            typer.echo(f"warning: {w}", err=True)
         program = _prove_lifts_for_ingest(program, cfg)
         save_program(program, program_path)
 
