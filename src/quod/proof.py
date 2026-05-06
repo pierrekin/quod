@@ -147,12 +147,12 @@ def _expr_to_smt(expr, state: _SmtState) -> str:
             )
         case ShortCircuitOr() | ShortCircuitAnd():
             raise NotImplementedError(
-                "can't lower short-circuit Or/And for SMT in this round; "
+                "can't lower short-circuit Or/And for SMT; "
                 "rewrite as nested If if you need a proof"
             )
         case IfExpr():
             raise NotImplementedError(
-                "can't lower IfExpr (ternary) for SMT in this round; "
+                "can't lower IfExpr (ternary) for SMT; "
                 "rewrite as a statement-level If if you need a proof"
             )
         case BinOp(op=op, lhs=l, rhs=r) if op in _SMT_BINOP:
@@ -165,7 +165,7 @@ def _expr_to_smt(expr, state: _SmtState) -> str:
             # zero while SMT div floors; srem ≠ SMT mod; signed/unsigned
             # cmp; boolean-vs-integer ambiguity for or/and).
             raise NotImplementedError(
-                f"can't lower BinOp(op={op!r}) for SMT in this round"
+                f"can't lower BinOp(op={op!r}) for SMT"
             )
         case Call(function=fname, args=args):
             arg_terms = [_expr_to_smt(a, state) for a in args]

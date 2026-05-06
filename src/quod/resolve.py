@@ -62,7 +62,7 @@ def resolve_imports(program: Program, *, disabled_tiers: frozenset[str] = frozen
 
     For imports with a `wire` clause, the resolver substitutes the
     imported module's wirables to the bound types throughout the
-    module's body BEFORE merging it. v1: no transitive forwarding —
+    module's body BEFORE merging it. No transitive forwarding —
     wirables in a stdlib module that's transitively imported (rather
     than directly wired by the consumer) are an error.
 

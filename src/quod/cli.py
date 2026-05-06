@@ -1111,8 +1111,8 @@ def _find_csource_fn_ref(program: Program, ref: str) -> CFn:
         raise typer.Exit(_echo_err(
             f"no layer-A function matches {ref!r} — either the program "
             f"isn't C-derived (no source_units), or the function uses "
-            f"constructs outside the v6 layer-A subset (and hit the "
-            f"all-or-nothing fallback)"
+            f"constructs outside the supported layer-A subset (and hit "
+            f"the all-or-nothing fallback)"
         ))
     if len({cfn.id for cfn in by_id}) > 1:
         raise typer.Exit(_echo_err(

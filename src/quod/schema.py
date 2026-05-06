@@ -884,8 +884,8 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "`Program.equivalences`, not in `fn.claims`. Carries the "
             "regime / enforcement / justification metadata of any other "
             "claim. `domain` (predicate over which the equivalence "
-            "holds) is reserved for the predicates spike — v2 lands "
-            "with `domain=None` (always-true)."
+            "holds) is currently always `None` (always-true); a real "
+            "predicate domain is not yet supported."
         ),
         "example": {
             "kind": "equivalent_to",
@@ -1065,15 +1065,13 @@ _KIND_INFO["quod.match"] = {
 # ---------- Layer-A: C source-language nodes ----------
 #
 # Inert structural nodes that preserve the original C as a subtree of
-# the program graph. See `.scratch/c-ingest/00-overview.md`. v3 supports
-# the same int-only, no-structs/floats/switch C subset as the existing
-# ingester, narrowed further to what `sum.c` exercises (the smallest
-# end-to-end slice).
+# the program graph. The supported subset is int-only, no
+# structs/floats/switch — matching what the C ingester emits.
 
 _KIND_INFO["c.type"] = {
     "class": CNamedType,
     "summary": (
-        "A named scalar C type. v6 supports `int` and `char` "
+        "A named scalar C type. Currently supports `int` and `char` "
         "(`char*` is `c.type.ptr` wrapping `c.type` with name='char')."
     ),
     "example": {"kind": "c.type", "name": "int"},
@@ -1146,8 +1144,8 @@ _KIND_INFO["c.lit_str"] = {
 _KIND_INFO["c.call"] = {
     "class": CCall,
     "summary": (
-        "A C function call expression. v6 supports only direct calls "
-        "(non-indirect, non-function-pointer)."
+        "A C function call expression. Only direct calls are supported "
+        "(no indirect / function-pointer calls)."
     ),
     "example": {
         "kind": "c.call", "callee": "printf",
@@ -1161,8 +1159,8 @@ _KIND_INFO["c.call"] = {
 _KIND_INFO["c.array_subscript"] = {
     "class": CArraySubscript,
     "summary": (
-        "`base[index]` — array subscript. v6 only emits this inside "
-        "a `c.addr_of`; bare reads aren't yet supported."
+        "`base[index]` — array subscript. Only emitted inside a "
+        "`c.addr_of`; bare reads aren't yet supported."
     ),
     "example": {
         "kind": "c.array_subscript",
@@ -1223,7 +1221,7 @@ _KIND_INFO["c.unary"] = {
 _KIND_INFO["c.addr_of"] = {
     "class": CAddressOf,
     "summary": (
-        "`&expr` — address-of. v6 only emits this with a "
+        "`&expr` — address-of. Only emitted with a "
         "`c.array_subscript` target (`&p[k]` is C's pointer-arithmetic "
         "spelling, equivalent to `p + k` for char*)."
     ),
@@ -1292,7 +1290,7 @@ _KIND_INFO["c.compound_assign"] = {
 _KIND_INFO["c.assign"] = {
     "class": CAssign,
     "summary": (
-        "`s = s + i;` — assignment to an in-scope variable. v3 doesn't "
+        "`s = s + i;` — assignment to an in-scope variable. Layer A doesn't "
         "model field/indexed/dereferenced targets."
     ),
     "example": {
@@ -1418,7 +1416,7 @@ _KIND_INFO["c.expr_stmt"] = {
     "class": CExprStmt,
     "summary": (
         "A C expression evaluated for its side effect — typically a "
-        "call like `printf(...)`. v6 only emits this for calls; bare "
+        "call like `printf(...)`. Only emitted for calls; bare "
         "expression statements (e.g. `x;`) are refused at ingest time."
     ),
     "example": {
@@ -1531,8 +1529,7 @@ _CATEGORIES: dict[str, list[str]] = {
     ],
     "edge": ["edge.provenance"],
     "linkage": ["LibcLinkage", "RuntimeLinkage"],
-    # Layer-A nodes — original C source preserved as quod nodes. See
-    # .scratch/c-ingest/00-overview.md.
+    # Layer-A nodes — original C source preserved as quod nodes.
     "source.c": [
         "c_unit", "c.fn", "c.param", "c.type", "c.type.ptr",
         "c.var_decl", "c.multi_var_decl", "c.assign", "c.compound_assign",
@@ -1543,7 +1540,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "c.array_subscript", "c.addr_of", "c.unary", "c.ternary",
     ],
     # Layer-B `c.*` extensions — constructs core quod can't represent;
-    # lowered to core by lower/c_family.py (step 5).
+    # lowered to core by lower/c_family.py.
     "c": ["c.scoped_block", "c.for_general"],
 }
 

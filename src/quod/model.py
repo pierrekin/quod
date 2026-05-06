@@ -217,7 +217,7 @@ class FieldInit(_Node):
 
 
 class StructInit(_Node):
-    """Construct a struct value. v1: every field of the named def must be
+    """Construct a struct value. Every field of the named def must be
     initialized exactly once, in any order. Lowered to an `insertvalue`
     chain on `undef`.
 
@@ -516,8 +516,8 @@ class EnumType(_Node):
     Lowered as a tagged union: i8 discriminant + [N x i64] payload, where
     N is `max(1, max(len(variant.fields)))` and each payload field occupies
     one i64-sized slot (so payload field types are restricted to scalar
-    types — int widths up to i64, plus i8*; no struct or enum payload
-    fields in v1).
+    types — int widths up to i64, plus i8*; struct and enum payload
+    fields are not yet supported).
 
     `type_args`: same story as StructType — the monomorphization pass
     rewrites generic instantiations to mangled-name references with
@@ -686,11 +686,9 @@ class Block(_Node):
     """Identified container for a sequence of statements.
 
     Endpoint of provenance and equivalence edges across language-family
-    layers (see .scratch/c-ingest). The `id` is opaque, minted at
-    construction time, and persisted in JSON so reloads are deterministic.
-    Step 1 of the C-ingest redesign introduces this primitive without any
-    new semantics; step 2 wires `Program.edges` and `Equivalence` claims
-    that anchor on these IDs.
+    layers. The `id` is opaque, minted at construction time, and
+    persisted in JSON so reloads are deterministic. `Program.edges` and
+    `Equivalence` claims anchor on these IDs.
     """
     id: str = Field(default_factory=_mint_block_id)
     stmts: tuple["Statement", ...] = ()
@@ -1231,7 +1229,7 @@ class StructDef(_Node):
 
     By-value semantics: lowered to an LLVM identified struct type, passed
     and returned as values, no implicit pointer indirection. Pointers to
-    structs are out of v1 scope — opaque `i8*` if you need to hand one
+    structs aren't yet modeled — use opaque `i8*` if you need to hand one
     to an extern.
 
     `type_params` lists this struct's type parameters, e.g.
@@ -1357,9 +1355,9 @@ class Param(_Node):
 
 class Function(_Node):
     # Stable opaque ID — endpoint of provenance and equivalence edges
-    # across language-family layers (see .scratch/c-ingest). Auto-minted
-    # at construction; persists in JSON so reloads stay deterministic.
-    # Hand-supplied IDs (in JSON) override the default.
+    # across language-family layers. Auto-minted at construction;
+    # persists in JSON so reloads stay deterministic. Hand-supplied IDs
+    # (in JSON) override the default.
     id: str = Field(default_factory=_mint_function_id)
     name: str
     type_params: tuple[TypeParam, ...] = ()
@@ -1459,7 +1457,7 @@ class ExternFunction(_Node):
                     f"extern {self.name!r}: predicate references parameter "
                     f"{claim_param(c)!r}, but externs don't yet carry named "
                     f"params. Only return-scoped predicates are supported on "
-                    f"externs in this revision."
+                    f"externs."
                 )
             if not ret_is_int:
                 raise ValueError(
@@ -1500,7 +1498,7 @@ class TraitMethodSig(_Node):
     """One method signature in a `TraitDef`. No body; impls supply the
     body. Param/return types may reference `SelfType` (the implementing
     type) and any `TypeParamRef`s declared by the trait itself
-    (currently always empty — generic traits are post-v1)."""
+    (currently always empty — generic traits aren't yet supported)."""
     name: str
     params: tuple[Param, ...] = ()
     return_type: ReturnType
@@ -1552,7 +1550,7 @@ class ImplDef(_Node):
     in `for_type` (e.g. `impl<T> Drop for Box<T>`). When the
     corresponding template (`Box`) is instantiated, the mono pass
     generates one concrete impl per instantiation by binding the
-    impl's type-params from positions in `for_type.type_args`. v1
+    impl's type-params from positions in `for_type.type_args`. Current
     restriction: each `for_type.type_args[i]` must be either a
     `TypeParamRef` naming one of the impl's `type_params`, or a
     concrete type — no nested patterns like `Box<List<T>>`.
@@ -1658,9 +1656,9 @@ class Equivalence(_Node):
     The metadata fields (regime/enforcement/justification) mirror the
     `_Claim` shape so the existing claim plumbing — provers, the verify
     command, the stored-vs-derived discipline — extends uniformly.
-    `domain` is the predicate over which the equivalence holds; v2 lands
-    with `domain=None` (always-true) and the predicates spike replaces
-    this with a real `PredicateClaim` (see `.scratch/c-ingest`).
+    `domain` is the predicate over which the equivalence holds;
+    currently always `None` (always-true). A real predicate domain
+    (a `PredicateClaim`) is not yet supported.
 
     The two endpoints are symmetric — `~` is symmetric — but stored as
     `(a_node_id, b_node_id)` for stable JSON ordering. The `kind`
@@ -1676,9 +1674,9 @@ class Equivalence(_Node):
     regime: Regime = "axiom"
     enforcement: Enforcement = "trust"
     justification: Justification | None = None
-    # `domain` is reserved for the predicates spike. Until then every
-    # equivalence is "true everywhere"; storing None keeps the JSON shape
-    # forward-compatible without forcing a migration.
+    # Currently always None (every equivalence is "true everywhere");
+    # storing it keeps the JSON shape forward-compatible for when a real
+    # predicate domain is introduced.
     domain: None = None
 
     @model_serializer(mode="wrap")
@@ -1697,23 +1695,17 @@ class Equivalence(_Node):
 
 # ---------- Staged-lift: source-language and family-extension nodes ----------
 #
-# These nodes implement steps 3+ of the C-ingest redesign described in
-# .scratch/c-ingest/00-overview.md. The graph has three layers:
+# The graph has three layers:
 #
 #   Layer A — source language as authored (here: C). Lives under
-#             `Program.source_units`. Inert at v3 (no validation, no
-#             codegen) — exists so the original program is preserved as
-#             a first-class subtree of the graph.
+#             `Program.source_units`. Inert (no validation, no codegen)
+#             — exists so the original program is preserved as a
+#             first-class subtree of the graph.
 #   Layer B — core quod ∪ family extensions (here: `c.*`). The c-family
 #             lowering pass produces this from layer A; `lower.py`
 #             refuses to consume it.
 #   Layer C — pure core quod. What `lower.py` and the proof tooling
 #             operate on.
-#
-# Step 3 lands the *types* without producing any layer-A or layer-B
-# graphs from the existing ingester. Step 4 ports the C ingester to emit
-# layer A + layer B; step 5 implements the B→C lowering rule for
-# `c.for_general`.
 
 
 def _mint_node_id(prefix: str) -> str:
@@ -1735,9 +1727,9 @@ def _mint_node_id(prefix: str) -> str:
 
 class CNamedType(_Node):
     """A named scalar C type (`int`, `char`, etc.) — anything not a
-    composite (pointer, array, struct). v6 supports only `int` and
-    `char`; the lift-checker decides which `CNamedType` names map
-    cleanly onto layer-B types and refuses the rest.
+    composite (pointer, array, struct). Currently only `int` and
+    `char` are supported; the lift-checker decides which `CNamedType`
+    names map cleanly onto layer-B types and refuses the rest.
 
     JSON kind stays `c.type` for backward compatibility with the
     existing layer-A corpus; the Python class was renamed when
@@ -1810,12 +1802,11 @@ class CEnumConstRef(_Node):
 class CBinOp(_Node):
     """A binary operator in C source — arithmetic, comparison, bitwise,
     or logical. `op` is the operator's source-form spelling (`+`, `<`,
-    `&&`, etc.). v3 doesn't enumerate; the lifter is responsible for
-    refusing operators outside the supported subset.
+    `&&`, etc.). Layer A doesn't enumerate; the lifter is responsible
+    for refusing operators outside the supported subset.
 
     Has its own ID — for-loop conditions and other named expression
-    positions are edge endpoints in the worked example (see
-    `@a.cnd ~ @b.ccond` in `.scratch/c-ingest/00-overview.md`).
+    positions are edge endpoints.
     """
     kind: Literal["c.binop"] = "c.binop"
     id: str = Field(default_factory=lambda: _mint_node_id("cbinop"))
@@ -1837,8 +1828,8 @@ class CStringLit(_Node):
 
 class CCall(_Node):
     """A C function call expression — `printf("...", x)`,
-    `square(a)`, etc. `callee` is the called function's spelling; v6
-    only supports direct (non-indirect) calls."""
+    `square(a)`, etc. `callee` is the called function's spelling; only
+    direct (non-indirect) calls are supported."""
     kind: Literal["c.call"] = "c.call"
     id: str = Field(default_factory=lambda: _mint_node_id("ccall"))
     callee: str
@@ -1846,7 +1837,7 @@ class CCall(_Node):
 
 
 class CArraySubscript(_Node):
-    """`base[index]` — array subscript. v6 only emits this inside a
+    """`base[index]` — array subscript. Only emitted inside a
     `CAddressOf` (the lifter recognizes `&p[k]` as pointer arithmetic
     and produces a `PtrOffset` at layer B). Bare `arr[k]` reads —
     e.g. for an `int arr[]` value — aren't yet supported by the
@@ -1859,7 +1850,7 @@ class CArraySubscript(_Node):
 
 
 class CAddressOf(_Node):
-    """`&expr` — address-of. v6 only emits this with a
+    """`&expr` — address-of. Only emitted with a
     `CArraySubscript` target (`&p[k]` ≡ `p + k` for char-pointer
     arithmetic). Other `&` forms (`&local`, `&struct.field`, …) are
     refused at ingest time."""
@@ -1910,9 +1901,7 @@ class CUnary(_Node):
       ~x  ↔  BinOp("xor", x',         IntLit(-1))  (one's-complement)
 
     The lift-checker pairs CUnary with the corresponding layer-B
-    BinOp shape. (Earlier ingest revisions folded `-x` directly to
-    the BinOp form at lift time — that was a documented infraction
-    of the "layer A is source-form" contract; CUnary is the fix.)
+    BinOp shape.
     """
     kind: Literal["c.unary"] = "c.unary"
     id: str = Field(default_factory=lambda: _mint_node_id("cunary"))
@@ -1944,8 +1933,8 @@ class CVarDecl(_Node):
 
 class CAssign(_Node):
     """`s = s + i;` — assignment to an in-scope variable. The target is
-    a name; v3 doesn't model assignments to fields, indexed locations,
-    or pointer dereferences."""
+    a name; assignments to fields, indexed locations, or pointer
+    dereferences aren't yet modeled."""
     kind: Literal["c.assign"] = "c.assign"
     id: str = Field(default_factory=lambda: _mint_node_id("cassign"))
     target: str
@@ -2031,7 +2020,7 @@ class CDoWhile(_Node):
 
 class CExprStmt(_Node):
     """An expression evaluated for its side effect — typically a call
-    like `printf(...)`. v6 only emits `CExprStmt(CCall(...))`; bare
+    like `printf(...)`. Only `CExprStmt(CCall(...))` is emitted; bare
     expression statements (e.g. `x;`) are refused at ingest time."""
     kind: Literal["c.expr_stmt"] = "c.expr_stmt"
     id: str = Field(default_factory=lambda: _mint_node_id("cexprstmt"))
@@ -2113,8 +2102,8 @@ class CUnit(_Node):
 # ----- Layer B: c.* extension nodes -----
 #
 # Constructs core quod can't represent on its own. Lowered to core by
-# `lower/c_family.py` (step 5). `lower.py` refuses to consume them
-# directly — the c-family pass must run first.
+# `lower/c_family.py`. `lower.py` refuses to consume them directly —
+# the c-family pass must run first.
 
 
 class CScopedBlock(_Node):
@@ -2122,13 +2111,12 @@ class CScopedBlock(_Node):
     edges anchor on; the wrapper carries family-specific scope semantics
     (which decls die at the closing brace). Lowered by c-family lowering
     to its inner block — the wrapper is discarded by the time `lower.py`
-    sees the program. See `.scratch/c-ingest/00-overview.md` ("Blocks"
-    section).
+    sees the program.
 
     `scope_locals` records the names of locals whose scope ends with
-    this block. v3 stores them as a tuple of names; richer scope
-    metadata (types, kill points within the block) accumulates as
-    lowering rules grow.
+    this block. Currently a tuple of names; richer scope metadata
+    (types, kill points within the block) can accumulate as lowering
+    rules grow.
     """
     kind: Literal["c.scoped_block"] = "c.scoped_block"
     id: str = Field(default_factory=lambda: _mint_node_id("cscope"))
@@ -2366,7 +2354,7 @@ def _check_no_struct_cycle(start: str, by_name: dict[str, "StructDef"]) -> None:
             chain = " -> ".join(path + (name,))
             raise ValueError(
                 f"struct {start!r} contains itself by value (cycle: {chain}); "
-                f"v1 has no pointer-to-struct, so recursive structs are unrepresentable"
+                f"quod has no pointer-to-struct, so recursive structs are unrepresentable"
             )
         if name in visiting:
             return

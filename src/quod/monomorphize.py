@@ -626,10 +626,10 @@ def _index_generic_impls(impls) -> dict[str, list[ImplDef]]:
     monomorphized, mono looks up "Box" here, computes the substitution
     (T → i64), and instantiates the impl.
 
-    v1 restriction: `for_type` must be a `StructType` or `EnumType`,
+    Current restriction: `for_type` must be a `StructType` or `EnumType`,
     and each position in `for_type.type_args` is either a TypeParamRef
     (one of the impl's type-params) or a concrete type. No nested
-    patterns like `Box<List<T>>` for v1 — `for_type` is one level deep.
+    patterns like `Box<List<T>>` — `for_type` is one level deep.
     """
     out: dict[str, list[ImplDef]] = {}
     for impl in impls:
@@ -641,7 +641,7 @@ def _index_generic_impls(impls) -> dict[str, list[ImplDef]]:
         else:
             raise ValueError(
                 f"generic impl {impl.trait!r} for {for_type!r}: only "
-                f"StructType/EnumType for_types supported in v1"
+                f"StructType/EnumType for_types are supported"
             )
     return out
 

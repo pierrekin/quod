@@ -2,7 +2,7 @@
 
 The C ingester emits an `Equivalence` claim between each layer-A
 `CFn` and its layer-B `Function` to mark that the lift is a
-faithful transcription. v6 emitted these claims as `regime=axiom`
+faithful transcription. The ingester emits these as `regime=axiom`
 with a `ManualJustification` ("the ingester's promise"); this
 module promotes them to `regime=witness` with a `LiftEquivalence`
 artifact.
@@ -733,7 +733,7 @@ def _check_stmt(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
         return {"kind": "c.continue ↔ continue", "a_id": a.id}
 
     raise LiftCheckError(
-        f"{path}: layer-A {type(a).__name__} has no v6 correspondence rule"
+        f"{path}: layer-A {type(a).__name__} has no correspondence rule"
     )
 
 
@@ -995,8 +995,8 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
     if isinstance(a, CAddressOf):
         # `&p[k]` is C's pointer-arithmetic spelling — equivalent to
         # `p + k` for char* (and any pointer type, modulo the byte
-        # vs element-size scaling that v6 limits to char-stride). The
-        # layer-B side is always `PtrOffset(base, offset)`.
+        # vs element-size scaling that's currently limited to char-stride).
+        # The layer-B side is always `PtrOffset(base, offset)`.
         if not isinstance(b, PtrOffset):
             raise LiftCheckError(
                 f"{path}: layer-A CAddressOf vs layer-B {type(b).__name__}"
@@ -1004,7 +1004,7 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
         if not isinstance(a.target, CArraySubscript):
             raise LiftCheckError(
                 f"{path}: layer-A CAddressOf target is "
-                f"{type(a.target).__name__}; v6 only allows CArraySubscript"
+                f"{type(a.target).__name__}; only CArraySubscript is allowed"
             )
         sub = a.target
         return {
@@ -1015,7 +1015,7 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
         }
 
     raise LiftCheckError(
-        f"{path}: layer-A {type(a).__name__} has no v6 expression correspondence"
+        f"{path}: layer-A {type(a).__name__} has no expression correspondence"
     )
 
 
@@ -1033,7 +1033,7 @@ def _check_pointer_arith(
     The structural walk doesn't have type info; we don't try to
     reverse-engineer which side was the pointer. Instead, we pair
     layer-A LHS with layer-B base and layer-A RHS with layer-B
-    offset. For the v6 corpus (`string_offset.c` only), this is
+    offset. For the current corpus (`string_offset.c` only), this is
     consistent because the lifter never swaps operand order.
     """
     return {

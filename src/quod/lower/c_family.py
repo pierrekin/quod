@@ -5,9 +5,9 @@ transcription) and produces `Program.functions` (layer C, pure core)
 plus the cross-layer provenance metadata:
 
   - One block-level `ProvenanceEdge` per (B-block, C-block) pair. Block
-    granularity is sufficient at v5 — every lowering rule operates
-    inside an enclosing block, and per-statement edges can be added
-    later when a use case needs them.
+    granularity is sufficient — every lowering rule operates inside
+    an enclosing block, and per-statement edges can be added later
+    when a use case needs them.
   - One function-level `Equivalence` per function with `FamilyLowering`
     justification citing the rule(s) used. Rules with a pinned proof
     artifact (under `c_family_proofs/`) emit `regime="witness"` with
@@ -16,7 +16,7 @@ plus the cross-layer provenance metadata:
     artifact (today: `identity` and `c.scoped_block`) emit
     `regime="axiom"` — honest about what hasn't been proved.
 
-Step-6 supported rules:
+Supported rules:
 
   - `c.for_general` — `for(init; cond; inc) body` becomes
     `init; while (cond) { body; inc }`. Per-iteration equivalence
@@ -24,10 +24,10 @@ Step-6 supported rules:
     Whole-loop equivalence is the meta-theoretic inductive lift — see
     the artifact's header comment.
   - `c.scoped_block` — drops the wrapper, surfacing the inner core
-    Block. v6 doesn't yet exploit `scope_locals` (all decls in a C
+    Block. `scope_locals` is currently unused (all decls in a C
     scope are already lexically scoped at layer C); the data is
-    preserved in the layer-B subtree for future analyses. No proof
-    artifact at v6 — the rule is structurally a no-op.
+    preserved in the layer-B subtree for downstream analyses. No
+    proof artifact — the rule is structurally a no-op.
 
 Other `c.*` extensions refuse — they'll grow rules as the C subset
 expands. Refusal mirrors `lower.py`'s discipline: rather than silently
@@ -202,8 +202,8 @@ def _layer_c_fn_id(name: str) -> str:
 def _lower_block_or_scoped(b: BlockOrScoped, ctx: _LowerContext) -> Block:
     """Strip a `CScopedBlock` wrapper if present, then lower the inner
     block. The wrapper contributes `c.scoped_block` to rules_used —
-    even though stripping is a no-op semantically at v5, we record
-    that the rule fired so the equivalence claim cites it."""
+    even though stripping is a no-op semantically, we record that the
+    rule fired so the equivalence claim cites it."""
     if isinstance(b, CScopedBlock):
         ctx.rules_used.add("c.scoped_block")
         return _lower_block(b.block, ctx)

@@ -551,7 +551,7 @@ def _size_of_quod_type(
     """Return (abi_size, abi_alignment) in bytes for a quod type.
 
     Assumes a 64-bit data model (i8* is 8 bytes, 8-byte aligned). Mirrors
-    the LLVM data-layout rules for our v1 type system: integers are
+    the LLVM data-layout rules for the quod type system: integers are
     naturally aligned to their width; structs accumulate fields with
     per-field alignment + tail padding to the struct's max-alignment;
     enums layout as `{i8 tag, [N x i8] payload}` where N is the largest
@@ -1150,8 +1150,8 @@ def _lower_stmt(
     if getattr(stmt, "kind", None) and str(stmt.kind).startswith("c."):
         raise ValueError(
             f"lower.py refuses {stmt.kind!r}: layer C must be pure core "
-            f"quod. Run the c-family lowering pass (lower/c_family.py, "
-            f"step 5 of the C-ingest redesign) before lower.py."
+            f"quod. Run the c-family lowering pass (lower/c_family.py) "
+            f"before lower.py."
         )
     raise ValueError(f"unhandled stmt: {stmt!r}")
 
@@ -1226,7 +1226,7 @@ def _emit_extern_call_postconditions(
         if claim.enforcement != "trust":
             raise NotImplementedError(
                 f"extern return-claim with enforcement={claim.enforcement!r}: "
-                f"only 'trust' is supported in this revision"
+                f"only 'trust' is supported"
             )
         if assume is None:
             assume = _get_or_declare_assume(module)
@@ -1309,12 +1309,12 @@ def _lower_function_body(
     # lower.py operates on layer C only. Family wrappers and family-
     # extension statements must be stripped/lowered by the c-family
     # lowering pass first; refuse here rather than crash deep in the
-    # statement walker. See .scratch/c-ingest/00-overview.md.
+    # statement walker.
     if not isinstance(fn.body, Block):
         raise ValueError(
             f"function {fn.name!r} body is wrapped in {type(fn.body).__name__!r} — "
             f"layer C must be pure core. Run the c-family lowering pass "
-            f"(lower/c_family.py, step 5) before lower.py."
+            f"(lower/c_family.py) before lower.py."
         )
     llvm_fn = module.globals[fn.name]
     for arg, p in zip(llvm_fn.args, fn.params):
@@ -1836,16 +1836,14 @@ def _refuse_non_core_layer(program: Program) -> None:
     c-family lowering pass strips wrappers and rewrites extension
     statements before this point; if any survive, surface a clear error
     naming the offending kind so the fix is obvious.
-
-    See `.scratch/c-ingest/00-overview.md` for the layer model.
     """
     for fn in program.functions:
         if not isinstance(fn.body, Block):
             raise ValueError(
                 f"function {fn.name!r}: body is wrapped in "
                 f"{type(fn.body).__name__!r} — layer C must be pure core. "
-                f"Run the c-family lowering pass (lower/c_family.py, "
-                f"step 5 of the C-ingest redesign) before building."
+                f"Run the c-family lowering pass (lower/c_family.py) "
+                f"before building."
             )
         for stmt in fn.body.stmts:
             kind = getattr(stmt, "kind", None)
@@ -1853,8 +1851,8 @@ def _refuse_non_core_layer(program: Program) -> None:
                 raise ValueError(
                     f"function {fn.name!r}: statement {kind!r} is a "
                     f"`c.*` family extension — layer C must be pure core. "
-                    f"Run the c-family lowering pass (lower/c_family.py, "
-                    f"step 5 of the C-ingest redesign) before building."
+                    f"Run the c-family lowering pass (lower/c_family.py) "
+                    f"before building."
                 )
 
 

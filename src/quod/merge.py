@@ -14,11 +14,9 @@ existing claims are reconciled into the merged result rather than
 silently dropped. A claim survives if its target still exists in the
 new shape — for param-scoped claims, "param exists by name and is
 still an int type"; for return-scoped, "return is still an int type".
-Claims whose target is gone are dropped with a warning. This honors
-the design rule from `.scratch/c-ingest/00-overview.md` ("Survival
-across re-lifts") that user-authored work shouldn't disappear when
-the source is touched in a way that doesn't actually invalidate the
-claim.
+Claims whose target is gone are dropped with a warning. The rule:
+user-authored work shouldn't disappear when the source is touched in
+a way that doesn't actually invalidate the claim.
 
 `merge_program` returns `(merged: Program, warnings: tuple[str, ...])`.
 Callers print the warnings; `merge.py` stays UI-agnostic.

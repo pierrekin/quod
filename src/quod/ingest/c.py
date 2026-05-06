@@ -4,8 +4,8 @@ Walks a libclang AST once and emits **three parallel subtrees**:
 
   - Layer A (`Program.source_units`): the original C preserved as quod
     nodes (`CUnit`, `CFn`, `CFor`, `CVarDecl`, …). Inert — no codegen,
-    no validation — but addressable by stable IDs so future analyses
-    can reach the source-form.
+    no validation — but addressable by stable IDs so downstream
+    analyses can reach the source-form.
   - Layer B (`Program.structured_functions`): the c-like-quod
     transcription. Mostly core nodes, with `c.*` family extensions
     where layer-B carries information the lift hasn't finished
@@ -31,9 +31,9 @@ arithmetic, comparison, short-circuit boolean, bitwise (`& | ^ ~ <<
 >>`), unary (`- ! ~`), ternary `? :`, compound assignments
 (`+= -= ...`), calls. Locals can be declared without an initializer
 (`int x;`); the validator's definite-init analysis refuses any read
-that isn't dominated by a write. See `.scratch/c-ingest/roadmap.md`
-for the broader subset map (Tier 2/3 still missing — loads, casts,
-wider integer types, structs, floats, …).
+that isn't dominated by a write. Constructs not yet in the supported
+subset (loads, casts, wider integer types, structs, floats, …) raise
+`IngestError` rather than silently lowering with surprising semantics.
 
 Constructs outside the supported subset raise `IngestError` with the
 offending source location.
@@ -223,7 +223,7 @@ _BIN_OP_TABLE: dict[str, str] = {
 
 
 class IngestError(Exception):
-    """Raised when a C construct falls outside the v1 subset."""
+    """Raised when a C construct falls outside the supported subset."""
 
 
 def _loc(cursor: cx.Cursor) -> str:
@@ -242,7 +242,7 @@ def _is_int_type(t: cx.Type) -> bool:
 
 def _quod_type(cursor: cx.Cursor, t: cx.Type) -> I32Type:
     if not _is_int_type(t):
-        raise _refuse(cursor, f"only `int` types are supported in v1, got {t.spelling!r}")
+        raise _refuse(cursor, f"only `int` types are supported, got {t.spelling!r}")
     return _I32
 
 
@@ -254,7 +254,7 @@ def _local_type(cursor: cx.Cursor, t: cx.Type) -> Type:
         return _I32
     if canon.kind == cx.TypeKind.POINTER:
         return _I8PTR
-    raise _refuse(cursor, f"unsupported local-var type {t.spelling!r} (only `int`, `enum`, and pointers in v1)")
+    raise _refuse(cursor, f"unsupported local-var type {t.spelling!r} (only `int`, `enum`, and pointers are supported)")
 
 
 def _unwrap(cursor: cx.Cursor) -> cx.Cursor:
@@ -1135,8 +1135,8 @@ class _FunctionTranslator:
 #
 # The two walkers share the libclang AST as the source of truth; every
 # layer-A node is paired with a layer-B node by being produced from the
-# same FUNCTION_DECL cursor (function-level pairing in v3 — finer-grained
-# pairing is future work as edges grow per-statement).
+# same FUNCTION_DECL cursor (function-level pairing — finer-grained
+# pairing can be added when edges need to grow per-statement).
 
 
 class _LayerATranslator:
@@ -1638,7 +1638,7 @@ def ingest_c(
 ) -> Program:
     """Parse a C file and return a quod Program.
 
-    Anything outside the supported v1 subset raises IngestError with the
+    Anything outside the supported subset raises IngestError with the
     offending source location. Only declarations whose primary location is
     in `path` itself are translated — header-included declarations are
     skipped, but their types/symbols are visible to the parser, so calls
@@ -1679,7 +1679,7 @@ def ingest_c(
         if loc_file is None or Path(loc_file.name).resolve() != path:
             continue
         if cursor.kind != cx.CursorKind.FUNCTION_DECL:
-            raise _refuse(cursor, f"top-level {cursor.kind.name} not supported (only functions in v1)")
+            raise _refuse(cursor, f"top-level {cursor.kind.name} not supported (only functions)")
         if not cursor.is_definition():
             continue
         functions.append(_translate_function(cursor, path, state))
@@ -1691,12 +1691,10 @@ def ingest_c(
     externs = tuple(e for name, e in state.externs.items() if name not in defined_names)
 
     # Layer-A pass — best-effort. The layer-A translator covers a narrower
-    # C subset than layer B (step 4 is focused on sum.c; broader layer-A
-    # coverage grows in subsequent steps). If translation fails for any
-    # function in the file, we emit no layer-A subtree for the whole file
-    # — all-or-nothing keeps the corpus less surprising than partial
-    # source_units. Layer B is unaffected; the file still compiles via
-    # the existing path.
+    # C subset than layer B; if translation fails for any function in the
+    # file, we emit no layer-A subtree for the whole file — all-or-nothing
+    # keeps the corpus less surprising than partial source_units. Layer B
+    # is unaffected; the file still compiles via the existing path.
     cfns: list[CFn] = []
     layer_a_failed = False
     for cursor in fn_cursors:
@@ -1723,10 +1721,10 @@ def ingest_c(
             for cfn, fn in zip(cfns, functions)
         )
         # Function-level A→B Equivalence claims mark the transcription.
-        # v5's regime is `axiom` with a manual justification (the
-        # ingester promises a structural lift); the auto-checker that
-        # bumps to `witness` with a `LiftEquivalence` artifact is the
-        # predicates spike's downstream payoff.
+        # The ingester emits `regime=axiom` with a manual justification
+        # (it promises a structural lift); `quod equiv prove` runs the
+        # lift-checker and promotes these to `regime=witness` with a
+        # `LiftEquivalence` artifact.
         a_to_b_equivalences = tuple(
             Equivalence(
                 a_node_id=cfn.id,
