@@ -40,6 +40,8 @@ from quod.model import (
     CDoWhile,
     Continue,
     CEnumConstRef,
+    CSwitch,
+    CSwitchCase,
     DoWhile,
     CExprStmt,
     CFn,
@@ -1308,6 +1310,45 @@ _KIND_INFO["c.if"] = {
     },
 }
 
+_KIND_INFO["c.switch"] = {
+    "class": CSwitch,
+    "summary": (
+        "`switch (scrutinee) { case ...: ...; default: ...; }` — "
+        "multiway dispatch on an integer value. The lift produces an "
+        "if-else-if chain at layer B (each case becomes one If with "
+        "`scrutinee == value` cond, possibly OR'd for stacked cases). "
+        "Each case body must end with `break;` or `return ...;`; "
+        "implicit fallthrough refuses at ingest."
+    ),
+    "example": {
+        "kind": "c.switch",
+        "scrutinee": {"kind": "c.var_ref", "name": "x"},
+        "cases": [
+            {"kind": "c.switch_case",
+             "values": [{"kind": "c.lit_int", "value": 1}],
+             "body": [{"kind": "c.return", "value": {"kind": "c.lit_int", "value": 100}}]},
+        ],
+        "default": [{"kind": "c.return", "value": {"kind": "c.lit_int", "value": 0}}],
+    },
+}
+
+_KIND_INFO["c.switch_case"] = {
+    "class": CSwitchCase,
+    "summary": (
+        "One arm of a `c.switch`. Stacked-empty-case labels (`case 1: "
+        "case 2: shared;`) share one body, encoded as a single "
+        "CSwitchCase with multiple values."
+    ),
+    "example": {
+        "kind": "c.switch_case",
+        "values": [
+            {"kind": "c.lit_int", "value": 1},
+            {"kind": "c.lit_int", "value": 2},
+        ],
+        "body": [{"kind": "c.return", "value": {"kind": "c.lit_int", "value": 12}}],
+    },
+}
+
 _KIND_INFO["c.do_while"] = {
     "class": CDoWhile,
     "summary": (
@@ -1457,7 +1498,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "c_unit", "c.fn", "c.param", "c.type", "c.type.ptr",
         "c.var_decl", "c.multi_var_decl", "c.assign", "c.compound_assign",
         "c.return", "c.for", "c.if", "c.while", "c.do_while", "c.expr_stmt",
-        "c.break", "c.continue",
+        "c.break", "c.continue", "c.switch", "c.switch_case",
         "c.binop", "c.lit_int", "c.lit_str", "c.var_ref",
         "c.enum_const_ref", "c.call",
         "c.array_subscript", "c.addr_of", "c.unary", "c.ternary",

@@ -1,0 +1,1907 @@
+{
+  "constants": [
+    {
+      "name": ".str.switch_case.0",
+      "value": "day_length(1)  = %d\n"
+    },
+    {
+      "name": ".str.switch_case.1",
+      "value": "day_length(2)  = %d\n"
+    },
+    {
+      "name": ".str.switch_case.2",
+      "value": "day_length(4)  = %d\n"
+    },
+    {
+      "name": ".str.switch_case.3",
+      "value": "day_length(11) = %d\n"
+    },
+    {
+      "name": ".str.switch_case.4",
+      "value": "day_length(7)  = %d\n"
+    },
+    {
+      "name": ".str.switch_case.5",
+      "value": "classify(0)    = %d\n"
+    },
+    {
+      "name": ".str.switch_case.6",
+      "value": "classify(2)    = %d\n"
+    },
+    {
+      "name": ".str.switch_case.7",
+      "value": "classify(99)   = %d\n"
+    }
+  ],
+  "functions": [
+    {
+      "id": "@fn_c_lowered_day_length",
+      "name": "day_length",
+      "params": [
+        {
+          "name": "day",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_lowered_day_length_7",
+        "stmts": [
+          {
+            "kind": "quod.if",
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "eq",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "day"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 1
+              }
+            },
+            "then_body": {
+              "id": "@blk_c_lowered_day_length_1",
+              "stmts": [
+                {
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
+                    "value": 31
+                  }
+                }
+              ]
+            },
+            "else_body": {
+              "id": "@blk_c_lowered_day_length_6",
+              "stmts": [
+                {
+                  "kind": "quod.if",
+                  "cond": {
+                    "kind": "quod.sc_or",
+                    "lhs": {
+                      "kind": "quod.sc_or",
+                      "lhs": {
+                        "kind": "quod.sc_or",
+                        "lhs": {
+                          "kind": "llvm.binop",
+                          "op": "eq",
+                          "lhs": {
+                            "kind": "llvm.param_ref",
+                            "name": "day"
+                          },
+                          "rhs": {
+                            "kind": "llvm.const_int",
+                            "type": {
+                              "kind": "llvm.i32"
+                            },
+                            "value": 4
+                          }
+                        },
+                        "rhs": {
+                          "kind": "llvm.binop",
+                          "op": "eq",
+                          "lhs": {
+                            "kind": "llvm.param_ref",
+                            "name": "day"
+                          },
+                          "rhs": {
+                            "kind": "llvm.const_int",
+                            "type": {
+                              "kind": "llvm.i32"
+                            },
+                            "value": 6
+                          }
+                        }
+                      },
+                      "rhs": {
+                        "kind": "llvm.binop",
+                        "op": "eq",
+                        "lhs": {
+                          "kind": "llvm.param_ref",
+                          "name": "day"
+                        },
+                        "rhs": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 9
+                        }
+                      }
+                    },
+                    "rhs": {
+                      "kind": "llvm.binop",
+                      "op": "eq",
+                      "lhs": {
+                        "kind": "llvm.param_ref",
+                        "name": "day"
+                      },
+                      "rhs": {
+                        "kind": "llvm.const_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
+                        "value": 11
+                      }
+                    }
+                  },
+                  "then_body": {
+                    "id": "@blk_c_lowered_day_length_2",
+                    "stmts": [
+                      {
+                        "kind": "quod.return_expr",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 30
+                        }
+                      }
+                    ]
+                  },
+                  "else_body": {
+                    "id": "@blk_c_lowered_day_length_5",
+                    "stmts": [
+                      {
+                        "kind": "quod.if",
+                        "cond": {
+                          "kind": "llvm.binop",
+                          "op": "eq",
+                          "lhs": {
+                            "kind": "llvm.param_ref",
+                            "name": "day"
+                          },
+                          "rhs": {
+                            "kind": "llvm.const_int",
+                            "type": {
+                              "kind": "llvm.i32"
+                            },
+                            "value": 2
+                          }
+                        },
+                        "then_body": {
+                          "id": "@blk_c_lowered_day_length_3",
+                          "stmts": [
+                            {
+                              "kind": "quod.return_expr",
+                              "value": {
+                                "kind": "llvm.const_int",
+                                "type": {
+                                  "kind": "llvm.i32"
+                                },
+                                "value": 28
+                              }
+                            }
+                          ]
+                        },
+                        "else_body": {
+                          "id": "@blk_c_lowered_day_length_4",
+                          "stmts": [
+                            {
+                              "kind": "quod.return_expr",
+                              "value": {
+                                "kind": "llvm.const_int",
+                                "type": {
+                                  "kind": "llvm.i32"
+                                },
+                                "value": 31
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from switch_case.c:9"
+      ]
+    },
+    {
+      "id": "@fn_c_lowered_classify",
+      "name": "classify",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_lowered_classify_5",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "label",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          {
+            "kind": "quod.if",
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "eq",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 0
+              }
+            },
+            "then_body": {
+              "id": "@blk_c_lowered_classify_1",
+              "stmts": [
+                {
+                  "kind": "quod.assign",
+                  "name": "label",
+                  "value": {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
+                    "value": 100
+                  }
+                }
+              ]
+            },
+            "else_body": {
+              "id": "@blk_c_lowered_classify_4",
+              "stmts": [
+                {
+                  "kind": "quod.if",
+                  "cond": {
+                    "kind": "quod.sc_or",
+                    "lhs": {
+                      "kind": "quod.sc_or",
+                      "lhs": {
+                        "kind": "llvm.binop",
+                        "op": "eq",
+                        "lhs": {
+                          "kind": "llvm.param_ref",
+                          "name": "x"
+                        },
+                        "rhs": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 1
+                        }
+                      },
+                      "rhs": {
+                        "kind": "llvm.binop",
+                        "op": "eq",
+                        "lhs": {
+                          "kind": "llvm.param_ref",
+                          "name": "x"
+                        },
+                        "rhs": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 2
+                        }
+                      }
+                    },
+                    "rhs": {
+                      "kind": "llvm.binop",
+                      "op": "eq",
+                      "lhs": {
+                        "kind": "llvm.param_ref",
+                        "name": "x"
+                      },
+                      "rhs": {
+                        "kind": "llvm.const_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
+                        "value": 3
+                      }
+                    }
+                  },
+                  "then_body": {
+                    "id": "@blk_c_lowered_classify_2",
+                    "stmts": [
+                      {
+                        "kind": "quod.assign",
+                        "name": "label",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 200
+                        }
+                      }
+                    ]
+                  },
+                  "else_body": {
+                    "id": "@blk_c_lowered_classify_3",
+                    "stmts": [
+                      {
+                        "kind": "quod.assign",
+                        "name": "label",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 999
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "label"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from switch_case.c:26"
+      ]
+    },
+    {
+      "id": "@fn_c_lowered_main",
+      "name": "main",
+      "params": [],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_lowered_main_1",
+        "stmts": [
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.0"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "day_length",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 1
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.1"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "day_length",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 2
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.2"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "day_length",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 4
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.3"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "day_length",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 11
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.4"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "day_length",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 7
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.5"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "classify",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.6"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "classify",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 2
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.7"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "classify",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 99
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from switch_case.c:45"
+      ]
+    }
+  ],
+  "externs": [
+    {
+      "name": "printf",
+      "param_types": [
+        {
+          "kind": "llvm.i8_ptr"
+        }
+      ],
+      "varargs": true,
+      "linkage": {
+        "kind": "linkage.libc"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_day_length",
+      "target": "@fn_c_day_length"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_classify",
+      "target": "@fn_c_classify"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@cfn_c_main",
+      "target": "@fn_c_main"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_6",
+      "target": "@blk_c_lowered_day_length_1"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_4",
+      "target": "@blk_c_lowered_day_length_2"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_2",
+      "target": "@blk_c_lowered_day_length_3"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_1",
+      "target": "@blk_c_lowered_day_length_4"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_3",
+      "target": "@blk_c_lowered_day_length_5"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_5",
+      "target": "@blk_c_lowered_day_length_6"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_8",
+      "target": "@blk_c_lowered_day_length_7"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@fn_c_day_length",
+      "target": "@fn_c_lowered_day_length"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_12",
+      "target": "@blk_c_lowered_classify_1"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_10",
+      "target": "@blk_c_lowered_classify_2"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_9",
+      "target": "@blk_c_lowered_classify_3"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_11",
+      "target": "@blk_c_lowered_classify_4"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_14",
+      "target": "@blk_c_lowered_classify_5"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@fn_c_classify",
+      "target": "@fn_c_lowered_classify"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@blk_c_15",
+      "target": "@blk_c_lowered_main_1"
+    },
+    {
+      "kind": "edge.provenance",
+      "source": "@fn_c_main",
+      "target": "@fn_c_lowered_main"
+    }
+  ],
+  "equivalences": [
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@fn_c_day_length",
+      "b_node_id": "@fn_c_lowered_day_length",
+      "regime": "witness",
+      "justification": {
+        "kind": "family_lowering",
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@fn_c_classify",
+      "b_node_id": "@fn_c_lowered_classify",
+      "regime": "witness",
+      "justification": {
+        "kind": "family_lowering",
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@fn_c_main",
+      "b_node_id": "@fn_c_lowered_main",
+      "regime": "witness",
+      "justification": {
+        "kind": "family_lowering",
+        "rule_name": "identity",
+        "artifact_path": "lower/c_family_proofs/identity.smt2",
+        "artifact_hash": "e6af3670bb1cb4c150a306aa7d1b0975b1f64c68150573cf5e11069934543965"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_day_length",
+      "b_node_id": "@fn_c_day_length",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/day_length.txt",
+        "artifact_hash": "f662c1ad44e89f3def87b287119f0fc6ed0f64e235f222776138ee6b5238af55"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_classify",
+      "b_node_id": "@fn_c_classify",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/classify.txt",
+        "artifact_hash": "eb2b0c4b73b9389aa41047185a63a239dcc58ab98a92ee1f130cc0fd45a1665d"
+      }
+    },
+    {
+      "kind": "equivalent_to",
+      "a_node_id": "@cfn_c_main",
+      "b_node_id": "@fn_c_main",
+      "regime": "witness",
+      "justification": {
+        "kind": "lift_equivalence",
+        "artifact_path": "proofs/lift/main.txt",
+        "artifact_hash": "f5cfc925909b293840cdf55325f34d3291f34949902a2abb45efaab36a2dc4d3"
+      }
+    }
+  ],
+  "source_units": [
+    {
+      "kind": "c_unit",
+      "id": "@cunit_c_switch_case",
+      "source_path": "switch_case.c",
+      "functions": [
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_day_length",
+          "name": "day_length",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [
+            {
+              "kind": "c.param",
+              "name": "day",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            }
+          ],
+          "body": [
+            {
+              "kind": "c.switch",
+              "id": "@cswitch_c_day_length_1",
+              "scrutinee": {
+                "kind": "c.var_ref",
+                "name": "day"
+              },
+              "cases": [
+                {
+                  "kind": "c.switch_case",
+                  "id": "@cswitchcase_c_day_length_1",
+                  "values": [
+                    {
+                      "kind": "c.lit_int",
+                      "value": 1
+                    }
+                  ],
+                  "body": [
+                    {
+                      "kind": "c.return",
+                      "id": "@creturn_c_day_length_1",
+                      "value": {
+                        "kind": "c.lit_int",
+                        "value": 31
+                      }
+                    }
+                  ]
+                },
+                {
+                  "kind": "c.switch_case",
+                  "id": "@cswitchcase_c_day_length_2",
+                  "values": [
+                    {
+                      "kind": "c.lit_int",
+                      "value": 4
+                    },
+                    {
+                      "kind": "c.lit_int",
+                      "value": 6
+                    },
+                    {
+                      "kind": "c.lit_int",
+                      "value": 9
+                    },
+                    {
+                      "kind": "c.lit_int",
+                      "value": 11
+                    }
+                  ],
+                  "body": [
+                    {
+                      "kind": "c.return",
+                      "id": "@creturn_c_day_length_2",
+                      "value": {
+                        "kind": "c.lit_int",
+                        "value": 30
+                      }
+                    }
+                  ]
+                },
+                {
+                  "kind": "c.switch_case",
+                  "id": "@cswitchcase_c_day_length_3",
+                  "values": [
+                    {
+                      "kind": "c.lit_int",
+                      "value": 2
+                    }
+                  ],
+                  "body": [
+                    {
+                      "kind": "c.return",
+                      "id": "@creturn_c_day_length_3",
+                      "value": {
+                        "kind": "c.lit_int",
+                        "value": 28
+                      }
+                    }
+                  ]
+                }
+              ],
+              "default": [
+                {
+                  "kind": "c.return",
+                  "id": "@creturn_c_day_length_4",
+                  "value": {
+                    "kind": "c.lit_int",
+                    "value": 31
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_classify",
+          "name": "classify",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [
+            {
+              "kind": "c.param",
+              "name": "x",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              }
+            }
+          ],
+          "body": [
+            {
+              "kind": "c.var_decl",
+              "id": "@cvardecl_c_classify_1",
+              "type": {
+                "kind": "c.type",
+                "name": "int"
+              },
+              "name": "label",
+              "init": {
+                "kind": "c.lit_int",
+                "value": 0
+              }
+            },
+            {
+              "kind": "c.switch",
+              "id": "@cswitch_c_classify_1",
+              "scrutinee": {
+                "kind": "c.var_ref",
+                "name": "x"
+              },
+              "cases": [
+                {
+                  "kind": "c.switch_case",
+                  "id": "@cswitchcase_c_classify_1",
+                  "values": [
+                    {
+                      "kind": "c.lit_int",
+                      "value": 0
+                    }
+                  ],
+                  "body": [
+                    {
+                      "kind": "c.assign",
+                      "id": "@cassign_c_classify_1",
+                      "target": "label",
+                      "value": {
+                        "kind": "c.lit_int",
+                        "value": 100
+                      }
+                    }
+                  ]
+                },
+                {
+                  "kind": "c.switch_case",
+                  "id": "@cswitchcase_c_classify_2",
+                  "values": [
+                    {
+                      "kind": "c.lit_int",
+                      "value": 1
+                    },
+                    {
+                      "kind": "c.lit_int",
+                      "value": 2
+                    },
+                    {
+                      "kind": "c.lit_int",
+                      "value": 3
+                    }
+                  ],
+                  "body": [
+                    {
+                      "kind": "c.assign",
+                      "id": "@cassign_c_classify_2",
+                      "target": "label",
+                      "value": {
+                        "kind": "c.lit_int",
+                        "value": 200
+                      }
+                    }
+                  ]
+                }
+              ],
+              "default": [
+                {
+                  "kind": "c.assign",
+                  "id": "@cassign_c_classify_3",
+                  "target": "label",
+                  "value": {
+                    "kind": "c.lit_int",
+                    "value": 999
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_classify_1",
+              "value": {
+                "kind": "c.var_ref",
+                "name": "label"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "c.fn",
+          "id": "@cfn_c_main",
+          "name": "main",
+          "return_type": {
+            "kind": "c.type",
+            "name": "int"
+          },
+          "params": [],
+          "body": [
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_1",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_2",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_1",
+                    "value": "day_length(1)  = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_1",
+                    "callee": "day_length",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 1
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_2",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_4",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_2",
+                    "value": "day_length(2)  = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_3",
+                    "callee": "day_length",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 2
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_3",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_6",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_3",
+                    "value": "day_length(4)  = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_5",
+                    "callee": "day_length",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 4
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_4",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_8",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_4",
+                    "value": "day_length(11) = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_7",
+                    "callee": "day_length",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 11
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_5",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_10",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_5",
+                    "value": "day_length(7)  = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_9",
+                    "callee": "day_length",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 7
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_6",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_12",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_6",
+                    "value": "classify(0)    = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_11",
+                    "callee": "classify",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 0
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_7",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_14",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_7",
+                    "value": "classify(2)    = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_13",
+                    "callee": "classify",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 2
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.expr_stmt",
+              "id": "@cexprstmt_c_main_8",
+              "value": {
+                "kind": "c.call",
+                "id": "@ccall_c_main_16",
+                "callee": "printf",
+                "args": [
+                  {
+                    "kind": "c.lit_str",
+                    "id": "@clitstr_c_main_8",
+                    "value": "classify(99)   = %d\n"
+                  },
+                  {
+                    "kind": "c.call",
+                    "id": "@ccall_c_main_15",
+                    "callee": "classify",
+                    "args": [
+                      {
+                        "kind": "c.lit_int",
+                        "value": 99
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "c.return",
+              "id": "@creturn_c_main_1",
+              "value": {
+                "kind": "c.lit_int",
+                "value": 0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "structured_functions": [
+    {
+      "id": "@fn_c_day_length",
+      "name": "day_length",
+      "params": [
+        {
+          "name": "day",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_8",
+        "stmts": [
+          {
+            "kind": "quod.if",
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "eq",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "day"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 1
+              }
+            },
+            "then_body": {
+              "id": "@blk_c_6",
+              "stmts": [
+                {
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
+                    "value": 31
+                  }
+                }
+              ]
+            },
+            "else_body": {
+              "id": "@blk_c_5",
+              "stmts": [
+                {
+                  "kind": "quod.if",
+                  "cond": {
+                    "kind": "quod.sc_or",
+                    "lhs": {
+                      "kind": "quod.sc_or",
+                      "lhs": {
+                        "kind": "quod.sc_or",
+                        "lhs": {
+                          "kind": "llvm.binop",
+                          "op": "eq",
+                          "lhs": {
+                            "kind": "llvm.param_ref",
+                            "name": "day"
+                          },
+                          "rhs": {
+                            "kind": "llvm.const_int",
+                            "type": {
+                              "kind": "llvm.i32"
+                            },
+                            "value": 4
+                          }
+                        },
+                        "rhs": {
+                          "kind": "llvm.binop",
+                          "op": "eq",
+                          "lhs": {
+                            "kind": "llvm.param_ref",
+                            "name": "day"
+                          },
+                          "rhs": {
+                            "kind": "llvm.const_int",
+                            "type": {
+                              "kind": "llvm.i32"
+                            },
+                            "value": 6
+                          }
+                        }
+                      },
+                      "rhs": {
+                        "kind": "llvm.binop",
+                        "op": "eq",
+                        "lhs": {
+                          "kind": "llvm.param_ref",
+                          "name": "day"
+                        },
+                        "rhs": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 9
+                        }
+                      }
+                    },
+                    "rhs": {
+                      "kind": "llvm.binop",
+                      "op": "eq",
+                      "lhs": {
+                        "kind": "llvm.param_ref",
+                        "name": "day"
+                      },
+                      "rhs": {
+                        "kind": "llvm.const_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
+                        "value": 11
+                      }
+                    }
+                  },
+                  "then_body": {
+                    "id": "@blk_c_4",
+                    "stmts": [
+                      {
+                        "kind": "quod.return_expr",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 30
+                        }
+                      }
+                    ]
+                  },
+                  "else_body": {
+                    "id": "@blk_c_3",
+                    "stmts": [
+                      {
+                        "kind": "quod.if",
+                        "cond": {
+                          "kind": "llvm.binop",
+                          "op": "eq",
+                          "lhs": {
+                            "kind": "llvm.param_ref",
+                            "name": "day"
+                          },
+                          "rhs": {
+                            "kind": "llvm.const_int",
+                            "type": {
+                              "kind": "llvm.i32"
+                            },
+                            "value": 2
+                          }
+                        },
+                        "then_body": {
+                          "id": "@blk_c_2",
+                          "stmts": [
+                            {
+                              "kind": "quod.return_expr",
+                              "value": {
+                                "kind": "llvm.const_int",
+                                "type": {
+                                  "kind": "llvm.i32"
+                                },
+                                "value": 28
+                              }
+                            }
+                          ]
+                        },
+                        "else_body": {
+                          "id": "@blk_c_1",
+                          "stmts": [
+                            {
+                              "kind": "quod.return_expr",
+                              "value": {
+                                "kind": "llvm.const_int",
+                                "type": {
+                                  "kind": "llvm.i32"
+                                },
+                                "value": 31
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from switch_case.c:9"
+      ]
+    },
+    {
+      "id": "@fn_c_classify",
+      "name": "classify",
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "llvm.i32"
+          }
+        }
+      ],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_14",
+        "stmts": [
+          {
+            "kind": "quod.let",
+            "name": "label",
+            "type": {
+              "kind": "llvm.i32"
+            },
+            "init": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          },
+          {
+            "kind": "quod.if",
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "eq",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 0
+              }
+            },
+            "then_body": {
+              "id": "@blk_c_12",
+              "stmts": [
+                {
+                  "kind": "quod.assign",
+                  "name": "label",
+                  "value": {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
+                    "value": 100
+                  }
+                }
+              ]
+            },
+            "else_body": {
+              "id": "@blk_c_11",
+              "stmts": [
+                {
+                  "kind": "quod.if",
+                  "cond": {
+                    "kind": "quod.sc_or",
+                    "lhs": {
+                      "kind": "quod.sc_or",
+                      "lhs": {
+                        "kind": "llvm.binop",
+                        "op": "eq",
+                        "lhs": {
+                          "kind": "llvm.param_ref",
+                          "name": "x"
+                        },
+                        "rhs": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 1
+                        }
+                      },
+                      "rhs": {
+                        "kind": "llvm.binop",
+                        "op": "eq",
+                        "lhs": {
+                          "kind": "llvm.param_ref",
+                          "name": "x"
+                        },
+                        "rhs": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 2
+                        }
+                      }
+                    },
+                    "rhs": {
+                      "kind": "llvm.binop",
+                      "op": "eq",
+                      "lhs": {
+                        "kind": "llvm.param_ref",
+                        "name": "x"
+                      },
+                      "rhs": {
+                        "kind": "llvm.const_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
+                        "value": 3
+                      }
+                    }
+                  },
+                  "then_body": {
+                    "id": "@blk_c_10",
+                    "stmts": [
+                      {
+                        "kind": "quod.assign",
+                        "name": "label",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 200
+                        }
+                      }
+                    ]
+                  },
+                  "else_body": {
+                    "id": "@blk_c_9",
+                    "stmts": [
+                      {
+                        "kind": "quod.assign",
+                        "name": "label",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 999
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "quod.local_ref",
+              "name": "label"
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from switch_case.c:26"
+      ]
+    },
+    {
+      "id": "@fn_c_main",
+      "name": "main",
+      "params": [],
+      "return_type": {
+        "kind": "llvm.i32"
+      },
+      "body": {
+        "id": "@blk_c_15",
+        "stmts": [
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.0"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "day_length",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 1
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.1"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "day_length",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 2
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.2"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "day_length",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 4
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.3"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "day_length",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 11
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.4"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "day_length",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 7
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.5"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "classify",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.6"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "classify",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 2
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.expr_stmt",
+            "value": {
+              "kind": "llvm.call",
+              "function": "printf",
+              "args": [
+                {
+                  "kind": "quod.string_ref",
+                  "name": ".str.switch_case.7"
+                },
+                {
+                  "kind": "llvm.call",
+                  "function": "classify",
+                  "args": [
+                    {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
+                      "value": 99
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            }
+          }
+        ]
+      },
+      "claims": [],
+      "notes": [
+        "ingested from switch_case.c:45"
+      ]
+    }
+  ]
+}

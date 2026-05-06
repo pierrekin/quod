@@ -89,6 +89,8 @@ from quod.model import (
     CScopedBlock,
     CStringLit,
     CStyleFor,
+    CSwitch,
+    CSwitchCase,
     CTernary,
     CUnary,
     CVarDecl,
@@ -409,6 +411,124 @@ def _check_body(
     }
 
 
+def _check_switch_chain(
+    a: "CSwitch", b, *, path: str, ctx: "_Ctx",
+) -> dict[str, Any]:
+    """Pair a layer-A CSwitch with a layer-B If-else-if chain. The
+    chain shape mirrors what `_build_switch_chain` in ingest/c.py
+    emits: each case becomes one If whose cond is `scrutinee == v0`
+    or `(scrutinee == v0) || (scrutinee == v1) || ...` for stacked
+    cases; the innermost else is the default (or empty)."""
+    if not isinstance(b, If):
+        raise LiftCheckError(
+            f"{path}: layer-A CSwitch vs layer-B {type(b).__name__}"
+        )
+    case_records: list[dict[str, Any]] = []
+    cur = b
+    for i, case in enumerate(a.cases):
+        if not isinstance(cur, If):
+            raise LiftCheckError(
+                f"{path}.cases[{i}]: ran out of If-chain at layer B"
+            )
+        # Verify the cond matches `scrutinee == v0 || ... || scrutinee == vN`.
+        _check_switch_case_cond(a.scrutinee, case.values, cur.cond,
+                                path=f"{path}.cases[{i}].cond", ctx=ctx)
+        # The then-body matches the case body.
+        body_record = _check_body(
+            case.body, cur.then_body,
+            path=f"{path}.cases[{i}].body", ctx=ctx,
+        )
+        case_records.append({
+            "kind": f"switch.case[{i}] ↔ if",
+            "values_count": len(case.values),
+            "body": body_record,
+        })
+        # Walk into the else branch for the next case (or the default).
+        # The lift wraps each next-case If inside a Block in else_body
+        # whose stmts is exactly that nested If.
+        if not cur.else_body.stmts:
+            cur = None  # type: ignore[assignment]
+            break
+        if i == len(a.cases) - 1:
+            # Last case — what's in else is the default body.
+            break
+        if len(cur.else_body.stmts) != 1 or not isinstance(cur.else_body.stmts[0], If):
+            raise LiftCheckError(
+                f"{path}.cases[{i}].else: expected nested If, "
+                f"got {len(cur.else_body.stmts)}-stmt block"
+            )
+        cur = cur.else_body.stmts[0]
+
+    # Default body lives in the last If's else_body (or, if no cases,
+    # in `b` itself — but we always have at least one case to reach
+    # here). When the source had no `default:` clause, the else is
+    # an empty Block.
+    expected_default = a.default if a.default is not None else ()
+    if cur is None:
+        # Walked into a None — only happens when a case body's else was
+        # empty mid-chain, which would be malformed. Treat as empty default.
+        actual_default_block = Block()
+    else:
+        actual_default_block = cur.else_body
+    default_record = _check_body(
+        expected_default, actual_default_block,
+        path=f"{path}.default", ctx=ctx,
+    )
+    return {
+        "kind": "c.switch ↔ if-else-if chain",
+        "a_id": a.id,
+        "cases": case_records,
+        "default": default_record,
+    }
+
+
+def _check_switch_case_cond(
+    scrutinee, values, b_cond, *, path: str, ctx: "_Ctx",
+) -> None:
+    """Verify `b_cond` is `scrutinee == values[0] || ... || scrutinee == values[N]`
+    structurally — the exact shape `_build_switch_chain` emits."""
+    expected_eqs = list(values)
+    # Walk the b_cond as a left-leaning chain of `||` over `eq` nodes.
+    # For a single value, b_cond is just the single eq.
+    if len(expected_eqs) == 1:
+        _check_switch_eq(scrutinee, expected_eqs[0], b_cond,
+                         path=path, ctx=ctx)
+        return
+    # Flatten the layer-B Or chain. _build_switch_chain produces a left-
+    # leaning chain: ((eq0 || eq1) || eq2) || eq3.
+    flat: list = []
+    def _flatten(node):
+        if isinstance(node, ShortCircuitOr):
+            _flatten(node.lhs)
+            _flatten(node.rhs)
+        else:
+            flat.append(node)
+    _flatten(b_cond)
+    if len(flat) != len(expected_eqs):
+        raise LiftCheckError(
+            f"{path}: switch case has {len(expected_eqs)} stacked values "
+            f"but layer-B cond has {len(flat)} disjuncts"
+        )
+    for i, (val, eq_node) in enumerate(zip(expected_eqs, flat)):
+        _check_switch_eq(
+            scrutinee, val, eq_node,
+            path=f"{path}.disjunct[{i}]", ctx=ctx,
+        )
+
+
+def _check_switch_eq(
+    scrutinee, a_value, b_eq, *, path: str, ctx: "_Ctx",
+) -> None:
+    """Verify `b_eq` is `BinOp("eq", scrutinee', a_value')` structurally."""
+    if not isinstance(b_eq, BinOp) or b_eq.op != "eq":
+        raise LiftCheckError(
+            f"{path}: expected layer-B BinOp(eq, ...), got "
+            f"{type(b_eq).__name__}"
+        )
+    _check_expr(scrutinee, b_eq.lhs, path=f"{path}.scrutinee", ctx=ctx)
+    _check_expr(a_value, b_eq.rhs, path=f"{path}.value", ctx=ctx)
+
+
 def _is_synthesized_fallthrough(stmt) -> bool:
     """True iff `stmt` is a layer-B fall-through stub the ingester
     appends when the layer-A body doesn't terminate explicitly. The
@@ -585,6 +705,13 @@ def _check_stmt(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
             "body": _check_body(a.body, b_body_block, path=f"{path}.body", ctx=ctx),
             "cond": _check_expr(a.cond, b.cond, path=f"{path}.cond", ctx=ctx),
         }
+
+    if isinstance(a, CSwitch):
+        # `CSwitch` lifts to a nested If-else-if chain at layer B.
+        # Walk the cases in order, expecting each to match the next
+        # If's cond/then; the final else carries the default body
+        # (or an empty Block when no default was given).
+        return _check_switch_chain(a, b, path=path, ctx=ctx)
 
     if isinstance(a, CExprStmt):
         if not isinstance(b, ExprStmt):

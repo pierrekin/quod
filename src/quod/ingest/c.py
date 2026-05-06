@@ -75,6 +75,8 @@ from quod.model import (
     CStmt,
     CStringLit,
     CStyleFor,
+    CSwitch,
+    CSwitchCase,
     CTernary,
     CType,
     CUnary,
@@ -253,6 +255,198 @@ def _unwrap(cursor: cx.Cursor) -> cx.Cursor:
             return cursor
         cursor = children[0]
     return cursor
+
+
+def _parse_switch_groups(
+    body_cursor: cx.Cursor,
+) -> list[tuple[list[cx.Cursor], list[cx.Cursor], str]]:
+    """Walk a SWITCH_STMT's body (a COMPOUND_STMT) and group its
+    children into (case_values, body_cursors, kind) tuples where kind
+    is `"case"` or `"default"`.
+
+    libclang's representation: each CASE_STMT has children
+    (value_expr, first_body_stmt). Subsequent statements that belong
+    to the same case appear as siblings of the CASE_STMT in the
+    enclosing COMPOUND_STMT. Stacked-empty-case labels (`case 2: case
+    3: stmt;`) are represented as nested CASE_STMTs.
+    """
+    if body_cursor.kind != cx.CursorKind.COMPOUND_STMT:
+        raise _refuse(body_cursor, "switch body must be a compound statement")
+    children = list(body_cursor.get_children())
+    groups: list[tuple[list[cx.Cursor], list[cx.Cursor], str]] = []
+    cur_values: list[cx.Cursor] = []
+    cur_body: list[cx.Cursor] = []
+    cur_kind = ""
+
+    def flush():
+        if cur_kind:
+            groups.append((list(cur_values), list(cur_body), cur_kind))
+
+    for child in children:
+        if child.kind == cx.CursorKind.CASE_STMT:
+            flush()
+            cur_values = []
+            cur_body = []
+            cur_kind = "case"
+            # Walk into nested CASE_STMTs to gather stacked labels.
+            inner = child
+            while inner.kind == cx.CursorKind.CASE_STMT:
+                inner_children = list(inner.get_children())
+                if not inner_children:
+                    raise _refuse(inner, "case-stmt with no value")
+                cur_values.append(inner_children[0])
+                if len(inner_children) > 1:
+                    nxt = inner_children[1]
+                    if nxt.kind == cx.CursorKind.CASE_STMT:
+                        inner = nxt
+                        continue
+                    if nxt.kind == cx.CursorKind.DEFAULT_STMT:
+                        # `case 1: default: ...` — non-trivial fallthrough
+                        raise _refuse(
+                            inner,
+                            "fallthrough from `case` into `default` is not "
+                            "supported (the supported subset requires each "
+                            "case body to end with break/return)"
+                        )
+                    cur_body.append(nxt)
+                break
+        elif child.kind == cx.CursorKind.DEFAULT_STMT:
+            flush()
+            cur_values = []
+            cur_body = []
+            cur_kind = "default"
+            inner_children = list(child.get_children())
+            if inner_children:
+                first = inner_children[0]
+                if first.kind == cx.CursorKind.CASE_STMT:
+                    raise _refuse(
+                        child,
+                        "fallthrough from `default` into `case` is not supported"
+                    )
+                cur_body.append(first)
+        else:
+            if not cur_kind:
+                raise _refuse(child, "statement before any case label in switch")
+            cur_body.append(child)
+
+    flush()
+    return groups
+
+
+def _check_switch_body(
+    switch_cursor: cx.Cursor, body: list[cx.Cursor], *, label: str,
+) -> None:
+    """Refuse switch-case bodies that don't end with a clear terminator
+    (break / return / unreachable). The supported subset is "every case
+    ends in break or return" — implicit fallthrough between cases (other
+    than shared-empty-case stacking) is refused per the deferred
+    design question on UB-handling. Also refuse non-trailing `break;`
+    inside a case body (it'd be a switch-break that the if-else-if
+    rewrite can't represent without dedicated control flow)."""
+    if not body:
+        # Empty case body — only valid if this group is shared-empty
+        # with the next group (handled by the parser nesting). A flushed
+        # empty body here means the case has no statements at all,
+        # which would fall through to the next case implicitly. Refuse.
+        raise _refuse(
+            switch_cursor,
+            f"`{label}` body is empty — implicit fallthrough to the next "
+            f"case is not supported (use shared-empty-case stacking like "
+            f"`case 1: case 2: body break;` for shared bodies)."
+        )
+    last = body[-1]
+    if last.kind not in (
+        cx.CursorKind.BREAK_STMT, cx.CursorKind.RETURN_STMT,
+    ):
+        raise _refuse(
+            last,
+            f"`{label}` body's last statement is {last.kind.name} — every "
+            f"case body must end with `break;` or `return ...;` "
+            f"(implicit fallthrough is not supported)."
+        )
+    # Refuse any non-trailing `break` inside the body — would be a
+    # switch-break the if-else-if rewrite can't encode.
+    for stmt in body[:-1]:
+        for descendant in _walk_cursors(stmt):
+            if descendant.kind == cx.CursorKind.BREAK_STMT:
+                raise _refuse(
+                    descendant,
+                    f"`break;` inside a switch case body (other than as "
+                    f"the trailing terminator) is not supported."
+                )
+
+
+def _walk_cursors(cursor: cx.Cursor):
+    """Yield `cursor` and every descendant cursor."""
+    yield cursor
+    for child in cursor.get_children():
+        yield from _walk_cursors(child)
+
+
+def _build_switch_chain(
+    scrutinee: Expr,
+    groups: list[tuple[list[cx.Cursor], list[cx.Cursor], str]],
+    translator: "_FunctionTranslator",
+) -> Statement:
+    """Build the layer-B if-else-if chain for a parsed switch. Drops
+    trailing `break;` from each case body (it's a switch-break which
+    becomes implicit at the if-else-if level)."""
+    # Translate each group's body, dropping the trailing `break;`.
+    translated_groups: list[tuple[list[Expr], tuple[Statement, ...], str]] = []
+    for value_cursors, body_cursors, kind in groups:
+        # Drop trailing break (return stays).
+        trimmed_body = body_cursors
+        if trimmed_body and trimmed_body[-1].kind == cx.CursorKind.BREAK_STMT:
+            trimmed_body = trimmed_body[:-1]
+        body_stmts: list[Statement] = []
+        for s in trimmed_body:
+            body_stmts.extend(translator.stmts(s))
+        # Translate the values.
+        values = [translator.expr(v) for v in value_cursors]
+        translated_groups.append((values, tuple(body_stmts), kind))
+
+    # Build the chain right-to-left.
+    default_body: tuple[Statement, ...] = ()
+    case_groups: list[tuple[list[Expr], tuple[Statement, ...]]] = []
+    for values, body, kind in translated_groups:
+        if kind == "default":
+            default_body = body
+        else:
+            case_groups.append((values, body))
+
+    # Innermost else is the default body (or empty Block).
+    else_block = Block(
+        id=translator._state.mint_block_id(),
+        stmts=default_body,
+    )
+    for values, body in reversed(case_groups):
+        # Build the cond: scrutinee == v[0] || scrutinee == v[1] || ...
+        cond = _eq_or_chain(scrutinee, values)
+        then_block = Block(
+            id=translator._state.mint_block_id(),
+            stmts=body,
+        )
+        else_block = Block(
+            id=translator._state.mint_block_id(),
+            stmts=(If(cond=cond, then_body=then_block, else_body=else_block),),
+        )
+    # The outermost If is the first wrapper of `else_block`'s only stmt.
+    if not else_block.stmts:
+        # No cases — degenerate switch with only a default. Just emit
+        # the default body inline (wrapped in an If with `true` cond
+        # would change observability of the scrutinee).
+        return ExprStmt(value=scrutinee)  # evaluate scrutinee for side effects
+    return else_block.stmts[0]
+
+
+def _eq_or_chain(scrutinee: Expr, values: list[Expr]) -> Expr:
+    """Build `scrutinee == v[0] || scrutinee == v[1] || ...` from a
+    list of case values. Single-value case is just `scrutinee == v[0]`."""
+    eqs = [BinOp(op="eq", lhs=scrutinee, rhs=v) for v in values]
+    cond: Expr = eqs[0]
+    for e in eqs[1:]:
+        cond = ShortCircuitOr(lhs=cond, rhs=e)
+    return cond
 
 
 def _split_for_children(c: cx.Cursor) -> tuple[
@@ -804,6 +998,23 @@ class _FunctionTranslator:
         if k == cx.CursorKind.CONTINUE_STMT:
             return (Continue(),)
 
+        if k == cx.CursorKind.SWITCH_STMT:
+            # Lift to a layer-B if-else-if chain. Each case becomes
+            # `if (scrutinee == val[0] || scrutinee == val[1] || ...) body`,
+            # nested in the previous case's else-branch. Default (if
+            # present) becomes the innermost else.
+            children = list(c.get_children())
+            if len(children) != 2:
+                raise _refuse(c, f"switch with {len(children)} children")
+            scrutinee_b = self.expr(children[0])
+            groups = _parse_switch_groups(children[1])
+            # Validate each group's body ends with break/return/unreachable
+            # and contains no stray `break` (which would be a switch-break
+            # we can't trivially handle in the if-else-if rewrite).
+            for values, body, kind in groups:
+                _check_switch_body(c, body, label=kind)
+            return (_build_switch_chain(scrutinee_b, groups, self),)
+
         raise _refuse(c, f"unsupported statement kind: {k.name}")
 
     def _block(self, cursor: cx.Cursor) -> Block:
@@ -1192,6 +1403,35 @@ class _LayerATranslator:
 
         if k == cx.CursorKind.CONTINUE_STMT:
             return CContinue(id=self._mint("ccontinue"))
+
+        if k == cx.CursorKind.SWITCH_STMT:
+            children = list(c.get_children())
+            if len(children) != 2:
+                raise _refuse(c, f"layer A: switch with {len(children)} children")
+            scrutinee = self.expr(children[0])
+            groups = _parse_switch_groups(children[1])
+            cases: list[CSwitchCase] = []
+            default_body: tuple[CStmt, ...] | None = None
+            for value_cursors, body_cursors, kind in groups:
+                # Drop trailing break (matches the layer-B trim).
+                trimmed = body_cursors
+                if trimmed and trimmed[-1].kind == cx.CursorKind.BREAK_STMT:
+                    trimmed = trimmed[:-1]
+                body_a = tuple(self.stmt(s) for s in trimmed)
+                if kind == "default":
+                    default_body = body_a
+                else:
+                    cases.append(CSwitchCase(
+                        id=self._mint("cswitchcase"),
+                        values=tuple(self.expr(v) for v in value_cursors),
+                        body=body_a,
+                    ))
+            return CSwitch(
+                id=self._mint("cswitch"),
+                scrutinee=scrutinee,
+                cases=tuple(cases),
+                default=default_body,
+            )
 
         raise _refuse(c, f"layer A: unsupported statement kind: {k.name}")
 

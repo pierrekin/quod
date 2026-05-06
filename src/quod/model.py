@@ -1955,6 +1955,34 @@ class CWhile(_Node):
     body: tuple["CStmt", ...] = ()
 
 
+class CSwitchCase(_Node):
+    """One arm of a `CSwitch`. Stacked-empty-case labels share one
+    body: `case 1: case 2: stmt; break;` is one CSwitchCase with
+    `values=(1, 2)`. Each case's body must end with `break`, `return`,
+    or `unreachable` — fall-through to the next case (other than via
+    shared-empty-case stacking) is refused at ingest time per the
+    deferred design question on UB-handling.
+    """
+    kind: Literal["c.switch_case"] = "c.switch_case"
+    id: str = Field(default_factory=lambda: _mint_node_id("cswitchcase"))
+    values: tuple["CExpr", ...]
+    body: tuple["CStmt", ...] = ()
+
+
+class CSwitch(_Node):
+    """`switch (scrutinee) { case ...: ...; default: ...; }` —
+    multiway dispatch on an integer value. Layer A preserves the
+    source structure; the lift produces an if-else-if chain at
+    layer B (no Switch in core; a tag-on-int dispatch can always
+    be re-expressed as comparisons).
+    """
+    kind: Literal["c.switch"] = "c.switch"
+    id: str = Field(default_factory=lambda: _mint_node_id("cswitch"))
+    scrutinee: "CExpr"
+    cases: tuple[CSwitchCase, ...] = ()
+    default: tuple["CStmt", ...] | None = None  # None = no `default:` clause
+
+
 class CDoWhile(_Node):
     """`do { body } while (cond);` — post-test loop. Layer A preserves
     the source statement; the lift produces a layer-B `DoWhile` (core).
@@ -2019,7 +2047,8 @@ class CMultiVarDecl(_Node):
 
 CStmt = Annotated[
     Union[CVarDecl, CMultiVarDecl, CAssign, CCompoundAssign, CReturn,
-          CFor, CIf, CWhile, CDoWhile, CExprStmt, CBreak, CContinue],
+          CFor, CIf, CWhile, CDoWhile, CExprStmt, CBreak, CContinue,
+          CSwitch],
     Field(discriminator="kind"),
 ]
 

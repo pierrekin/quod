@@ -1,0 +1,101 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_day_length",
+    "b_id": "@fn_c_day_length",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_8",
+      "stmts": [
+        {
+          "a_id": "@cswitch_c_day_length_1",
+          "cases": [
+            {
+              "body": {
+                "a_block": "<inline>",
+                "b_block_id": "@blk_c_6",
+                "stmts": [
+                  {
+                    "a_id": "@creturn_c_day_length_1",
+                    "kind": "return e \u2194 return_expr",
+                    "value": {
+                      "kind": "int_lit",
+                      "value": 31
+                    }
+                  }
+                ]
+              },
+              "kind": "switch.case[0] \u2194 if",
+              "values_count": 1
+            },
+            {
+              "body": {
+                "a_block": "<inline>",
+                "b_block_id": "@blk_c_4",
+                "stmts": [
+                  {
+                    "a_id": "@creturn_c_day_length_2",
+                    "kind": "return e \u2194 return_expr",
+                    "value": {
+                      "kind": "int_lit",
+                      "value": 30
+                    }
+                  }
+                ]
+              },
+              "kind": "switch.case[1] \u2194 if",
+              "values_count": 4
+            },
+            {
+              "body": {
+                "a_block": "<inline>",
+                "b_block_id": "@blk_c_2",
+                "stmts": [
+                  {
+                    "a_id": "@creturn_c_day_length_3",
+                    "kind": "return e \u2194 return_expr",
+                    "value": {
+                      "kind": "int_lit",
+                      "value": 28
+                    }
+                  }
+                ]
+              },
+              "kind": "switch.case[2] \u2194 if",
+              "values_count": 1
+            }
+          ],
+          "default": {
+            "a_block": "<inline>",
+            "b_block_id": "@blk_c_1",
+            "stmts": [
+              {
+                "a_id": "@creturn_c_day_length_4",
+                "kind": "return e \u2194 return_expr",
+                "value": {
+                  "kind": "int_lit",
+                  "value": 31
+                }
+              }
+            ]
+          },
+          "kind": "c.switch \u2194 if-else-if chain"
+        }
+      ]
+    },
+    "name": "day_length",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "day"
+      }
+    ],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

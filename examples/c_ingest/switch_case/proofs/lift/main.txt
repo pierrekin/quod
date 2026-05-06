@@ -1,0 +1,229 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_main",
+    "b_id": "@fn_c_main",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_15",
+      "stmts": [
+        {
+          "a_id": "@cexprstmt_c_main_1",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.switch_case.0",
+                "value": "day_length(1)  = %d\n"
+              },
+              {
+                "args": [
+                  {
+                    "kind": "int_lit",
+                    "value": 1
+                  }
+                ],
+                "callee": "day_length",
+                "kind": "call \u2194 call"
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_2",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.switch_case.1",
+                "value": "day_length(2)  = %d\n"
+              },
+              {
+                "args": [
+                  {
+                    "kind": "int_lit",
+                    "value": 2
+                  }
+                ],
+                "callee": "day_length",
+                "kind": "call \u2194 call"
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_3",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.switch_case.2",
+                "value": "day_length(4)  = %d\n"
+              },
+              {
+                "args": [
+                  {
+                    "kind": "int_lit",
+                    "value": 4
+                  }
+                ],
+                "callee": "day_length",
+                "kind": "call \u2194 call"
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_4",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.switch_case.3",
+                "value": "day_length(11) = %d\n"
+              },
+              {
+                "args": [
+                  {
+                    "kind": "int_lit",
+                    "value": 11
+                  }
+                ],
+                "callee": "day_length",
+                "kind": "call \u2194 call"
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_5",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.switch_case.4",
+                "value": "day_length(7)  = %d\n"
+              },
+              {
+                "args": [
+                  {
+                    "kind": "int_lit",
+                    "value": 7
+                  }
+                ],
+                "callee": "day_length",
+                "kind": "call \u2194 call"
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_6",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.switch_case.5",
+                "value": "classify(0)    = %d\n"
+              },
+              {
+                "args": [
+                  {
+                    "kind": "int_lit",
+                    "value": 0
+                  }
+                ],
+                "callee": "classify",
+                "kind": "call \u2194 call"
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_7",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.switch_case.6",
+                "value": "classify(2)    = %d\n"
+              },
+              {
+                "args": [
+                  {
+                    "kind": "int_lit",
+                    "value": 2
+                  }
+                ],
+                "callee": "classify",
+                "kind": "call \u2194 call"
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_8",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.switch_case.7",
+                "value": "classify(99)   = %d\n"
+              },
+              {
+                "args": [
+                  {
+                    "kind": "int_lit",
+                    "value": 99
+                  }
+                ],
+                "callee": "classify",
+                "kind": "call \u2194 call"
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@creturn_c_main_1",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "int_lit",
+            "value": 0
+          }
+        }
+      ]
+    },
+    "name": "main",
+    "params": [],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

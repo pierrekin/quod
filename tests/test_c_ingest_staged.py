@@ -708,6 +708,74 @@ def test_do_while_example_compiles_and_runs(tmp_path):
     assert "sum_until(10)   = 37" in out.stdout
 
 
+SWITCH_CASE_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/switch_case/switch_case.c"
+
+
+def test_switch_lifts_to_if_chain_at_layer_b():
+    """Layer-A `c.switch` lifts to a layer-B if-else-if chain. Each
+    case becomes one If; stacked cases (`case 4: case 6: ...`) get
+    OR'd conds; the innermost else holds the default body."""
+    from quod.model import CSwitch, CSwitchCase
+    p = ingest_c(SWITCH_CASE_C)
+
+    cfn = next(cf for cf in p.source_units[0].functions if cf.name == "day_length")
+    sw = next(s for s in cfn.body if isinstance(s, CSwitch))
+    # 4 cases (1 / [4,6,9,11] / 2) and a default.
+    assert len(sw.cases) == 3
+    assert tuple(len(c.values) for c in sw.cases) == (1, 4, 1)
+    assert sw.default is not None
+
+    fn_b = next(f for f in p.structured_functions if f.name == "day_length")
+    body = fn_b.body.stmts
+    # First (and only) statement of body is the outer If of the chain.
+    outer = body[0]
+    assert isinstance(outer, If)
+
+
+def test_switch_example_compiles_and_runs(tmp_path):
+    import subprocess
+    from quod.lower import compile_program
+    p = ingest_c(SWITCH_CASE_C)
+    res = compile_program(
+        p, build_dir=tmp_path, bins=(("sw", "main"),),
+        profile=2, link=True,
+    )
+    out = subprocess.run([str(res.bins[0].binary)], capture_output=True, text=True, timeout=10)
+    assert out.returncode == 0
+    assert "day_length(1)  = 31" in out.stdout
+    assert "day_length(4)  = 30" in out.stdout
+    assert "day_length(11) = 30" in out.stdout
+    assert "day_length(7)  = 31" in out.stdout  # default
+    assert "classify(2)    = 200" in out.stdout
+    assert "classify(99)   = 999" in out.stdout
+
+
+def test_switch_implicit_fallthrough_refuses(tmp_path):
+    """A case body without break/return is rejected at ingest."""
+    src = tmp_path / "fall.c"
+    src.write_text(
+        "int f(int x) {\n"
+        "    int r = 0;\n"
+        "    switch (x) {\n"
+        "        case 1: r = 1;\n"  # no break — fallthrough into case 2
+        "        case 2: r = 2; break;\n"
+        "    }\n"
+        "    return r;\n"
+        "}\n"
+    )
+    with pytest.raises(IngestError, match="break|fallthrough|return"):
+        ingest_c(src)
+
+
+def test_switch_passes_lift_check():
+    from quod.lift_check import prove_lifts
+    from pathlib import Path as P
+    p = ingest_c(SWITCH_CASE_C)
+    # prove_lifts walks each (cfn, fn) pair structurally; the CSwitch
+    # ↔ if-else-if chain pairing must succeed.
+    prove_lifts(p, write_dir=P("/tmp/sw_proofs_test"), write=False)
+
+
 def test_every_c_corpus_example_emits_layer_a():
     """Coverage sweep: every example now produces a `source_units`
     entry. The layer-A widening landed in three steps (calls /
