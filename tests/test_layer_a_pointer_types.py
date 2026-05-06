@@ -259,13 +259,20 @@ def test_walk_lift_refuses_string_lit_without_program():
 # ---------- enum-constant refusal (preserves curl_fetch fallback) ----------
 
 
-def test_curl_fetch_still_falls_back_to_layer_b():
-    """`curl_fetch.c` uses `CURLOPT_URL` (an enum constant). Layer A
-    refuses these in v6 — they need a `CEnumConstRef` node which
-    lands in the next commit. Until then, the all-or-nothing
-    fallback preserves layer-B behavior."""
+def test_curl_fetch_layer_a_after_enum_const_ref_landed():
+    """Once `CEnumConstRef` lands (next commit on top of pointer
+    types), curl_fetch.c gets full layer-A coverage too — `CURL*`
+    is a pointer type, `CURLOPT_URL` is an enum constant resolved
+    to its integer value."""
     p = ingest_c(EXAMPLES / "curl_fetch/curl_fetch.c")
-    assert p.source_units == ()
-    # Layer B / C still work.
-    assert len(p.structured_functions) == 1
-    assert len(p.functions) == 1
+    assert len(p.source_units) == 1
+    fn = p.source_units[0].functions[0]
+    # The setopt call's second arg is CURLOPT_URL.
+    setopt_stmt = fn.body[1]
+    call = setopt_stmt.value
+    assert call.callee == "curl_easy_setopt"
+    second = call.args[1]
+    from quod.model import CEnumConstRef
+    assert isinstance(second, CEnumConstRef)
+    assert second.name == "CURLOPT_URL"
+    assert second.value == 10002

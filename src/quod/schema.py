@@ -33,6 +33,7 @@ from quod.model import (
     CAssign,
     CBinOp,
     CCall,
+    CEnumConstRef,
     CExprStmt,
     CFn,
     CFor,
@@ -993,6 +994,20 @@ _KIND_INFO["c.var_ref"] = {
     "example": {"kind": "c.var_ref", "name": "i"},
 }
 
+_KIND_INFO["c.enum_const_ref"] = {
+    "class": CEnumConstRef,
+    "summary": (
+        "A C enum-constant reference. The layer-B lifter resolves "
+        "these to integer values; layer A preserves both the "
+        "source-level identifier (`name`) and the resolved integer "
+        "(`value`) so the lift-check can verify equivalence without "
+        "re-running libclang. If the enum's resolved value drifts, "
+        "the pinned `value` disagrees with layer-B's IntLit and "
+        "`equiv verify` catches it."
+    ),
+    "example": {"kind": "c.enum_const_ref", "name": "CURLOPT_URL", "value": 10002},
+}
+
 _KIND_INFO["c.binop"] = {
     "class": CBinOp,
     "summary": (
@@ -1271,7 +1286,8 @@ _CATEGORIES: dict[str, list[str]] = {
         "c_unit", "c.fn", "c.param", "c.type", "c.type.ptr",
         "c.var_decl", "c.assign", "c.return", "c.for",
         "c.if", "c.while", "c.expr_stmt",
-        "c.binop", "c.lit_int", "c.lit_str", "c.var_ref", "c.call",
+        "c.binop", "c.lit_int", "c.lit_str", "c.var_ref",
+        "c.enum_const_ref", "c.call",
         "c.array_subscript", "c.addr_of",
     ],
     # Layer-B `c.*` extensions — constructs core quod can't represent;

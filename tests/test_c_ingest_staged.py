@@ -153,16 +153,10 @@ def test_sum_c_compiles_and_runs(tmp_path):
 
 
 def test_existing_c_examples_get_full_three_layer_lift():
-    """As of the layer-A widening (calls / strings / if / while
-    landed), the loops.c example produces all three layers — layer A
+    """All examples in the corpus now produce all three layers — layer A
     under `source_units`, layer B under `structured_functions`,
     layer C under `functions`. The B→C rule cited is `identity`
-    (no `c.*` extensions present).
-
-    Files that still use constructs outside the v6 layer-A subset
-    (pointer-typed locals — `string_offset.c`, enum constants —
-    `curl_fetch.c`) hit the all-or-nothing fallback and emit no
-    `source_units`. See `test_curl_fetch_falls_back_to_layer_b_only`."""
+    when no `c.*` extensions are present (i.e. no for-loops)."""
     examples = Path(__file__).resolve().parents[1] / "examples/c_ingest"
     p = ingest_c(examples / "loops/loops.c")
 
@@ -189,15 +183,15 @@ def test_existing_c_examples_get_full_three_layer_lift():
     assert len(a_to_b) == 3
 
 
-def test_curl_fetch_falls_back_to_layer_b_only():
-    """`curl_fetch.c` uses pointer-typed locals (`CURL *handle`) and
-    enum constants (`CURLOPT_URL`) that are outside v6's layer-A
-    subset. The all-or-nothing fallback produces a layer-B-only
-    program; layer C still works."""
-    examples = Path(__file__).resolve().parents[1] / "examples/c_ingest"
-    p = ingest_c(examples / "curl_fetch/curl_fetch.c")
-    assert p.source_units == ()
-    # Layer B and layer C still populated; B→C `identity` cited.
-    assert len(p.structured_functions) == 1
-    assert len(p.functions) == 1
-    assert p.functions[0].name == "main"
+def test_every_c_corpus_example_emits_layer_a():
+    """Coverage sweep: every example now produces a `source_units`
+    entry. The layer-A widening landed in three steps (calls /
+    strings / if / while; pointer types; enum constants); this test
+    pins the now-uniform invariant."""
+    examples_dir = Path(__file__).resolve().parents[1] / "examples/c_ingest"
+    for example_dir in sorted(examples_dir.iterdir()):
+        c_files = list(example_dir.glob("*.c"))
+        if not c_files:
+            continue
+        p = ingest_c(c_files[0])
+        assert p.source_units, f"{example_dir.name}: expected layer-A subtree"

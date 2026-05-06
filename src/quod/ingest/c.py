@@ -52,6 +52,7 @@ from quod.model import (
     CAssign,
     CBinOp,
     CCall,
+    CEnumConstRef,
     CExpr,
     CExprStmt,
     CFn,
@@ -756,19 +757,16 @@ class _LayerATranslator:
             return CStringLit(id=self._mint("clitstr"), value=value)
         if k == cx.CursorKind.DECL_REF_EXPR:
             # Enum constants resolve to integer values at layer B
-            # (`CURLOPT_URL` → `IntLit(10002)`). Layer A doesn't yet
-            # have a node for "enum constant by name" — that lands in
-            # the next commit. Until then, refuse so the all-or-
-            # nothing fallback preserves layer-B behavior for files
-            # that use enum constants (e.g. curl_fetch.c).
+            # (`CURLOPT_URL` → `IntLit(10002)`); layer A preserves
+            # both the source-level identifier and the resolved
+            # value via `CEnumConstRef`. The pinned value is what the
+            # lift-check compares against the layer-B `IntLit`.
             referenced = c.referenced
             if referenced is not None and referenced.kind == cx.CursorKind.ENUM_CONSTANT_DECL:
-                raise _refuse(
-                    c,
-                    f"layer A: enum constants ({c.spelling!r}) not "
-                    f"supported in v6 — use the enum's resolved "
-                    f"integer value at layer B until CEnumConstRef "
-                    f"lands"
+                return CEnumConstRef(
+                    id=self._mint("cenumconst"),
+                    name=c.spelling,
+                    value=referenced.enum_value,
                 )
             return CVarRef(name=c.spelling)
         if k == cx.CursorKind.CALL_EXPR:

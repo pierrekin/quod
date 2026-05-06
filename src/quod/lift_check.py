@@ -68,6 +68,7 @@ from quod.model import (
     CAssign,
     CBinOp,
     CCall,
+    CEnumConstRef,
     CExprStmt,
     CFn,
     CFor,
@@ -472,6 +473,30 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
         if not isinstance(b.type, I32Type):
             raise LiftCheckError(f"{path}: layer-B int_lit is not i32")
         return {"kind": "int_lit", "value": a.value}
+
+    if isinstance(a, CEnumConstRef):
+        # `CURLOPT_URL` (layer A) ↔ `IntLit(I32, 10002)` (layer B).
+        # The lifter resolves the enum constant via libclang at lift
+        # time; layer A pins the resolved value so re-checking
+        # doesn't need libclang. Compare values (the source-level
+        # name is informational).
+        if not isinstance(b, IntLit):
+            raise LiftCheckError(
+                f"{path}: layer-A enum constant {a.name!r} (value {a.value}) "
+                f"vs layer-B {type(b).__name__}"
+            )
+        if a.value != b.value:
+            raise LiftCheckError(
+                f"{path}: enum constant {a.name!r} resolved value {a.value} "
+                f"vs layer-B IntLit value {b.value} — the enum's value has "
+                f"drifted since this lift was pinned (re-ingest to update)"
+            )
+        if not isinstance(b.type, I32Type):
+            raise LiftCheckError(
+                f"{path}: layer-B IntLit for enum constant {a.name!r} is "
+                f"not i32 ({b.type.kind!r})"
+            )
+        return {"kind": "enum_const_ref ↔ int_lit", "name": a.name, "value": a.value}
 
     if isinstance(a, CVarRef):
         # The lift produces ParamRef when the name is a function

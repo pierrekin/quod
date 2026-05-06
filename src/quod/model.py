@@ -1686,6 +1686,29 @@ class CVarRef(_Node):
     name: str
 
 
+class CEnumConstRef(_Node):
+    """A C enum-constant reference — `CURLOPT_URL`, `EAGAIN`, `O_RDONLY`,
+    etc. The layer-B lifter resolves these via libclang to integer
+    values (`CURLOPT_URL` → `IntLit(10002)`); layer A preserves the
+    source-level identifier *and* records the resolved value so the
+    lift-check can verify equivalence without re-running libclang.
+
+    Both fields are load-bearing in different ways:
+      - `name` is the source-level spelling (provenance + readability).
+      - `value` is what the lift-check actually compares against the
+        layer-B `IntLit.value`.
+
+    If the enum's resolved value drifts (e.g. you ingested against
+    libcurl 7.x and rebuild against 8.x with a re-numbered enum), the
+    pinned `value` here disagrees with the new layer B's `IntLit` and
+    `equiv verify` flags it. Catching that drift is half the point.
+    """
+    kind: Literal["c.enum_const_ref"] = "c.enum_const_ref"
+    id: str = Field(default_factory=lambda: _mint_node_id("cenumconst"))
+    name: str
+    value: int
+
+
 class CBinOp(_Node):
     """A binary operator in C source — arithmetic, comparison, bitwise,
     or logical. `op` is the operator's source-form spelling (`+`, `<`,
@@ -1748,7 +1771,7 @@ class CAddressOf(_Node):
 
 
 CExpr = Annotated[
-    Union[CIntLit, CVarRef, CBinOp, CStringLit, CCall,
+    Union[CIntLit, CVarRef, CEnumConstRef, CBinOp, CStringLit, CCall,
           CArraySubscript, CAddressOf],
     Field(discriminator="kind"),
 ]
@@ -2491,6 +2514,8 @@ def _format_c_expr(e) -> str:
             return repr(v)
         case CVarRef(name=n):
             return n
+        case CEnumConstRef(name=n, value=v):
+            return f"{n}={v}"
         case CBinOp(op=op, lhs=l, rhs=r):
             return f"({_format_c_expr(l)} {op} {_format_c_expr(r)})"
         case CCall(callee=callee, args=args):
