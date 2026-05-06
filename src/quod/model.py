@@ -1888,8 +1888,24 @@ CForInit = Annotated[
 ]
 
 
+class CMultiVarDecl(_Node):
+    """`int a, b, c;` or `int a = 1, b = 2;` — a single declaration
+    statement that introduces multiple locals.
+
+    Layer A preserves the source-form grouping; the lift expands this
+    to N consecutive `Let` statements on the layer-B side. The lift-
+    checker recognizes the 1:N pairing and walks each sub-decl against
+    its corresponding Let. All `decls` share the same C type (the type
+    appears once in source, before the comma-separated declarator
+    list).
+    """
+    kind: Literal["c.multi_var_decl"] = "c.multi_var_decl"
+    id: str = Field(default_factory=lambda: _mint_node_id("cmultivardecl"))
+    decls: tuple[CVarDecl, ...]
+
+
 CStmt = Annotated[
-    Union[CVarDecl, CAssign, CReturn, CFor, CIf, CWhile, CExprStmt],
+    Union[CVarDecl, CMultiVarDecl, CAssign, CReturn, CFor, CIf, CWhile, CExprStmt],
     Field(discriminator="kind"),
 ]
 

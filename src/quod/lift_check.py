@@ -74,6 +74,7 @@ from quod.model import (
     CFor,
     CIf,
     CIntLit,
+    CMultiVarDecl,
     CNamedType,
     CParam,
     CPointerType,
@@ -312,27 +313,74 @@ def _check_body(
     a_list = list(a_stmts)
     b_list = list(b_block.stmts)
 
+    # Each layer-A CMultiVarDecl(N) corresponds to N consecutive layer-B
+    # Lets, so the number of layer-B stmts the layer-A list "expects"
+    # is the sum of (N for multi-decls) + (1 for everything else).
+    a_expanded_count = sum(
+        len(a.decls) if isinstance(a, CMultiVarDecl) else 1
+        for a in a_list
+    )
+
     if strip_fallthrough:
         # The ingester adds:
         #   - ReturnExpr(IntLit(0)) for `main` falling off the end
+        #   - Return() for void functions falling off the end
         #   - Unreachable() for non-main int-returning functions
-        # When the layer-A body terminates explicitly, neither is added.
-        while len(b_list) > len(a_list) and _is_synthesized_fallthrough(b_list[-1]):
+        # When the layer-A body terminates explicitly, none is added.
+        while b_list and len(b_list) > a_expanded_count and (
+            _is_synthesized_fallthrough(b_list[-1])
+        ):
             b_list.pop()
 
-    if len(a_list) != len(b_list):
+    # Walk the two lists together. A layer-A `CMultiVarDecl(N decls)`
+    # consumes N consecutive Lets on the layer-B side (the ingester
+    # expands `int a, b, c;` to N `Let`s). Every other statement is
+    # 1:1.
+    out_records: list[dict[str, Any]] = []
+    bi = 0
+    for ai, a in enumerate(a_list):
+        if isinstance(a, CMultiVarDecl):
+            n = len(a.decls)
+            if bi + n > len(b_list):
+                raise LiftCheckError(
+                    f"{path}: layer-A CMultiVarDecl with {n} sub-decls "
+                    f"but only {len(b_list) - bi} layer-B stmts left"
+                )
+            sub_records = []
+            for j, sub in enumerate(a.decls):
+                rec = _check_stmt(
+                    sub, b_list[bi + j],
+                    path=f"{path}.stmts[{ai}].decls[{j}]", ctx=ctx,
+                )
+                sub_records.append(rec)
+            out_records.append({
+                "kind": "c.multi_var_decl ↔ N×let",
+                "a_id": a.id,
+                "decls": sub_records,
+            })
+            bi += n
+        else:
+            if bi >= len(b_list):
+                raise LiftCheckError(
+                    f"{path}: ran out of layer-B stmts at A-index {ai}"
+                )
+            out_records.append(_check_stmt(
+                a, b_list[bi],
+                path=f"{path}.stmts[{ai}]", ctx=ctx,
+            ))
+            bi += 1
+
+    if bi != len(b_list):
         raise LiftCheckError(
-            f"{path}: stmt count {len(a_list)} (layer A) vs {len(b_list)} "
-            f"(layer B); divergent shape"
+            f"{path}: layer-A consumed {bi} of {len(b_list)} layer-B "
+            f"stmts; divergent shape (extra layer-B stmts: "
+            f"{[type(s).__name__ for s in b_list[bi:]]})"
         )
 
     return {
         "a_block": "<inline>",  # layer-A bodies are tuple[CStmt, ...], not blocks
         "b_block_id": b_block.id,
-        "stmts": [
-            _check_stmt(a, b, path=f"{path}.stmts[{i}]", ctx=ctx)
-            for i, (a, b) in enumerate(zip(a_list, b_list))
-        ],
+        "stmts": out_records,
     }
 
 

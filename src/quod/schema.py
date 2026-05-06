@@ -39,6 +39,7 @@ from quod.model import (
     CFor,
     CIf,
     CIntLit,
+    CMultiVarDecl,
     CNamedType,
     CParam,
     CPointerType,
@@ -1110,6 +1111,25 @@ _KIND_INFO["c.var_decl"] = {
     },
 }
 
+_KIND_INFO["c.multi_var_decl"] = {
+    "class": CMultiVarDecl,
+    "summary": (
+        "`int a, b, c;` — a single declaration statement introducing "
+        "multiple locals. Layer-A only: the lift expands each sub-decl "
+        "to a separate layer-B `Let`, and the lift-checker pairs the "
+        "multi-decl with the resulting N consecutive Lets."
+    ),
+    "example": {
+        "kind": "c.multi_var_decl",
+        "decls": [
+            {"kind": "c.var_decl", "type": {"kind": "c.type", "name": "int"},
+             "name": "a", "init": {"kind": "c.lit_int", "value": 0}},
+            {"kind": "c.var_decl", "type": {"kind": "c.type", "name": "int"},
+             "name": "b", "init": {"kind": "c.lit_int", "value": 1}},
+        ],
+    },
+}
+
 _KIND_INFO["c.assign"] = {
     "class": CAssign,
     "summary": (
@@ -1300,7 +1320,7 @@ _CATEGORIES: dict[str, list[str]] = {
     # .scratch/c-ingest/00-overview.md.
     "source.c": [
         "c_unit", "c.fn", "c.param", "c.type", "c.type.ptr",
-        "c.var_decl", "c.assign", "c.return", "c.for",
+        "c.var_decl", "c.multi_var_decl", "c.assign", "c.return", "c.for",
         "c.if", "c.while", "c.expr_stmt",
         "c.binop", "c.lit_int", "c.lit_str", "c.var_ref",
         "c.enum_const_ref", "c.call",

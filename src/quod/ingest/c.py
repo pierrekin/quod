@@ -60,6 +60,7 @@ from quod.model import (
     CForInit,
     CIf,
     CIntLit,
+    CMultiVarDecl,
     CNamedType,
     CParam,
     CPointerType,
@@ -508,6 +509,20 @@ class _FunctionTranslator:
         raise _refuse(c, f"unsupported expression kind: {k.name}")
 
     def stmt(self, cursor: cx.Cursor) -> Statement:
+        """Translate a cursor that's expected to produce exactly one
+        statement. Refuses if the cursor expands to multiple (e.g. a
+        multi-declarator `int a, b;` in a for-loop init slot)."""
+        out = self.stmts(cursor)
+        if len(out) != 1:
+            raise _refuse(
+                cursor,
+                f"this position expects a single statement, got "
+                f"{len(out)} (multi-declarator declarations are only "
+                f"supported as top-level statements)"
+            )
+        return out[0]
+
+    def stmts(self, cursor: cx.Cursor) -> tuple[Statement, ...]:
         c = cursor
         k = c.kind
 
@@ -525,17 +540,17 @@ class _FunctionTranslator:
                         "bare `return;` is only valid in void-returning "
                         "functions; this function returns a non-void type."
                     )
-                return Return()
+                return (Return(),)
             inner = _unwrap(children[0])
             if inner.kind == cx.CursorKind.INTEGER_LITERAL:
                 tokens = [t.spelling for t in inner.get_tokens()]
-                return ReturnExpr(value=IntLit(type=_I32, value=int(tokens[0], 0)))
+                return (ReturnExpr(value=IntLit(type=_I32, value=int(tokens[0], 0))),)
             value = self.expr(children[0])
             if _is_i1_typed(value):
                 # C's `return cond;` implicitly widens i1→int. quod has no
                 # zext node, so synthesize the equivalent branch: if cond
                 # then return 1 else return 0.
-                return If(
+                return (If(
                     cond=value,
                     then_body=Block(
                         id=self._state.mint_block_id(),
@@ -545,8 +560,8 @@ class _FunctionTranslator:
                         id=self._state.mint_block_id(),
                         stmts=(ReturnExpr(value=IntLit(type=_I32, value=0)),),
                     ),
-                )
-            return ReturnExpr(value=value)
+                ),)
+            return (ReturnExpr(value=value),)
 
         if k == cx.CursorKind.IF_STMT:
             children = list(c.get_children())
@@ -558,7 +573,7 @@ class _FunctionTranslator:
                 self._block(children[2]) if len(children) == 3
                 else Block(id=self._state.mint_block_id())
             )
-            return If(cond=cond, then_body=then_body, else_body=else_body)
+            return (If(cond=cond, then_body=then_body, else_body=else_body),)
 
         if k == cx.CursorKind.WHILE_STMT:
             children = list(c.get_children())
@@ -566,7 +581,7 @@ class _FunctionTranslator:
                 raise _refuse(c, f"while-stmt with {len(children)} children")
             cond = self.expr(children[0])
             body = self._block(children[1])
-            return While(cond=cond, body=body)
+            return (While(cond=cond, body=body),)
 
         if k == cx.CursorKind.FOR_STMT:
             # Layer B: emit `c.for_general` (CStyleFor). The c-family
@@ -592,26 +607,29 @@ class _FunctionTranslator:
             cond_expr = self.expr(cond_cursor)
             inc_stmt = self.stmt(inc_cursor)
             body = self._block(body_cursor)
-            return CStyleFor(
+            return (CStyleFor(
                 id=self._state.mint_cstyle_for_id(),
                 init=init_stmt, cond=cond_expr, inc=inc_stmt, body=body,
-            )
+            ),)
 
         if k == cx.CursorKind.DECL_STMT:
             children = list(c.get_children())
-            if len(children) != 1:
-                raise _refuse(c, "multi-declarator declarations not supported")
-            decl = children[0]
-            if decl.kind != cx.CursorKind.VAR_DECL:
-                raise _refuse(decl, f"only var declarations supported, got {decl.kind.name}")
-            local_ty = _local_type(decl, decl.type)
-            init_children = list(decl.get_children())
-            if not init_children:
-                raise _refuse(decl, "uninitialized locals not supported (require `T x = …;`)")
-            # The last child is the initializer; earlier children are type refs we ignore.
-            init_expr = self.expr(init_children[-1])
-            self._locals.add(decl.spelling)
-            return Let(name=decl.spelling, type=local_ty, init=init_expr)
+            if not children:
+                raise _refuse(c, "decl-stmt with no children")
+            # Multi-declarator: `int a, b, c;` becomes N consecutive Lets.
+            # libclang exposes each declarator as its own VAR_DECL child.
+            lets: list[Statement] = []
+            for decl in children:
+                if decl.kind != cx.CursorKind.VAR_DECL:
+                    raise _refuse(decl, f"only var declarations supported, got {decl.kind.name}")
+                local_ty = _local_type(decl, decl.type)
+                init_children = list(decl.get_children())
+                if not init_children:
+                    raise _refuse(decl, "uninitialized locals not supported (require `T x = …;`)")
+                init_expr = self.expr(init_children[-1])
+                self._locals.add(decl.spelling)
+                lets.append(Let(name=decl.spelling, type=local_ty, init=init_expr))
+            return tuple(lets)
 
         if k == cx.CursorKind.BINARY_OPERATOR:
             # Bare assignment as a statement: `x = expr;`
@@ -624,24 +642,24 @@ class _FunctionTranslator:
                 if lhs.spelling not in self._locals:
                     raise _refuse(lhs, f"cannot assign to {lhs.spelling!r} (must be a local declared with `int`)")
                 value = self.expr(children[1])
-                return Assign(name=lhs.spelling, value=value)
-            return ExprStmt(value=self.expr(c))
+                return (Assign(name=lhs.spelling, value=value),)
+            return (ExprStmt(value=self.expr(c)),)
 
         if k == cx.CursorKind.CALL_EXPR:
-            return ExprStmt(value=self.expr(c))
+            return (ExprStmt(value=self.expr(c)),)
 
         raise _refuse(c, f"unsupported statement kind: {k.name}")
 
     def _block(self, cursor: cx.Cursor) -> Block:
         block_id = self._state.mint_block_id()
         if cursor.kind == cx.CursorKind.COMPOUND_STMT:
-            return Block(
-                id=block_id,
-                stmts=tuple(self.stmt(s) for s in cursor.get_children()),
-            )
+            stmts: list[Statement] = []
+            for s in cursor.get_children():
+                stmts.extend(self.stmts(s))
+            return Block(id=block_id, stmts=tuple(stmts))
         # Single-statement bodies (e.g. `if (c) return 0;`) are valid C and
         # libclang exposes them as the statement directly.
-        return Block(id=block_id, stmts=(self.stmt(cursor),))
+        return Block(id=block_id, stmts=self.stmts(cursor))
 
     def _maybe_pointer_add(
         self, c: cx.Cursor, children: list[cx.Cursor],
@@ -892,19 +910,26 @@ class _LayerATranslator:
 
         if k == cx.CursorKind.DECL_STMT:
             children = list(c.get_children())
-            if len(children) != 1:
-                raise _refuse(c, "layer A: multi-declarator declarations not supported")
-            decl = children[0]
-            if decl.kind != cx.CursorKind.VAR_DECL:
-                raise _refuse(decl, f"layer A: only var declarations supported, got {decl.kind.name}")
-            init_children = list(decl.get_children())
-            init = self.expr(init_children[-1]) if init_children else None
-            return CVarDecl(
-                id=self._mint("cvardecl"),
-                type=_c_source_type(decl, decl.type),
-                name=decl.spelling,
-                init=init,
-            )
+            if not children:
+                raise _refuse(c, "layer A: decl-stmt with no children")
+            sub_decls: list[CVarDecl] = []
+            for decl in children:
+                if decl.kind != cx.CursorKind.VAR_DECL:
+                    raise _refuse(decl, f"layer A: only var declarations supported, got {decl.kind.name}")
+                init_children = list(decl.get_children())
+                init = self.expr(init_children[-1]) if init_children else None
+                sub_decls.append(CVarDecl(
+                    id=self._mint("cvardecl"),
+                    type=_c_source_type(decl, decl.type),
+                    name=decl.spelling,
+                    init=init,
+                ))
+            if len(sub_decls) == 1:
+                return sub_decls[0]
+            # Multi-declarator: `int a, b, c;` becomes a single layer-A
+            # CMultiVarDecl wrapping the sub-decls. The lift-checker
+            # pairs this 1:N against the layer-B sequence of Lets.
+            return CMultiVarDecl(id=self._mint("cmultivardecl"), decls=tuple(sub_decls))
 
         if k == cx.CursorKind.BINARY_OPERATOR:
             # Bare assignment as a statement: `x = expr;`.
@@ -1096,7 +1121,10 @@ def _translate_function(
     translator = _FunctionTranslator(
         tuple(p.name for p in params), state, is_void=is_void,
     )
-    body = tuple(translator.stmt(s) for s in body_cursor.get_children())
+    body_list: list[Statement] = []
+    for s in body_cursor.get_children():
+        body_list.extend(translator.stmts(s))
+    body = tuple(body_list)
 
     # Faithful translation of C fall-through. C99 §5.1.2.2.3 defines falling
     # off `main` as `return 0;` — synthesize that for int-returning `main`.

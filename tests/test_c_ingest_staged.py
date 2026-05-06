@@ -321,6 +321,66 @@ def test_void_extern_signature_uses_voidtype(tmp_path):
     assert out.returncode == 0
 
 
+MULTI_DECL_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/multi_decl/multi_decl.c"
+
+
+def test_multi_decl_layer_a_preserves_grouping_and_layer_b_expands():
+    """`int a = x, b = y, c = z;` lifts to a single layer-A
+    CMultiVarDecl wrapping three CVarDecls, and to three consecutive
+    Lets at layer B. The lift-checker pairs them 1:3."""
+    from quod.model import CMultiVarDecl, Let
+    p = ingest_c(MULTI_DECL_C)
+
+    sum3_a = next(cf for cf in p.source_units[0].functions if cf.name == "sum3")
+    first = sum3_a.body[0]
+    assert isinstance(first, CMultiVarDecl)
+    assert tuple(d.name for d in first.decls) == ("a", "b", "c")
+
+    sum3_b = next(fn for fn in p.structured_functions if fn.name == "sum3")
+    body = sum3_b.body.stmts
+    assert isinstance(body[0], Let) and body[0].name == "a"
+    assert isinstance(body[1], Let) and body[1].name == "b"
+    assert isinstance(body[2], Let) and body[2].name == "c"
+
+
+def test_multi_decl_lift_check_pairs_n_lets():
+    """walk_lift records the multi-decl 1:N pairing in its output."""
+    from quod.lift_check import walk_lift
+    p = ingest_c(MULTI_DECL_C)
+    sum3_a = next(cf for cf in p.source_units[0].functions if cf.name == "sum3")
+    sum3_b = next(fn for fn in p.structured_functions if fn.name == "sum3")
+    rec = walk_lift(sum3_a, sum3_b, program=p)
+    body_stmts = rec["fn"]["body"]["stmts"]
+    multi = body_stmts[0]
+    assert multi["kind"] == "c.multi_var_decl ↔ N×let"
+    assert len(multi["decls"]) == 3
+
+
+def test_multi_decl_example_compiles_and_runs(tmp_path):
+    import subprocess
+    from quod.lower import compile_program
+    p = ingest_c(MULTI_DECL_C)
+    res = compile_program(
+        p, build_dir=tmp_path, bins=(("multi_decl", "main"),),
+        profile=2, link=True,
+    )
+    out = subprocess.run([str(res.bins[0].binary)], capture_output=True, text=True, timeout=10)
+    assert out.returncode == 0
+    assert "sum3(1, 2, 3)        = 6" in out.stdout
+    assert "linear_combo(10)     = 21" in out.stdout
+
+
+def test_multi_decl_in_for_init_refuses(tmp_path):
+    """Multi-declarator inside a for-loop init slot (`for (int a, b; ...)`)
+    isn't supported — the init slot wants a single statement."""
+    src = tmp_path / "bad_for.c"
+    src.write_text(
+        "int f(int n) { int s = 0; for (int i = 0, j = 0; i < n; i = i + 1) { s = s + i + j; } return s; }\n"
+    )
+    with pytest.raises(IngestError, match="single statement"):
+        ingest_c(src)
+
+
 def test_every_c_corpus_example_emits_layer_a():
     """Coverage sweep: every example now produces a `source_units`
     entry. The layer-A widening landed in three steps (calls /

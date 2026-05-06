@@ -1,0 +1,89 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_linear_combo",
+    "b_id": "@fn_c_linear_combo",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_2",
+      "stmts": [
+        {
+          "a_id": "@cmultivardecl_c_linear_combo_1",
+          "decls": [
+            {
+              "a_id": "@cvardecl_c_linear_combo_1",
+              "init": {
+                "kind": "binop(+) \u2194 binop(add)",
+                "lhs": {
+                  "kind": "var_ref \u2194 param_ref",
+                  "name": "x"
+                },
+                "rhs": {
+                  "kind": "int_lit",
+                  "value": 1
+                }
+              },
+              "kind": "var_decl \u2194 let",
+              "name": "a"
+            },
+            {
+              "a_id": "@cvardecl_c_linear_combo_2",
+              "init": {
+                "kind": "binop(*) \u2194 binop(mul)",
+                "lhs": {
+                  "kind": "var_ref \u2194 local_ref",
+                  "name": "a"
+                },
+                "rhs": {
+                  "kind": "int_lit",
+                  "value": 2
+                }
+              },
+              "kind": "var_decl \u2194 let",
+              "name": "b"
+            },
+            {
+              "a_id": "@cvardecl_c_linear_combo_3",
+              "init": {
+                "kind": "binop(-) \u2194 binop(sub)",
+                "lhs": {
+                  "kind": "var_ref \u2194 local_ref",
+                  "name": "b"
+                },
+                "rhs": {
+                  "kind": "int_lit",
+                  "value": 1
+                }
+              },
+              "kind": "var_decl \u2194 let",
+              "name": "c"
+            }
+          ],
+          "kind": "c.multi_var_decl \u2194 N\u00d7let"
+        },
+        {
+          "a_id": "@creturn_c_linear_combo_1",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "var_ref \u2194 local_ref",
+            "name": "c"
+          }
+        }
+      ]
+    },
+    "name": "linear_combo",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "x"
+      }
+    ],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}
