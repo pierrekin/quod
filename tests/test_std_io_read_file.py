@@ -12,13 +12,6 @@ exactly where a regression broke:
   11 — read_value returned None (parse failed mid-stream)
   12 — parsed JsonValue was not a Number variant
   N  — parsed JsonValue::Number(N) — the success path
-
-STATUS: skipped. Forward-written against `std.io.read_file<A>`, which
-is the named migration debt in `.scratch/scratch.md` ("std.io.read_file<A>
-replacing read_file_to_arena"). The test imports `std.io` /
-`alloc.json.io` / etc. with a wirable `A=Arena`, but `std.io` doesn't
-currently declare any wirables. Drop the `pytest.mark.skip` once the
-allocator-bound File API lands.
 """
 
 from __future__ import annotations
@@ -200,20 +193,12 @@ def _build_and_exit(path: Path) -> int:
     return out.returncode
 
 
-_PLANNED_API_SKIP = pytest.mark.skip(
-    reason="planned stdlib surface (std.io.read_file<A> + wirable A on std.io); "
-           "tracked in .scratch/scratch.md — drop these skips when the API lands"
-)
-
-
-@_PLANNED_API_SKIP
 def test_read_file_parses_number(tmp_path):
     f = tmp_path / "n.json"
     f.write_text("42")
     assert _build_and_exit(f) == 42
 
 
-@_PLANNED_API_SKIP
 def test_read_file_missing_path_errs(tmp_path):
     missing = tmp_path / "does-not-exist.json"
     assert _build_and_exit(missing) == 10

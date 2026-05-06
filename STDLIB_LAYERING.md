@@ -153,7 +153,7 @@ been migrated to this layering. State:
 | `alloc.json.Parser<A>`                            | ✅ shipped |
 | `alloc.json.write.write_value<A>`                 | ✅ shipped |
 | `alloc.map.Map<K, V, A>`                          | ⏳ not yet |
-| `std.io.read_file<A>`                             | ⏳ not yet (still `read_file_to_arena`) |
+| `std.io.read_file<A>`                             | ✅ shipped |
 | `mem.gpa.Gpa`                                     | ⏳ future |
 | `mem.page.Page`                                   | ⏳ future |
 

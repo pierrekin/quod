@@ -1,105 +1,191 @@
 {
   "program": {
     "imports": [
-      "std.io",
+      {
+        "module": "std.io",
+        "wire": [
+          {
+            "name": "A",
+            "type": {
+              "kind": "llvm.struct",
+              "name": "mem.arena.Arena"
+            }
+          }
+        ]
+      },
       "core.io",
       "core.option",
       "core.result",
       "mem.arena"
     ],
     "constants": [
-      {"name": ".str.greeting", "value": "*"}
+      {
+        "name": ".str.greeting",
+        "value": "*"
+      }
     ],
     "functions": [
       {
         "name": "main",
         "params": [],
-        "return_type": {"kind": "llvm.i32"},
-        "body": {"id": "@blk_file_writer_stdout_3", "stmts": [
-          {
-            "kind": "quod.let",
-            "name": "a",
-            "type": {"kind": "llvm.i8_ptr"},
-            "init": {
-              "kind": "llvm.call",
-              "function": "mem.arena.new",
-              "args": [
-                {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 4096}
-              ]
-            }
-          },
-          {
-            "kind": "quod.let",
-            "name": "file_ptr",
-            "type": {"kind": "llvm.i8_ptr"},
-            "init": {
-              "kind": "llvm.call",
-              "function": "mem.arena.alloc",
-              "args": [
-                {"kind": "quod.local_ref", "name": "a"},
-                {"kind": "quod.sizeof", "type": {"kind": "llvm.struct", "name": "std.io.File"}}
-              ]
-            }
-          },
-          {
-            "kind": "quod.store",
-            "ptr": {"kind": "quod.local_ref", "name": "file_ptr"},
-            "value": {
-              "kind": "llvm.call",
-              "function": "std.io.stdout_file",
-              "args": []
-            }
-          },
-          {
-            "kind": "quod.let",
-            "name": "rc",
-            "type": {
-              "kind": "llvm.enum",
-              "name": "core.result.Result",
-              "type_args": [
-                {"kind": "llvm.usize"},
-                {"kind": "llvm.enum", "name": "core.io.IoError"}
-              ]
-            },
-            "init": {
-              "kind": "quod.trait_call",
-              "trait": "core.io.Writer",
-              "method": "write",
-              "dispatch_type": {"kind": "llvm.struct", "name": "std.io.File"},
-              "args": [
-                {"kind": "quod.local_ref", "name": "file_ptr"},
-                {"kind": "quod.string_ref", "name": ".str.greeting"},
-                {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 1}
-              ]
-            }
-          },
-          {
-            "kind": "quod.match",
-            "scrutinee": {"kind": "quod.local_ref", "name": "rc"},
-            "arms": [
-              {
-                "variant": "Ok",
-                "bindings": ["_n"],
-                "body": {"id": "@blk_file_writer_stdout_1", "stmts": [
-                  {
-                    "kind": "quod.return_expr",
-                    "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}
-                  }
-                ]}
+        "return_type": {
+          "kind": "llvm.i32"
+        },
+        "body": {
+          "id": "@blk_file_writer_stdout_3",
+          "stmts": [
+            {
+              "kind": "quod.let",
+              "name": "a",
+              "type": {
+                "kind": "llvm.i8_ptr"
               },
-              {
-                "variant": "Err",
-                "bindings": ["_e"],
-                "body": {"id": "@blk_file_writer_stdout_2", "stmts": [
+              "init": {
+                "kind": "llvm.call",
+                "function": "mem.arena.new",
+                "args": [
                   {
-                    "kind": "quod.return_expr",
-                    "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i64"
+                    },
+                    "value": 4096
                   }
-                ]}
+                ]
               }
-            ]
-          }
-        ]}
+            },
+            {
+              "kind": "quod.let",
+              "name": "file_ptr",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              },
+              "init": {
+                "kind": "llvm.call",
+                "function": "mem.arena.alloc",
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "a"
+                  },
+                  {
+                    "kind": "quod.sizeof",
+                    "type": {
+                      "kind": "llvm.struct",
+                      "name": "std.io.File"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.store",
+              "ptr": {
+                "kind": "quod.local_ref",
+                "name": "file_ptr"
+              },
+              "value": {
+                "kind": "llvm.call",
+                "function": "std.io.stdout_file",
+                "args": []
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "rc",
+              "type": {
+                "kind": "llvm.enum",
+                "name": "core.result.Result",
+                "type_args": [
+                  {
+                    "kind": "llvm.usize"
+                  },
+                  {
+                    "kind": "llvm.enum",
+                    "name": "core.io.IoError"
+                  }
+                ]
+              },
+              "init": {
+                "kind": "quod.trait_call",
+                "trait": "core.io.Writer",
+                "method": "write",
+                "dispatch_type": {
+                  "kind": "llvm.struct",
+                  "name": "std.io.File"
+                },
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "file_ptr"
+                  },
+                  {
+                    "kind": "quod.string_ref",
+                    "name": ".str.greeting"
+                  },
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.usize"
+                    },
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.match",
+              "scrutinee": {
+                "kind": "quod.local_ref",
+                "name": "rc"
+              },
+              "arms": [
+                {
+                  "variant": "Ok",
+                  "bindings": [
+                    "_n"
+                  ],
+                  "body": {
+                    "id": "@blk_file_writer_stdout_1",
+                    "stmts": [
+                      {
+                        "kind": "quod.return_expr",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 0
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "variant": "Err",
+                  "bindings": [
+                    "_e"
+                  ],
+                  "body": {
+                    "id": "@blk_file_writer_stdout_2",
+                    "stmts": [
+                      {
+                        "kind": "quod.return_expr",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 1
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
       }
     ]
   },

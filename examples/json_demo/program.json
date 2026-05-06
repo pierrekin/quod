@@ -378,20 +378,18 @@
           "body": {"id": "@blk_program_15", "stmts": [
             {
               "kind": "quod.let",
-              "name": "read_result",
+              "name": "rd",
               "type": {
                 "kind": "llvm.enum",
-                "name": "core.option.Option",
+                "name": "core.result.Result",
                 "type_args": [
-                  {
-                    "kind": "llvm.struct",
-                    "name": "core.str.String"
-                  }
+                  {"kind": "llvm.i8_ptr"},
+                  {"kind": "llvm.enum", "name": "core.io.IoError"}
                 ]
               },
               "init": {
                 "kind": "llvm.call",
-                "function": "std.io.read_file_to_arena",
+                "function": "std.io.read_file",
                 "args": [
                   {
                     "kind": "quod.string_ref",
@@ -408,12 +406,12 @@
               "kind": "quod.match",
               "scrutinee": {
                 "kind": "quod.local_ref",
-                "name": "read_result"
+                "name": "rd"
               },
               "arms": [
                 {
-                  "variant": "None",
-                  "bindings": [],
+                  "variant": "Err",
+                  "bindings": ["_e"],
                   "body": {"id": "@blk_program_3", "stmts": [
                     {
                       "kind": "quod.expr_stmt",
@@ -431,9 +429,9 @@
                   ]}
                 },
                 {
-                  "variant": "Some",
+                  "variant": "Ok",
                   "bindings": [
-                    "text"
+                    "reader_ptr"
                   ],
                   "body": {"id": "@blk_program_14", "stmts": [
                     {
@@ -451,23 +449,20 @@
                       },
                       "init": {
                         "kind": "llvm.call",
-                        "function": "alloc.json.parse",
+                        "function": "alloc.json.io.read_value",
+                        "type_args": [
+                          {
+                            "kind": "llvm.struct",
+                            "name": "alloc.io.BufReader",
+                            "type_args": [
+                              {"kind": "llvm.struct", "name": "std.io.File"}
+                            ]
+                          }
+                        ],
                         "args": [
                           {
-                            "kind": "quod.field",
-                            "value": {
-                              "kind": "quod.local_ref",
-                              "name": "text"
-                            },
-                            "name": "ptr"
-                          },
-                          {
-                            "kind": "quod.field",
-                            "value": {
-                              "kind": "quod.local_ref",
-                              "name": "text"
-                            },
-                            "name": "len"
+                            "kind": "quod.local_ref",
+                            "name": "reader_ptr"
                           },
                           {
                             "kind": "quod.local_ref",
@@ -784,6 +779,41 @@
         }
       ]
     },
-    "std.io"
+    {
+      "module": "alloc.json.io",
+      "wire": [
+        {
+          "name": "A",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "mem.arena.Arena"
+          }
+        }
+      ]
+    },
+    {
+      "module": "alloc.io",
+      "wire": [
+        {
+          "name": "A",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "mem.arena.Arena"
+          }
+        }
+      ]
+    },
+    {
+      "module": "std.io",
+      "wire": [
+        {
+          "name": "A",
+          "type": {
+            "kind": "llvm.struct",
+            "name": "mem.arena.Arena"
+          }
+        }
+      ]
+    }
   ]
 }

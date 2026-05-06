@@ -1,54 +1,100 @@
 {
   "program": {
     "imports": [
-      "std.io",
+      {
+        "module": "std.io",
+        "wire": [
+          {
+            "name": "A",
+            "type": {
+              "kind": "llvm.struct",
+              "name": "mem.arena.Arena"
+            }
+          }
+        ]
+      },
       "core.io",
       "core.result"
     ],
     "constants": [
-      {"name": ".str.missing", "value": "/this/path/does/not/exist/quod-errno-test"}
+      {
+        "name": ".str.missing",
+        "value": "/this/path/does/not/exist/quod-errno-test"
+      }
     ],
     "functions": [
       {
         "name": "main",
         "params": [],
-        "return_type": {"kind": "llvm.i32"},
-        "body": {"id": "@blk_file_open_missing_3", "stmts": [
-          {
-            "kind": "quod.match",
-            "scrutinee": {
-              "kind": "llvm.call",
-              "function": "std.io.open_read",
-              "args": [
-                {"kind": "quod.string_ref", "name": ".str.missing"}
-              ]
-            },
-            "arms": [
-              {
-                "variant": "Ok",
-                "bindings": ["_f"],
-                "body": {"id": "@blk_file_open_missing_1", "stmts": [
+        "return_type": {
+          "kind": "llvm.i32"
+        },
+        "body": {
+          "id": "@blk_file_open_missing_3",
+          "stmts": [
+            {
+              "kind": "quod.match",
+              "scrutinee": {
+                "kind": "llvm.call",
+                "function": "std.io.open_read",
+                "args": [
                   {
-                    "kind": "quod.return_expr",
-                    "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}
+                    "kind": "quod.string_ref",
+                    "name": ".str.missing"
                   }
-                ]}
+                ]
               },
-              {
-                "variant": "Err",
-                "bindings": ["_e"],
-                "body": {"id": "@blk_file_open_missing_2", "stmts": [
-                  {
-                    "kind": "quod.return_expr",
-                    "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42}
+              "arms": [
+                {
+                  "variant": "Ok",
+                  "bindings": [
+                    "_f"
+                  ],
+                  "body": {
+                    "id": "@blk_file_open_missing_1",
+                    "stmts": [
+                      {
+                        "kind": "quod.return_expr",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 1
+                        }
+                      }
+                    ]
                   }
-                ]}
-              }
-            ]
-          }
-        ]}
+                },
+                {
+                  "variant": "Err",
+                  "bindings": [
+                    "_e"
+                  ],
+                  "body": {
+                    "id": "@blk_file_open_missing_2",
+                    "stmts": [
+                      {
+                        "kind": "quod.return_expr",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 42
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
       }
     ]
   },
-  "expect": {"exit": 42}
+  "expect": {
+    "exit": 42
+  }
 }

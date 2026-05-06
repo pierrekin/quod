@@ -1,7 +1,7 @@
 """Smoke test for `std.io.open_write`.
 
 Builds a quod program that opens a tempfile via open_write (which calls
-the now-variadic libc `open` extern with O_WRONLY|O_CREAT|O_TRUNC + mode
+the variadic libc `open` extern with O_WRONLY|O_CREAT|O_TRUNC + mode
 0644), writes a fixed payload through the File Reader/Writer trait, and
 closes the fd. Pytest asserts the file content matches.
 
@@ -9,13 +9,6 @@ Exit codes pin which step broke:
   10 — open_write returned Err
   11 — Writer.write returned Err
    0 — wrote payload, closed fd
-
-STATUS: skipped. This is a forward-written smoke test against a stdlib
-surface that hasn't shipped yet. It imports `std.io` with a wirable
-`A=Arena`, but `std.io` doesn't currently declare any wirables. See
-`.scratch/scratch.md` ("Write-side File openers" / "std.io.read_file<A>
-replacing read_file_to_arena") for the planned work — when those land,
-remove the `pytest.mark.skip` and verify the test passes.
 """
 
 from __future__ import annotations
@@ -172,10 +165,6 @@ def _build_and_run(prog: Program) -> int:
     return out.returncode
 
 
-@pytest.mark.skip(
-    reason="planned stdlib surface (std.io.open_write + wirable A on std.io); "
-           "tracked in .scratch/scratch.md — drop this skip when the API lands"
-)
 def test_open_write_roundtrip(tmp_path):
     f = tmp_path / "out.txt"
     rc = _build_and_run(_make_program(str(f)))

@@ -317,8 +317,12 @@ build time (first-wins by name).
   `as_string`, …). Returns option-like enums (`JsonValue` with an
   `Error` variant; `JsonOpt` for nullable lookups) — pair with `?` and
   `match`.
-- `std.io` — `std.io.read_file_to_arena(path, arena)` →
-  `ReadResult::Ok { text } | Err`. Wraps libc `open` / `read` / `close`.
+- `std.io` — `std.io.read_file<A>(path, alloc)` →
+  `Result<*BufReader<File>, IoError>`. Allocator-bound; opens the path
+  for reading and returns a streaming Reader so callers can pass it
+  straight into `alloc.json.io.read_value` and friends. `std.io.open_read`
+  / `std.io.open_write(path)` return a `Result<File, IoError>` for
+  callers that want the raw fd; `std.io.file_close(file)` closes it.
   `std.io.file_size(fd) -> IoResult` returns the file size via lseek.
 
 ### Importing in your program
@@ -622,24 +626,27 @@ quod check
 
 ### Use the stdlib
 
-Edit `program.json` directly to add imports:
+Edit `program.json` directly to add imports. `std.io` is allocator-
+parameterized, so wire it (typically to `mem.arena.Arena`):
 
 ```json
-{"imports": ["std.io"], "functions": [...]}
+{"imports": [{"module": "std.io", "wire": [{"name": "A", "type": {"kind": "llvm.struct", "name": "mem.arena.Arena"}}]}], "functions": [...]}
 ```
 
-Then call `std.io.read_file_to_arena(path, arena)` and match on the
-result:
+Then call `std.io.read_file<A>(path, alloc)` and match on the result:
 
 ```
-fn read_or(path: i8_ptr, arena: i8_ptr) -> core.str.String {
-  let r: std.io.ReadResult = std.io.read_file_to_arena(path, arena)
+fn read_or(path: i8_ptr, alloc: i8_ptr) -> i8_ptr {
+  let r: Result<i8_ptr, core.io.IoError> = std.io.read_file(path, alloc)
   match r {
-    std.io.ReadResult::Ok text { return text }
-    std.io.ReadResult::Err     { return core.str.from_cstr(&.fallback) }
+    Ok reader_ptr { return reader_ptr }
+    Err _e        { return null }
   }
 }
 ```
+
+`reader_ptr` is a `*BufReader<File>` you can hand to streaming consumers
+like `alloc.json.io.read_value<BufReader<File>>(reader_ptr, alloc)`.
 
 ### Prove a claim instead of asserting it
 
