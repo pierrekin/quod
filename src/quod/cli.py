@@ -838,9 +838,48 @@ def show(
         help="Dump every node and its short hash, instead of the program form.",
     ),
     json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
+    source: bool = typer.Option(
+        False, "--source",
+        help="Filter the rendering to layer A — `Program.source_units`, "
+             "the original source-language subtree. Other function-ish "
+             "sections (`structured_functions`, `functions`) are hidden; "
+             "program-scaffolding (constants / externs / structs / enums "
+             "/ imports / edges / equivalences) and the layer-A section "
+             "still render.",
+    ),
+    structured: bool = typer.Option(
+        False, "--structured",
+        help="Filter the rendering to layer B — `Program.structured_functions`, "
+             "the extension-bearing transcription. Other function-ish "
+             "sections are hidden; program-scaffolding still renders.",
+    ),
 ) -> None:
-    """Print the program. Color follows TTY (disable with `quod --no-color`)."""
+    """Print the program. Color follows TTY (disable with `quod --no-color`).
+
+    By default prints every populated section (the canonical layer-C
+    `functions` plus, for C-derived programs, `source_units` and
+    `structured_functions`). `--source` and `--structured` filter to a
+    single function-section view; both are mutually exclusive with
+    each other and with `--hashes` (which dumps node hashes regardless
+    of layer)."""
+    if source and structured:
+        typer.echo("error: --source and --structured are mutually exclusive", err=True)
+        raise typer.Exit(2)
+    if (source or structured) and hashes:
+        typer.echo(
+            "error: --hashes is layer-independent (dumps every node); "
+            "drop --source / --structured to combine, or use them without --hashes",
+            err=True,
+        )
+        raise typer.Exit(2)
+
     program = _load()
+    if source or structured:
+        program = _project_to_layer(
+            program,
+            source=source, structured=structured,
+        )
+
     if json_output:
         if hashes:
             seen: set[str] = set()
@@ -868,6 +907,26 @@ def show(
             ), theme))
         return
     typer.echo(render(format_program_lines(program), theme=theme, mode="columnar"))
+
+
+def _project_to_layer(program: Program, *, source: bool, structured: bool) -> Program:
+    """Return a copy of `program` with the function-ish sections
+    other than the requested layer's hidden. Program-scaffolding
+    (constants, externs, structs, enums, imports, edges,
+    equivalences) is preserved — those are layer-independent or
+    cross-layer, and hiding them would obscure the context the
+    layer's rendering depends on."""
+    if source:
+        return program.model_copy(update={
+            "structured_functions": (),
+            "functions": (),
+        })
+    if structured:
+        return program.model_copy(update={
+            "source_units": (),
+            "functions": (),
+        })
+    return program
 
 
 @app.command()

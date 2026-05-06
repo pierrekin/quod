@@ -2412,7 +2412,7 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
     if program.equivalences:
         lines.append("  equivalences:")
         for eq in program.equivalences:
-            lines.append(f"    {eq.a_node_id} ~ {eq.b_node_id}{_format_equivalence_metadata(eq)}")
+            lines.append(f"    {eq.a_node_id} ~ {eq.b_node_id}{format_equivalence_metadata(eq)}")
     if (
         not program.constants and not program.functions
         and not program.externs and not program.structs and not program.enums
@@ -2531,9 +2531,11 @@ def _format_c_expr(e) -> str:
     raise ValueError(f"unhandled c.* expression: {e!r}")
 
 
-def _format_equivalence_metadata(eq: "Equivalence") -> str:
+def format_equivalence_metadata(eq: "Equivalence") -> str:
     """Render the regime/enforcement/justification metadata trailing an
-    equivalence, mirroring `format_claim_metadata` for plain claims."""
+    equivalence, mirroring `format_claim_metadata` for plain claims.
+    Returns " {…}" with a leading space when any non-default field is
+    present, or "" when everything is at default."""
     bits: list[str] = []
     if eq.regime != "axiom":
         bits.append(f"regime={eq.regime}")

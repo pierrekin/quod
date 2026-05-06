@@ -29,8 +29,12 @@ from quod.model import (
     BinOp,
     Block,
     Call,
+    CFn,
     CStyleFor,
+    CUnit,
+    Equivalence,
     ExprStmt,
+    format_c_fn,
     ExternFunction,
     FieldRead,
     FieldSet,
@@ -90,6 +94,7 @@ from quod.model import (
     _Node,
     format_claim,
     format_claim_metadata,
+    format_equivalence_metadata,
 )
 
 
@@ -759,17 +764,62 @@ def format_program_lines(program: Program) -> Iterator[Line]:
         yield Line(None, 2, (Span("externs:", "section"),))
         for ext in program.externs:
             yield _extern_line(ext, 4)
+    if program.source_units:
+        yield Line(None, 2, (Span("source_units:", "section"),))
+        for unit in program.source_units:
+            yield from _c_unit_lines(unit, 4)
+    if program.structured_functions:
+        yield Line(None, 2, (Span("structured_functions:", "section"),))
+        for fn in program.structured_functions:
+            yield from format_function_lines(fn, indent=4)
     if program.functions:
         yield Line(None, 2, (Span("functions:", "section"),))
         for fn in program.functions:
             yield from format_function_lines(fn, indent=4)
+    if program.edges:
+        yield Line(None, 2, (Span("edges:", "section"),))
+        for e in program.edges:
+            yield Line(e, 4, (
+                Span(e.source, "local"),
+                Span(" -> ", "op"),
+                Span(e.target, "local"),
+            ))
+    if program.equivalences:
+        yield Line(None, 2, (Span("equivalences:", "section"),))
+        for eq in program.equivalences:
+            spans: list[Span] = [
+                Span(eq.a_node_id, "local"),
+                Span(" ~ ", "op"),
+                Span(eq.b_node_id, "local"),
+            ]
+            meta = format_equivalence_metadata(eq)
+            if meta:
+                spans.append(Span(meta, "comment"))
+            yield Line(eq, 4, tuple(spans))
     if (
         not program.constants and not program.functions
         and not program.externs and not program.structs
         and not program.enums and not program.imports
+        and not program.source_units and not program.structured_functions
+        and not program.edges and not program.equivalences
     ):
         yield Line(None, 2, (Span("(empty)", "comment"),))
     yield Line(None, 0, (Span("}", "punct"),))
+
+
+def _c_unit_lines(unit: CUnit, indent: int) -> Iterator[Line]:
+    """Render a layer-A `CUnit` as a section with the C source text
+    inside. Layer A is preserved C — coloring it with quod's vocabulary
+    would lie about what it is — so we drop into plain-text spans."""
+    yield Line(unit, indent, (
+        Span("c_unit ", "keyword"),
+        Span(repr(unit.source_path), "string"),
+        Span(" {", "punct"),
+    ))
+    for fn in unit.functions:
+        for raw_line in format_c_fn(fn).splitlines():
+            yield Line(None, indent + 2, (Span(raw_line, "comment"),))
+    yield Line(None, indent, (Span("}", "punct"),))
 
 
 def _enum_def_lines(ed: EnumDef, indent: int) -> Iterator[Line]:
