@@ -31,11 +31,10 @@ from typing import Literal
 from quod.analysis import derive_lattice_claims
 from quod.model import (
     Claim,
-    IntRangeClaim,
-    NonNegativeClaim,
+    Expr,
+    PredicateClaim,
     Program,
     Regime,
-    ReturnInRangeClaim,
     Z3Justification,
 )
 from quod.proof import Z3NotInstalled, goal_smt_lib, run_z3_on_smt
@@ -45,13 +44,17 @@ from quod.proof import Z3NotInstalled, goal_smt_lib, run_z3_on_smt
 
 @dataclass(frozen=True)
 class ClaimRequest:
-    """A specific goal to prove. Distinct from `Claim`: at request time, the
-    regime, enforcement, and justification are decided by the provider."""
+    """A specific goal to prove. Distinct from `Claim`: at request time
+    the regime, enforcement, and justification are decided by the
+    provider — only the predicate body and its target function are
+    user-supplied.
+
+    `expr` is expected to be canonicalized; the request shape doesn't
+    enforce it but providers re-canonicalize for safety and hash
+    stability of the resulting `.smt2` artifact.
+    """
     function: str
-    kind: str                  # "non_negative" | "int_range" | "return_in_range"
-    target: str | None         # param name; None for return-scoped claims
-    min: int | None = None
-    max: int | None = None
+    expr: Expr
     enforcement: str = "trust"
 
 
@@ -113,38 +116,16 @@ LATTICE_LITERAL_RANGE = Provider(
 
 # ---------- Built-in: Z3 / QF_LIA ----------
 
-def _build_claim_from_request(req: ClaimRequest) -> Claim:
-    if req.kind == "non_negative":
-        if req.target is None:
-            raise ValueError("non_negative requires a parameter target")
-        return NonNegativeClaim(regime="witness", enforcement=req.enforcement, param=req.target)
-    if req.kind == "int_range":
-        if req.target is None:
-            raise ValueError("int_range requires a parameter target")
-        return IntRangeClaim(
-            regime="witness", enforcement=req.enforcement,
-            param=req.target, min=req.min, max=req.max,
-        )
-    if req.kind == "return_in_range":
-        if req.target is not None:
-            raise ValueError("return_in_range takes no parameter target")
-        return ReturnInRangeClaim(
-            regime="witness", enforcement=req.enforcement,
-            min=req.min, max=req.max,
-        )
-    raise ValueError(f"unknown claim kind: {req.kind!r}")
-
-
 def _z3_qf_lia_prove(
     program: Program, request: ClaimRequest, proofs_dir: Path,
 ) -> ProviderResult:
     fn = next((f for f in program.functions if f.name == request.function), None)
     if fn is None:
         return ProviderResult(status="error", detail=f"function {request.function!r} not found")
-    try:
-        goal = _build_claim_from_request(request)
-    except ValueError as e:
-        return ProviderResult(status="error", detail=str(e))
+
+    goal = PredicateClaim(
+        regime="witness", enforcement=request.enforcement, expr=request.expr,
+    )
 
     try:
         smt = goal_smt_lib(fn, goal, hypotheses=fn.claims, program=program)
@@ -157,9 +138,8 @@ def _z3_qf_lia_prove(
         return ProviderResult(status="error", detail=str(e))
 
     artifact_hash = hashlib.sha256(smt.encode("utf-8")).hexdigest()
-    target_part = request.target or "return"
     proofs_dir.mkdir(parents=True, exist_ok=True)
-    artifact_path = proofs_dir / f"{request.function}_{request.kind}_{target_part}_{artifact_hash[:12]}.smt2"
+    artifact_path = proofs_dir / f"{request.function}_{artifact_hash[:12]}.smt2"
     artifact_path.write_text(smt)
 
     if z3_result.status != "unsat":

@@ -11,70 +11,110 @@
           }
         }
       ],
-      "body": {"id": "@blk_range_check_3", "stmts": [
-        {
-          "kind": "quod.if",
-          "cond": {
-            "kind": "llvm.binop",
-            "op": "slt",
-            "lhs": {
-              "kind": "llvm.param_ref",
-              "name": "x"
-            },
-            "rhs": {
-              "kind": "llvm.const_int",
-              "value": 0,
-              "type": {
-                "kind": "llvm.i32"
-              }
-            }
-          },
-          "then_body": {"id": "@blk_range_check_1", "stmts": [
-            {
-              "kind": "quod.return_expr",
-              "value": {
+      "body": {
+        "id": "@blk_range_check_3",
+        "stmts": [
+          {
+            "kind": "quod.if",
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "slt",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "rhs": {
                 "kind": "llvm.const_int",
-                "value": -1,
+                "value": 0,
                 "type": {
                   "kind": "llvm.i32"
                 }
               }
-            }
-          ]},
-          "else_body": {"id": "@blk_range_check_2", "stmts": [
-            {
-              "kind": "quod.return_expr",
-              "value": {
-                "kind": "llvm.binop",
-                "op": "add",
-                "lhs": {
-                  "kind": "llvm.param_ref",
-                  "name": "x"
-                },
-                "rhs": {
-                  "kind": "llvm.const_int",
-                  "value": 1,
-                  "type": {
-                    "kind": "llvm.i32"
+            },
+            "then_body": {
+              "id": "@blk_range_check_1",
+              "stmts": [
+                {
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "llvm.const_int",
+                    "value": -1,
+                    "type": {
+                      "kind": "llvm.i32"
+                    }
                   }
                 }
-              }
+              ]
+            },
+            "else_body": {
+              "id": "@blk_range_check_2",
+              "stmts": [
+                {
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "llvm.param_ref",
+                      "name": "x"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "value": 1,
+                      "type": {
+                        "kind": "llvm.i32"
+                      }
+                    }
+                  }
+                }
+              ]
             }
-          ]}
-        }
-      ]},
+          }
+        ]
+      },
       "claims": [
         {
+          "kind": "predicate",
+          "expr": {
+            "kind": "llvm.binop",
+            "op": "and",
+            "lhs": {
+              "kind": "llvm.binop",
+              "op": "sle",
+              "lhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 0
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            },
+            "rhs": {
+              "kind": "llvm.binop",
+              "op": "sle",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 100
+              }
+            }
+          },
           "enforcement": "verify",
           "justification": {
             "kind": "manual",
             "signed_by": "agent",
             "rationale": "unproven; verify at runtime"
-          },
-          "kind": "int_range",
-          "param": "x",
-          "min": 0,
-          "max": 100
+          }
         }
       ],
       "return_type": {

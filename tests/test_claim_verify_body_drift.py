@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from quod.canonicalize import predicate_for_return_range
 from quod.cli import _verify_justification
 from quod.model import (
     I32Type,
@@ -25,7 +26,6 @@ from quod.model import (
     Param,
     Program,
     ReturnExpr,
-    ReturnInRangeClaim,
     add_claim,
     replace_function,
 
@@ -54,7 +54,8 @@ def _make_program() -> Program:
 
 
 def _prove_return_ge_zero(program: Program, proofs_dir: Path) -> Program:
-    req = ClaimRequest(function="f", kind="return_in_range", target=None, min=0, max=None)
+    expr = predicate_for_return_range(_I32, lo=0, hi=None)
+    req = ClaimRequest(function="f", expr=expr)
     result = _z3_qf_lia_prove(program, req, proofs_dir)
     assert result.status == "proven", f"expected proven, got {result.status}: {result.detail}"
     assert result.claim is not None

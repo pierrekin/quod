@@ -57,12 +57,10 @@ from quod.model import (
     If,
     IfExpr,
     IntLit,
-    IntRangeClaim,
     Let,
     CharLit,
     Load,
     LocalRef,
-    NonNegativeClaim,
     Not,
     NullPtr,
     ParamRef,
@@ -72,7 +70,6 @@ from quod.model import (
     Program,
     PtrOffset,
     ReturnExpr,
-    ReturnInRangeClaim,
     ReturnRef,
     ShortCircuitAnd,
     ShortCircuitOr,
@@ -96,7 +93,6 @@ from quod.model import (
     Widen,
     WithArena,
     _Node,
-    format_claim,
     format_claim_metadata,
     format_equivalence_metadata,
 )
@@ -571,31 +567,14 @@ def _stmt_inline_spans(stmt) -> tuple:
 # ---------- Claim / meta-column spans ----------
 
 def claim_spans(claim) -> tuple[Span, ...]:
-    """Compact rendering of one claim for the meta column."""
-    match claim:
-        case NonNegativeClaim(param=p):
-            return (
-                Span("non_negative", "meta_label"), Span("(", "punct"),
-                Span(p, "param"), Span(")", "punct"),
-            )
-        case IntRangeClaim(param=p, min=lo, max=hi):
-            return (
-                Span("int_range", "meta_label"), Span("(", "punct"),
-                Span(p, "param"), Span(", [", "punct"),
-                Span("-inf" if lo is None else str(lo), "literal_int"),
-                Span(", ", "punct"),
-                Span("+inf" if hi is None else str(hi), "literal_int"),
-                Span("])", "punct"),
-            )
-        case ReturnInRangeClaim(min=lo, max=hi):
-            return (
-                Span("return_in_range", "meta_label"), Span("([", "punct"),
-                Span("-inf" if lo is None else str(lo), "literal_int"),
-                Span(", ", "punct"),
-                Span("+inf" if hi is None else str(hi), "literal_int"),
-                Span("])", "punct"),
-            )
-    return (Span(format_claim(claim), "meta_value"),)
+    """Compact rendering of one claim for the meta column.
+
+    Routes through the predicate-sugar recognizer: matches the
+    canonicalized predicate against the sugar table and renders the
+    friendly form (`non_negative(p)` / `int_range(...)` /
+    `return_in_range(...)`) when matched, otherwise the raw expression.
+    """
+    return predicate_spans(claim.expr)
 
 
 _REGIME_ORDER = ("axiom", "witness", "lattice")

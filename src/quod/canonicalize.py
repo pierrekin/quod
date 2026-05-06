@@ -47,7 +47,10 @@ from .model import (
     I1Type,
     IfExpr,
     IntLit,
+    IntType,
     Not,
+    ParamRef,
+    ReturnRef,
     ShortCircuitAnd,
     ShortCircuitOr,
 )
@@ -181,3 +184,56 @@ def _sort_key(expr: Expr) -> str:
     """Stable canonical-bytes sort key. After children are canonicalized,
     this is deterministic — Pydantic emits fields in declaration order."""
     return expr.model_dump_json()
+
+
+# ---------- Sugar-shape predicate builders ----------
+#
+# Build canonical predicates corresponding to the named claim shapes
+# (`non_negative`, `int_range`, `return_in_range`). Used by the CLI to
+# desugar user input and by the lattice analysis to emit derived
+# claims. The render-side recognizer is the inverse.
+
+# CLI vocabulary for the named sugar shapes. Useful for argument parsing
+# and autocomplete; the sugar names are only ever a CLI-surface concern,
+# never stored in the graph.
+SUGAR_KINDS: tuple[str, ...] = ("non_negative", "int_range", "return_in_range")
+PARAM_SUGAR_KINDS: tuple[str, ...] = ("non_negative", "int_range")
+RETURN_SUGAR_KINDS: tuple[str, ...] = ("return_in_range",)
+
+
+def predicate_for_param_range(
+    param: str, ty: IntType,
+    lo: int | None, hi: int | None,
+) -> Expr:
+    """Canonical predicate for `int_range(param, [lo, hi])` /
+    `non_negative(param)` over a function parameter.
+
+    `ty` is the param's declared type — IntLit bounds are pinned to
+    the same type so the predicate is well-typed at lower time.
+    """
+    return _range_predicate(ParamRef(name=param), ty, lo, hi)
+
+
+def predicate_for_return_range(
+    ty: IntType, lo: int | None, hi: int | None,
+) -> Expr:
+    """Canonical predicate for `return_in_range([lo, hi])`.
+
+    `ty` is the function's return type.
+    """
+    return _range_predicate(ReturnRef(), ty, lo, hi)
+
+
+def _range_predicate(
+    ref: Expr, ty: IntType, lo: int | None, hi: int | None,
+) -> Expr:
+    if lo is None and hi is None:
+        raise ValueError("range predicate requires at least one of lo/hi")
+    parts: list[Expr] = []
+    if lo is not None:
+        parts.append(BinOp(op="sle", lhs=IntLit(type=ty, value=lo), rhs=ref))
+    if hi is not None:
+        parts.append(BinOp(op="sle", lhs=ref, rhs=IntLit(type=ty, value=hi)))
+    if len(parts) == 1:
+        return canonicalize(parts[0])
+    return canonicalize(BinOp(op="and", lhs=parts[0], rhs=parts[1]))

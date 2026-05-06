@@ -1056,37 +1056,6 @@ class _Claim(_Node):
         return data
 
 
-class NonNegativeClaim(_Claim):
-    """Asserts param >= 0. Subsumed by IntRangeClaim(min=0); kept as a convenience."""
-    kind: Literal["non_negative"] = "non_negative"
-    param: str
-
-
-class IntRangeClaim(_Claim):
-    """Asserts `min <= param <= max` (either bound optional).
-
-    Lowered to one or two predicates (llvm.assume or runtime branch, per enforcement).
-    min=None / max=None means unbounded on that side.
-    """
-    kind: Literal["int_range"] = "int_range"
-    param: str
-    min: int | None = None
-    max: int | None = None
-
-
-class ReturnInRangeClaim(_Claim):
-    """Asserts the function's return value is in [min, max] (either bound optional).
-
-    Function-scoped, not param-scoped — there's no `param` field. Today this
-    is metadata only: the claim is provable via Z3 (quod claim prove) and
-    verifiable (quod claim verify) but not yet exploited by the LLVM lowering
-    pass.
-    """
-    kind: Literal["return_in_range"] = "return_in_range"
-    min: int | None = None
-    max: int | None = None
-
-
 class PredicateClaim(_Claim):
     """Single canonical claim form: a predicate over the function's
     parameters and (optionally) `ReturnRef`.
@@ -1110,25 +1079,46 @@ class PredicateClaim(_Claim):
     expr: "Expr"
 
 
-Claim = Annotated[
-    Union[NonNegativeClaim, IntRangeClaim, ReturnInRangeClaim],
-    Field(discriminator="kind"),
-]
+Claim = PredicateClaim
 
 
-CLAIM_KINDS: tuple[str, ...] = ("non_negative", "int_range", "return_in_range")
-PARAM_CLAIM_KINDS: tuple[str, ...] = ("non_negative", "int_range")
-RETURN_CLAIM_KINDS: tuple[str, ...] = ("return_in_range",)
+def claim_param(claim: PredicateClaim) -> str | None:
+    """The sole parameter referenced by a claim's predicate, or None.
+
+    Returns None if the predicate references zero params, multiple
+    distinct params, or any `ReturnRef`. Used by introspection that
+    only makes sense for single-param preconditions (e.g.
+    `quod fn unconstrained`); callers that want all referenced params
+    should walk `claim.expr` directly.
+    """
+    refs: set[str] = set()
+    has_return = _collect_predicate_refs(claim.expr, refs)
+    if has_return or len(refs) != 1:
+        return None
+    return next(iter(refs))
 
 
-def claim_param(claim: Claim) -> str | None:
-    """The parameter a claim targets, or None for function-scoped (return-value) claims."""
-    match claim:
-        case NonNegativeClaim(param=p) | IntRangeClaim(param=p):
-            return p
-        case ReturnInRangeClaim():
-            return None
-    raise ValueError(f"unhandled claim: {claim!r}")
+def _collect_predicate_refs(expr, refs: set[str]) -> bool:
+    """Walk a predicate expression. Add each ParamRef name to `refs`;
+    return True if any ReturnRef was encountered."""
+    if isinstance(expr, ParamRef):
+        refs.add(expr.name)
+        return False
+    if isinstance(expr, ReturnRef):
+        return True
+    if isinstance(expr, IntLit):
+        return False
+    if isinstance(expr, Not):
+        return _collect_predicate_refs(expr.operand, refs)
+    if isinstance(expr, BinOp):
+        l_ret = _collect_predicate_refs(expr.lhs, refs)
+        r_ret = _collect_predicate_refs(expr.rhs, refs)
+        return l_ret or r_ret
+    if isinstance(expr, (ShortCircuitOr, ShortCircuitAnd)):
+        l_ret = _collect_predicate_refs(expr.lhs, refs)
+        r_ret = _collect_predicate_refs(expr.rhs, refs)
+        return l_ret or r_ret
+    return False
 
 
 def function_callees(fn: "Function") -> tuple[str, ...]:
@@ -1466,15 +1456,16 @@ class ExternFunction(_Node):
         for c in self.claims:
             if claim_param(c) is not None:
                 raise ValueError(
-                    f"extern {self.name!r}: claim kind {c.kind!r} targets a "
-                    f"parameter, but externs don't yet carry named params. "
-                    f"Only return-scoped claims (e.g. return_in_range) are "
-                    f"supported on externs in this revision."
+                    f"extern {self.name!r}: predicate references parameter "
+                    f"{claim_param(c)!r}, but externs don't yet carry named "
+                    f"params. Only return-scoped predicates are supported on "
+                    f"externs in this revision."
                 )
-            if isinstance(c, ReturnInRangeClaim) and not ret_is_int:
+            if not ret_is_int:
                 raise ValueError(
-                    f"extern {self.name!r}: return_in_range claim requires an "
-                    f"integer return type, got {self.return_type.kind!r}"
+                    f"extern {self.name!r}: predicate over return value "
+                    f"requires an integer return type, got "
+                    f"{self.return_type.kind!r}"
                 )
         return self
 
@@ -2499,26 +2490,27 @@ def remove_function(program: Program, function_name: str) -> Program:
     return program.model_copy(update={"functions": kept})
 
 
-def add_claim(program: Program, function: str, claim: Claim) -> Program:
+def add_claim(program: Program, function: str, claim: PredicateClaim) -> Program:
+    """Append a claim to a function. Refuses duplicate predicates
+    (canonical-equal) — relax first to overwrite."""
     fn = require_function(program, function)
     target = claim_param(claim)
     if target is not None and fn.param(target) is None:
         raise KeyError(f"function {function!r} has no parameter {target!r}")
     for existing in fn.claims:
-        if existing.kind == claim.kind and claim_param(existing) == target:
-            scope = f"on {target!r}" if target is not None else "on return value"
+        if existing.expr == claim.expr:
             raise ValueError(
-                f"{claim.kind} claim {scope} already present on {function}; "
+                f"predicate already present on {function}; "
                 f"relax it first if you need to change bounds"
             )
     new_fn = fn.model_copy(update={"claims": fn.claims + (claim,)})
     return replace_function(program, new_fn)
 
 
-def add_extern_claim(program: Program, extern: str, claim: Claim) -> Program:
-    """Append a claim to the named extern. Mirrors add_claim's duplicate-check
-    contract — re-adding the same kind/target requires `relax` first."""
-    target = claim_param(claim)
+def add_extern_claim(program: Program, extern: str, claim: PredicateClaim) -> Program:
+    """Append a claim to the named extern. Mirrors `add_claim`'s
+    duplicate-check contract — re-adding the same predicate requires
+    `relax` first."""
     new_externs = []
     found = False
     for ext in program.externs:
@@ -2527,11 +2519,10 @@ def add_extern_claim(program: Program, extern: str, claim: Claim) -> Program:
             continue
         found = True
         for existing in ext.claims:
-            if existing.kind == claim.kind and claim_param(existing) == target:
-                scope = f"on {target!r}" if target is not None else "on return value"
+            if existing.expr == claim.expr:
                 raise ValueError(
-                    f"{claim.kind} claim {scope} already present on extern "
-                    f"{extern}; relax it first if you need to change bounds"
+                    f"predicate already present on extern {extern}; "
+                    f"relax it first if you need to change bounds"
                 )
         new_externs.append(ext.model_copy(update={"claims": ext.claims + (claim,)}))
     if not found:
@@ -2539,8 +2530,8 @@ def add_extern_claim(program: Program, extern: str, claim: Claim) -> Program:
     return program.model_copy(update={"externs": tuple(new_externs)})
 
 
-def relax_extern_claim(program: Program, extern: str, kind: str, target: str | None) -> Program:
-    """Remove the matching extern claim. target=None matches return-value claims."""
+def relax_extern_claim(program: Program, extern: str, expr) -> Program:
+    """Remove an extern claim by exact predicate match."""
     new_externs = []
     found_extern = False
     removed = False
@@ -2549,33 +2540,24 @@ def relax_extern_claim(program: Program, extern: str, kind: str, target: str | N
             new_externs.append(ext)
             continue
         found_extern = True
-        kept = tuple(
-            c for c in ext.claims
-            if not (c.kind == kind and claim_param(c) == target)
-        )
+        kept = tuple(c for c in ext.claims if c.expr != expr)
         if len(kept) != len(ext.claims):
             removed = True
         new_externs.append(ext.model_copy(update={"claims": kept}))
     if not found_extern:
         raise KeyError(f"no extern named {extern!r}")
     if not removed:
-        scope = f"on {target!r}" if target is not None else "on return value"
-        raise KeyError(f"no {kind} claim {scope} on extern {extern!r}")
+        raise KeyError(f"no matching predicate on extern {extern!r}")
     return program.model_copy(update={"externs": tuple(new_externs)})
 
 
-def relax_claim(program: Program, function: str, kind: str, target: str | None) -> Program:
-    """Remove the matching claim (no-op disallowed: must exist).
-
-    target=None matches return-value claims (which have no parameter scope)."""
+def relax_claim(program: Program, function: str, expr) -> Program:
+    """Remove a claim by exact predicate match (no-op disallowed:
+    the predicate must exist)."""
     fn = require_function(program, function)
-    kept = tuple(
-        c for c in fn.claims
-        if not (c.kind == kind and claim_param(c) == target)
-    )
+    kept = tuple(c for c in fn.claims if c.expr != expr)
     if len(kept) == len(fn.claims):
-        scope = f"targeting {target!r}" if target is not None else "(return-value)"
-        raise KeyError(f"no {kind} claim on {function} {scope}")
+        raise KeyError(f"no matching predicate on {function!r}")
     new_fn = fn.model_copy(update={"claims": kept})
     return replace_function(program, new_fn)
 
@@ -2871,23 +2853,6 @@ def _format_type(t) -> str:
         case VoidType():
             return "void"
     raise ValueError(f"unhandled type: {t!r}")
-
-
-def format_claim(c: Claim) -> str:
-    match c:
-        case NonNegativeClaim(param=p):
-            head = f"non_negative({p})"
-        case IntRangeClaim(param=p, min=lo, max=hi):
-            lo_s = "-inf" if lo is None else str(lo)
-            hi_s = "+inf" if hi is None else str(hi)
-            head = f"int_range({p}, [{lo_s}, {hi_s}])"
-        case ReturnInRangeClaim(min=lo, max=hi):
-            lo_s = "-inf" if lo is None else str(lo)
-            hi_s = "+inf" if hi is None else str(hi)
-            head = f"return_in_range([{lo_s}, {hi_s}])"
-        case _:
-            raise ValueError(f"unhandled claim: {c!r}")
-    return head + format_claim_metadata(c)
 
 
 def format_claim_metadata(c: Claim) -> str:

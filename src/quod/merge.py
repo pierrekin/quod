@@ -80,14 +80,14 @@ def _reconcile_function_claims(
 
     Returns `(combined_claims, warnings)`. New's claims are kept
     as-is; existing's claims are added if their target survives and
-    they aren't already present (same kind + same target). Surviving
-    rules:
+    the same canonical predicate isn't already present.
 
-      - Param-scoped claim (`non_negative`, `int_range`): the new
+    Surviving rules:
+      - Precondition (predicate over a single param): the new
         function still has a param of that name, and the param's
         type is still an int.
-      - Return-scoped claim (`return_in_range`): the new function's
-        return_type is still an int.
+      - Postcondition (predicate referencing `ReturnRef`): the new
+        function's return type is still an int.
 
     `qualifier` prefixes the warning text — `"function "` or
     `"structured function "` — so the source-of-truth is clear when a
@@ -95,39 +95,37 @@ def _reconcile_function_claims(
     `Program.structured_functions`.
     """
     new_params_by_name = {p.name: p for p in new.params}
-    new_keys = {(c.kind, claim_param(c)) for c in new.claims}
+    new_exprs = {c.expr for c in new.claims}
 
     surviving: list[Claim] = list(new.claims)
     warnings: list[str] = []
     for c in existing.claims:
-        target = claim_param(c)
-        key = (c.kind, target)
-        if key in new_keys:
-            # New already has a same-kind/same-target claim. New wins
-            # on collision (the bounds/regime may differ but that's
-            # the user's intent on the new side).
+        if c.expr in new_exprs:
+            # New already carries this exact predicate; existing one is redundant.
             continue
+        target = claim_param(c)
         if target is not None:
-            # param-scoped
             new_p = new_params_by_name.get(target)
             if new_p is None:
                 warnings.append(
-                    f"merge: claim {c.kind} on {qualifier}{existing.name}.{target} "
+                    f"merge: claim on {qualifier}{existing.name}.{target} "
                     f"dropped — param removed in new"
                 )
                 continue
             if not isinstance(new_p.type, _INT_TYPES_FOR_CLAIMS):
                 warnings.append(
-                    f"merge: claim {c.kind} on {qualifier}{existing.name}.{target} "
+                    f"merge: claim on {qualifier}{existing.name}.{target} "
                     f"dropped — param retyped to {new_p.type.kind!r} "
                     f"(claim requires an int type)"
                 )
                 continue
         else:
-            # return-scoped
+            # Multi-param predicates and postconditions both land here.
+            # The latter is the common case and the only one we currently
+            # generate; treat the former conservatively as return-scoped.
             if not isinstance(new.return_type, _INT_TYPES_FOR_CLAIMS):
                 warnings.append(
-                    f"merge: claim {c.kind} on {qualifier}{existing.name} return "
+                    f"merge: claim on {qualifier}{existing.name} return "
                     f"dropped — return retyped to {new.return_type.kind!r} "
                     f"(claim requires an int return type)"
                 )
@@ -143,15 +141,15 @@ def _reconcile_extern_claims(
     ExternFunctions today only carry return-scoped claims (their
     params are positional, not named) so the param-scoped branch is
     unreachable; the model's own validator enforces that."""
-    new_keys = {c.kind for c in new.claims}
+    new_exprs = {c.expr for c in new.claims}
     surviving: list[Claim] = list(new.claims)
     warnings: list[str] = []
     for c in existing.claims:
-        if c.kind in new_keys:
+        if c.expr in new_exprs:
             continue
         if not isinstance(new.return_type, _INT_TYPES_FOR_CLAIMS):
             warnings.append(
-                f"merge: claim {c.kind} on extern {existing.name} return "
+                f"merge: claim on extern {existing.name} return "
                 f"dropped — return retyped to {new.return_type.kind!r} "
                 f"(claim requires an int return type)"
             )

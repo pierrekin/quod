@@ -28,6 +28,7 @@ import json
 import pytest
 
 from quod import version as quod_version
+from quod.canonicalize import predicate_for_param_range
 from quod.model import (
     Block,
     Equivalence,
@@ -36,8 +37,8 @@ from quod.model import (
     I32Type,
     IntLit,
     ManualJustification,
-    NonNegativeClaim,
     Param,
+    PredicateClaim,
     Program,
     ReturnExpr,
     Z3Justification,
@@ -109,8 +110,9 @@ def _fn_with_z3() -> Function:
         params=(Param(name="x", type=I32Type()),),
         return_type=I32Type(),
         body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
-        claims=(NonNegativeClaim(
-            param="x", regime="witness",
+        claims=(PredicateClaim(
+            regime="witness",
+            expr=predicate_for_param_range("x", I32Type(), lo=0, hi=None),
             justification=Z3Justification(
                 artifact_path="proofs/x.smt2",
                 artifact_hash="deadbeef",
@@ -141,7 +143,9 @@ def test_pin_detection_negative_for_axiom_no_justification():
         name="f", params=(Param(name="x", type=I32Type()),),
         return_type=I32Type(),
         body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
-        claims=(NonNegativeClaim(param="x"),),  # no justification
+        claims=(PredicateClaim(
+            expr=predicate_for_param_range("x", I32Type(), lo=0, hi=None),
+        ),),  # no justification
     )
     assert not program_has_pinned_claims(Program(functions=(fn,)))
 

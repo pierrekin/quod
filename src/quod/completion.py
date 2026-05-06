@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import typer
 
-from quod.model import CLAIM_KINDS
+from quod.canonicalize import SUGAR_KINDS
 from quod.templates import TEMPLATES
 
 
@@ -159,7 +159,7 @@ def _safe_load_config(ctx):
 
 @_traced
 def claim_kinds(incomplete: str) -> list[str]:
-    return [k for k in CLAIM_KINDS if k.startswith(incomplete)]
+    return [k for k in SUGAR_KINDS if k.startswith(incomplete)]
 
 
 @_traced

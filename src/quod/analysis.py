@@ -2,8 +2,9 @@
 
 Today: literal-only interprocedural range propagation. For each callee
 parameter, if every call site passes an IntLit at that position, derive
-an IntRangeClaim(regime=lattice) covering [min, max] of those literals.
-Any non-literal arg poisons the parameter (no claim emitted).
+a `PredicateClaim(regime=lattice)` whose body is the canonical
+`lo <= p <= hi` predicate. Any non-literal arg poisons the parameter
+(no claim emitted).
 
 The analysis is deliberately limited — no fixpoint, no expression evaluation,
 no flow sensitivity. It's the smallest move that makes regime=lattice mean
@@ -14,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
+from quod.canonicalize import predicate_for_param_range
 from quod.hashing import node_hash
 from quod.model import (
     Assign,
@@ -30,9 +32,9 @@ from quod.model import (
     IfExpr,
     Not,
     IntLit,
-    IntRangeClaim,
     Let,
     Load,
+    PredicateClaim,
     Program,
     PtrOffset,
     Store,
@@ -90,11 +92,9 @@ def derive_lattice_claims(program: Program) -> dict[str, tuple[Claim, ...]]:
             literals = [v for v, _ in entries]
             input_hashes = tuple(h for _, h in entries)
             lo, hi = min(literals), max(literals)
-            derived.append(IntRangeClaim(
+            derived.append(PredicateClaim(
                 regime="lattice",
-                param=p.name,
-                min=lo,
-                max=hi,
+                expr=predicate_for_param_range(p.name, p.type, lo, hi),
                 justification=DerivedJustification(
                     analysis=_ANALYSIS_NAME,
                     inputs=input_hashes,

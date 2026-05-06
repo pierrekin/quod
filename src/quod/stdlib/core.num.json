@@ -57,21 +57,24 @@
       "return_type": {
         "kind": "llvm.u16"
       },
-      "body": {"id": "@blk_core.num_1", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.call",
-            "function": "quod_bswap_u16",
-            "args": [
-              {
-                "kind": "llvm.param_ref",
-                "name": "x"
-              }
-            ]
+      "body": {
+        "id": "@blk_core.num_1",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.call",
+              "function": "quod_bswap_u16",
+              "args": [
+                {
+                  "kind": "llvm.param_ref",
+                  "name": "x"
+                }
+              ]
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.bswap_u32",
@@ -86,21 +89,24 @@
       "return_type": {
         "kind": "llvm.u32"
       },
-      "body": {"id": "@blk_core.num_2", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.call",
-            "function": "quod_bswap_u32",
-            "args": [
-              {
-                "kind": "llvm.param_ref",
-                "name": "x"
-              }
-            ]
+      "body": {
+        "id": "@blk_core.num_2",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.call",
+              "function": "quod_bswap_u32",
+              "args": [
+                {
+                  "kind": "llvm.param_ref",
+                  "name": "x"
+                }
+              ]
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.bswap_u64",
@@ -115,21 +121,24 @@
       "return_type": {
         "kind": "llvm.u64"
       },
-      "body": {"id": "@blk_core.num_3", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.call",
-            "function": "quod_bswap_u64",
-            "args": [
-              {
-                "kind": "llvm.param_ref",
-                "name": "x"
-              }
-            ]
+      "body": {
+        "id": "@blk_core.num_3",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.call",
+              "function": "quod_bswap_u64",
+              "args": [
+                {
+                  "kind": "llvm.param_ref",
+                  "name": "x"
+                }
+              ]
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.to_le_u16",
@@ -144,15 +153,18 @@
       "return_type": {
         "kind": "llvm.u16"
       },
-      "body": {"id": "@blk_core.num_4", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.param_ref",
-            "name": "x"
+      "body": {
+        "id": "@blk_core.num_4",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            }
           }
-        }
-      ]},
+        ]
+      },
       "notes": [
         "Identity on the only target (x86_64, little-endian). Revisit if quod ever targets a big-endian host."
       ]
@@ -170,15 +182,18 @@
       "return_type": {
         "kind": "llvm.u32"
       },
-      "body": {"id": "@blk_core.num_5", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.param_ref",
-            "name": "x"
+      "body": {
+        "id": "@blk_core.num_5",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.to_le_u64",
@@ -193,15 +208,18 @@
       "return_type": {
         "kind": "llvm.u64"
       },
-      "body": {"id": "@blk_core.num_6", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.param_ref",
-            "name": "x"
+      "body": {
+        "id": "@blk_core.num_6",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.from_le_u16",
@@ -216,15 +234,18 @@
       "return_type": {
         "kind": "llvm.u16"
       },
-      "body": {"id": "@blk_core.num_7", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.param_ref",
-            "name": "x"
+      "body": {
+        "id": "@blk_core.num_7",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.from_le_u32",
@@ -239,15 +260,18 @@
       "return_type": {
         "kind": "llvm.u32"
       },
-      "body": {"id": "@blk_core.num_8", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.param_ref",
-            "name": "x"
+      "body": {
+        "id": "@blk_core.num_8",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.from_le_u64",
@@ -262,15 +286,18 @@
       "return_type": {
         "kind": "llvm.u64"
       },
-      "body": {"id": "@blk_core.num_9", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.param_ref",
-            "name": "x"
+      "body": {
+        "id": "@blk_core.num_9",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.to_be_u16",
@@ -285,21 +312,24 @@
       "return_type": {
         "kind": "llvm.u16"
       },
-      "body": {"id": "@blk_core.num_10", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.call",
-            "function": "core.num.bswap_u16",
-            "args": [
-              {
-                "kind": "llvm.param_ref",
-                "name": "x"
-              }
-            ]
+      "body": {
+        "id": "@blk_core.num_10",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.call",
+              "function": "core.num.bswap_u16",
+              "args": [
+                {
+                  "kind": "llvm.param_ref",
+                  "name": "x"
+                }
+              ]
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.to_be_u32",
@@ -314,21 +344,24 @@
       "return_type": {
         "kind": "llvm.u32"
       },
-      "body": {"id": "@blk_core.num_11", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.call",
-            "function": "core.num.bswap_u32",
-            "args": [
-              {
-                "kind": "llvm.param_ref",
-                "name": "x"
-              }
-            ]
+      "body": {
+        "id": "@blk_core.num_11",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.call",
+              "function": "core.num.bswap_u32",
+              "args": [
+                {
+                  "kind": "llvm.param_ref",
+                  "name": "x"
+                }
+              ]
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.to_be_u64",
@@ -343,21 +376,24 @@
       "return_type": {
         "kind": "llvm.u64"
       },
-      "body": {"id": "@blk_core.num_12", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.call",
-            "function": "core.num.bswap_u64",
-            "args": [
-              {
-                "kind": "llvm.param_ref",
-                "name": "x"
-              }
-            ]
+      "body": {
+        "id": "@blk_core.num_12",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.call",
+              "function": "core.num.bswap_u64",
+              "args": [
+                {
+                  "kind": "llvm.param_ref",
+                  "name": "x"
+                }
+              ]
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.from_be_u16",
@@ -372,21 +408,24 @@
       "return_type": {
         "kind": "llvm.u16"
       },
-      "body": {"id": "@blk_core.num_13", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.call",
-            "function": "core.num.bswap_u16",
-            "args": [
-              {
-                "kind": "llvm.param_ref",
-                "name": "x"
-              }
-            ]
+      "body": {
+        "id": "@blk_core.num_13",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.call",
+              "function": "core.num.bswap_u16",
+              "args": [
+                {
+                  "kind": "llvm.param_ref",
+                  "name": "x"
+                }
+              ]
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.from_be_u32",
@@ -401,21 +440,24 @@
       "return_type": {
         "kind": "llvm.u32"
       },
-      "body": {"id": "@blk_core.num_14", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.call",
-            "function": "core.num.bswap_u32",
-            "args": [
-              {
-                "kind": "llvm.param_ref",
-                "name": "x"
-              }
-            ]
+      "body": {
+        "id": "@blk_core.num_14",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.call",
+              "function": "core.num.bswap_u32",
+              "args": [
+                {
+                  "kind": "llvm.param_ref",
+                  "name": "x"
+                }
+              ]
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.from_be_u64",
@@ -430,21 +472,24 @@
       "return_type": {
         "kind": "llvm.u64"
       },
-      "body": {"id": "@blk_core.num_15", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "llvm.call",
-            "function": "core.num.bswap_u64",
-            "args": [
-              {
-                "kind": "llvm.param_ref",
-                "name": "x"
-              }
-            ]
+      "body": {
+        "id": "@blk_core.num_15",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
+            "value": {
+              "kind": "llvm.call",
+              "function": "core.num.bswap_u64",
+              "args": [
+                {
+                  "kind": "llvm.param_ref",
+                  "name": "x"
+                }
+              ]
+            }
           }
-        }
-      ]}
+        ]
+      }
     },
     {
       "name": "core.num.narrow_i64_to_i32",
@@ -459,28 +504,62 @@
       "return_type": {
         "kind": "llvm.i32"
       },
-      "body": {"id": "@blk_core.num_16", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "quod.widen",
+      "body": {
+        "id": "@blk_core.num_16",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
             "value": {
-              "kind": "llvm.param_ref",
-              "name": "x"
-            },
-            "target": {
-              "kind": "llvm.i32"
-            },
-            "signed": true
+              "kind": "quod.widen",
+              "value": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "target": {
+                "kind": "llvm.i32"
+              },
+              "signed": true
+            }
           }
-        }
-      ]},
+        ]
+      },
       "claims": [
         {
-          "kind": "int_range",
-          "param": "x",
-          "min": -2147483648,
-          "max": 2147483647
+          "kind": "predicate",
+          "expr": {
+            "kind": "llvm.binop",
+            "op": "and",
+            "lhs": {
+              "kind": "llvm.binop",
+              "op": "sle",
+              "lhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i64"
+                },
+                "value": -2147483648
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            },
+            "rhs": {
+              "kind": "llvm.binop",
+              "op": "sle",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i64"
+                },
+                "value": 2147483647
+              }
+            }
+          }
         }
       ]
     },
@@ -497,28 +576,62 @@
       "return_type": {
         "kind": "llvm.u32"
       },
-      "body": {"id": "@blk_core.num_17", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "quod.widen",
+      "body": {
+        "id": "@blk_core.num_17",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
             "value": {
-              "kind": "llvm.param_ref",
-              "name": "x"
-            },
-            "target": {
-              "kind": "llvm.u32"
-            },
-            "signed": false
+              "kind": "quod.widen",
+              "value": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "target": {
+                "kind": "llvm.u32"
+              },
+              "signed": false
+            }
           }
-        }
-      ]},
+        ]
+      },
       "claims": [
         {
-          "kind": "int_range",
-          "param": "x",
-          "min": 0,
-          "max": 4294967295
+          "kind": "predicate",
+          "expr": {
+            "kind": "llvm.binop",
+            "op": "and",
+            "lhs": {
+              "kind": "llvm.binop",
+              "op": "sle",
+              "lhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.u64"
+                },
+                "value": 0
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            },
+            "rhs": {
+              "kind": "llvm.binop",
+              "op": "sle",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.u64"
+                },
+                "value": 4294967295
+              }
+            }
+          }
         }
       ],
       "notes": [
@@ -538,26 +651,43 @@
       "return_type": {
         "kind": "llvm.u64"
       },
-      "body": {"id": "@blk_core.num_18", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "quod.widen",
+      "body": {
+        "id": "@blk_core.num_18",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
             "value": {
-              "kind": "llvm.param_ref",
-              "name": "x"
-            },
-            "target": {
-              "kind": "llvm.u64"
-            },
-            "signed": false
+              "kind": "quod.widen",
+              "value": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "target": {
+                "kind": "llvm.u64"
+              },
+              "signed": false
+            }
           }
-        }
-      ]},
+        ]
+      },
       "claims": [
         {
-          "kind": "non_negative",
-          "param": "x"
+          "kind": "predicate",
+          "expr": {
+            "kind": "llvm.binop",
+            "op": "sle",
+            "lhs": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i64"
+              },
+              "value": 0
+            },
+            "rhs": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            }
+          }
         }
       ],
       "notes": [
@@ -577,28 +707,62 @@
       "return_type": {
         "kind": "llvm.i64"
       },
-      "body": {"id": "@blk_core.num_19", "stmts": [
-        {
-          "kind": "quod.return_expr",
-          "value": {
-            "kind": "quod.widen",
+      "body": {
+        "id": "@blk_core.num_19",
+        "stmts": [
+          {
+            "kind": "quod.return_expr",
             "value": {
-              "kind": "llvm.param_ref",
-              "name": "x"
-            },
-            "target": {
-              "kind": "llvm.i64"
-            },
-            "signed": false
+              "kind": "quod.widen",
+              "value": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "target": {
+                "kind": "llvm.i64"
+              },
+              "signed": false
+            }
           }
-        }
-      ]},
+        ]
+      },
       "claims": [
         {
-          "kind": "int_range",
-          "param": "x",
-          "min": 0,
-          "max": 9223372036854775807
+          "kind": "predicate",
+          "expr": {
+            "kind": "llvm.binop",
+            "op": "and",
+            "lhs": {
+              "kind": "llvm.binop",
+              "op": "sle",
+              "lhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.u64"
+                },
+                "value": 0
+              },
+              "rhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              }
+            },
+            "rhs": {
+              "kind": "llvm.binop",
+              "op": "sle",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "rhs": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.u64"
+                },
+                "value": 9223372036854775807
+              }
+            }
+          }
         }
       ]
     }

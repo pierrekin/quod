@@ -56,10 +56,23 @@
         ]},
         "claims": [
           {
-            "kind": "int_range",
-            "param": "k",
-            "min": 0,
-            "max": 10
+            "kind": "predicate",
+            "expr": {
+              "kind": "llvm.binop",
+              "op": "and",
+              "lhs": {
+                "kind": "llvm.binop",
+                "op": "sle",
+                "lhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 0},
+                "rhs": {"kind": "llvm.param_ref", "name": "k"}
+              },
+              "rhs": {
+                "kind": "llvm.binop",
+                "op": "sle",
+                "lhs": {"kind": "llvm.param_ref", "name": "k"},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 10}
+              }
+            }
           }
         ]
       },

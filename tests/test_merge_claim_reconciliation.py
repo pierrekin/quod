@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import pytest
 
+from quod.canonicalize import predicate_for_param_range, predicate_for_return_range
 from quod.merge import merge_program
 from quod.model import (
     Block,
@@ -30,14 +31,24 @@ from quod.model import (
     I64Type,
     I8PtrType,
     IntLit,
-    IntRangeClaim,
     LibcLinkage,
-    NonNegativeClaim,
     Param,
+    PredicateClaim,
     Program,
     ReturnExpr,
-    ReturnInRangeClaim,
 )
+
+
+def _nn(param: str, ty=I32Type()) -> PredicateClaim:
+    return PredicateClaim(expr=predicate_for_param_range(param, ty, lo=0, hi=None))
+
+
+def _ir(param: str, *, lo=None, hi=None, ty=I32Type()) -> PredicateClaim:
+    return PredicateClaim(expr=predicate_for_param_range(param, ty, lo=lo, hi=hi))
+
+
+def _rr(*, lo=None, hi=None, ty=I32Type()) -> PredicateClaim:
+    return PredicateClaim(expr=predicate_for_return_range(ty, lo=lo, hi=hi))
 
 
 def _fn_with_claims(
@@ -64,7 +75,7 @@ def test_existing_claim_survives_unchanged_param(tmp_path):
     existing_fn = _fn_with_claims(
         name="f",
         params=(Param(name="x", type=I32Type()),),
-        claims=(NonNegativeClaim(param="x"),),
+        claims=(_nn("x"),),
     )
     new_fn = _fn_with_claims(
         name="f",
@@ -78,15 +89,13 @@ def test_existing_claim_survives_unchanged_param(tmp_path):
 
     assert warnings == ()
     surviving = merged.functions[0].claims
-    assert len(surviving) == 1
-    assert surviving[0].kind == "non_negative"
-    assert surviving[0].param == "x"
+    assert surviving == (_nn("x"),)
 
 
 def test_existing_return_claim_survives_unchanged_return_type():
     existing_fn = _fn_with_claims(
         name="f", return_type=I32Type(),
-        claims=(ReturnInRangeClaim(min=0, max=100),),
+        claims=(_rr(lo=0, hi=100),),
     )
     new_fn = _fn_with_claims(name="f", return_type=I32Type())
     merged, warnings = merge_program(
@@ -94,8 +103,7 @@ def test_existing_return_claim_survives_unchanged_return_type():
         Program(functions=(new_fn,)),
     )
     assert warnings == ()
-    assert len(merged.functions[0].claims) == 1
-    assert merged.functions[0].claims[0].kind == "return_in_range"
+    assert merged.functions[0].claims == (_rr(lo=0, hi=100),)
 
 
 # ---------- orphan + warn cases ----------
@@ -105,7 +113,7 @@ def test_param_renamed_drops_claim_with_warning():
     existing_fn = _fn_with_claims(
         name="f",
         params=(Param(name="x", type=I32Type()),),
-        claims=(NonNegativeClaim(param="x"),),
+        claims=(_nn("x"),),
     )
     new_fn = _fn_with_claims(
         name="f",
@@ -117,7 +125,7 @@ def test_param_renamed_drops_claim_with_warning():
     )
     assert merged.functions[0].claims == ()
     assert len(warnings) == 1
-    assert "non_negative on f.x" in warnings[0]
+    assert "f.x" in warnings[0]
     assert "param removed in new" in warnings[0]
 
 
@@ -125,7 +133,7 @@ def test_param_retyped_to_non_int_drops_claim_with_warning():
     existing_fn = _fn_with_claims(
         name="f",
         params=(Param(name="x", type=I32Type()),),
-        claims=(IntRangeClaim(param="x", min=0, max=100),),
+        claims=(_ir("x", lo=0, hi=100),),
     )
     new_fn = _fn_with_claims(
         name="f",
@@ -137,7 +145,7 @@ def test_param_retyped_to_non_int_drops_claim_with_warning():
     )
     assert merged.functions[0].claims == ()
     assert len(warnings) == 1
-    assert "int_range on f.x" in warnings[0]
+    assert "f.x" in warnings[0]
     assert "retyped" in warnings[0]
     assert "llvm.i8_ptr" in warnings[0]
 
@@ -149,7 +157,7 @@ def test_param_retyped_to_different_int_keeps_claim():
     existing_fn = _fn_with_claims(
         name="f",
         params=(Param(name="x", type=I32Type()),),
-        claims=(NonNegativeClaim(param="x"),),
+        claims=(_nn("x"),),
     )
     new_fn = _fn_with_claims(
         name="f",
@@ -166,7 +174,7 @@ def test_param_retyped_to_different_int_keeps_claim():
 def test_return_retyped_drops_claim_with_warning():
     existing_fn = _fn_with_claims(
         name="f", return_type=I32Type(),
-        claims=(ReturnInRangeClaim(min=0, max=100),),
+        claims=(_rr(lo=0, hi=100),),
     )
     new_fn = _fn_with_claims(name="f", return_type=I8PtrType())
     merged, warnings = merge_program(
@@ -175,7 +183,7 @@ def test_return_retyped_drops_claim_with_warning():
     )
     assert merged.functions[0].claims == ()
     assert len(warnings) == 1
-    assert "return_in_range on f return" in warnings[0]
+    assert "f return" in warnings[0]
     assert "retyped" in warnings[0]
 
 
@@ -189,25 +197,25 @@ def test_new_claim_wins_on_kind_target_collision():
     existing_fn = _fn_with_claims(
         name="f",
         params=(Param(name="x", type=I32Type()),),
-        claims=(NonNegativeClaim(param="x"),),
+        claims=(_nn("x"),),
     )
     new_fn = _fn_with_claims(
         name="f",
         params=(Param(name="x", type=I32Type()),),
-        # New version of the same kind+target — different bounds.
-        claims=(IntRangeClaim(param="x", min=0, max=100),),
+        # New version with different bounds — distinct canonical predicate.
+        claims=(_ir("x", lo=0, hi=100),),
     )
     merged, warnings = merge_program(
         Program(functions=(existing_fn,)),
         Program(functions=(new_fn,)),
     )
-    # Both kinds present (different kinds — non_negative AND int_range
-    # — for the same param both get to keep). With realistic data the
-    # user would explicitly relax the redundant one; here we're testing
-    # the merge mechanics.
-    kinds = {(c.kind, c.param) for c in merged.functions[0].claims}
-    assert ("non_negative", "x") in kinds
-    assert ("int_range", "x") in kinds
+    # Both predicates present — `non_negative(x)` and `int_range(x, [0, 100])`
+    # canonicalize to different exprs, so both survive on the same param.
+    # With realistic data the user would explicitly relax the redundant one;
+    # here we're testing the merge mechanics.
+    surviving = set(merged.functions[0].claims)
+    assert _nn("x") in surviving
+    assert _ir("x", lo=0, hi=100) in surviving
     assert warnings == ()
 
 
@@ -217,14 +225,14 @@ def test_existing_only_function_passes_through():
     existing_fn = _fn_with_claims(
         name="f",
         params=(Param(name="x", type=I32Type()),),
-        claims=(NonNegativeClaim(param="x"),),
+        claims=(_nn("x"),),
     )
     merged, warnings = merge_program(
         Program(functions=(existing_fn,)),
         Program(functions=()),
     )
     assert warnings == ()
-    assert merged.functions[0].claims == (NonNegativeClaim(param="x"),)
+    assert merged.functions[0].claims == (_nn("x"),)
 
 
 def test_new_only_function_passes_through():
@@ -232,14 +240,14 @@ def test_new_only_function_passes_through():
     new_fn = _fn_with_claims(
         name="g",
         params=(Param(name="y", type=I32Type()),),
-        claims=(NonNegativeClaim(param="y"),),
+        claims=(_nn("y"),),
     )
     merged, warnings = merge_program(
         Program(functions=()),
         Program(functions=(new_fn,)),
     )
     assert warnings == ()
-    assert merged.functions[0].claims == (NonNegativeClaim(param="y"),)
+    assert merged.functions[0].claims == (_nn("y"),)
 
 
 # ---------- structured_functions same logic ----------
@@ -252,7 +260,7 @@ def test_structured_functions_get_same_reconciliation():
     existing_fn = _fn_with_claims(
         name="f",
         params=(Param(name="x", type=I32Type()),),
-        claims=(NonNegativeClaim(param="x"),),
+        claims=(_nn("x"),),
     )
     new_fn = _fn_with_claims(
         name="f",
@@ -284,7 +292,7 @@ def _ext_with_claims(
 def test_extern_return_claim_survives_unchanged_return_type():
     e = _ext_with_claims(
         name="atoi", return_type=I32Type(),
-        claims=(ReturnInRangeClaim(min=-1),),
+        claims=(_rr(lo=-1),),
     )
     new = _ext_with_claims(name="atoi", return_type=I32Type())
     merged, warnings = merge_program(
@@ -298,7 +306,7 @@ def test_extern_return_claim_survives_unchanged_return_type():
 def test_extern_return_retyped_drops_claim_with_warning():
     e = _ext_with_claims(
         name="weird", return_type=I32Type(),
-        claims=(ReturnInRangeClaim(min=0),),
+        claims=(_rr(lo=0),),
     )
     new = _ext_with_claims(name="weird", return_type=I8PtrType())
     merged, warnings = merge_program(
@@ -357,7 +365,7 @@ def test_reingest_preserves_authored_claim_via_cli(tmp_path):
     program_path = tmp_path / "program.json"
     before = json.loads(program_path.read_text())
     sum_fn = next(f for f in before["functions"] if f["name"] == "sum")
-    assert any(c["kind"] == "non_negative" for c in sum_fn.get("claims", []))
+    assert any(c["kind"] == "predicate" for c in sum_fn.get("claims", []))
 
     # Touch the source: add a trailing comment. Semantically identical.
     (tmp_path / "sum.c").write_text(
@@ -374,6 +382,6 @@ def test_reingest_preserves_authored_claim_via_cli(tmp_path):
 
     after = json.loads(program_path.read_text())
     sum_fn_after = next(f for f in after["functions"] if f["name"] == "sum")
-    assert any(c["kind"] == "non_negative" for c in sum_fn_after.get("claims", [])), (
-        "expected non_negative claim to survive re-ingest"
+    assert any(c["kind"] == "predicate" for c in sum_fn_after.get("claims", [])), (
+        "expected predicate claim to survive re-ingest"
     )

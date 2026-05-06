@@ -94,7 +94,6 @@ from quod.model import (
     If,
     IfExpr,
     IntLit,
-    IntRangeClaim,
     Let,
     Load,
     LoadField,
@@ -106,7 +105,6 @@ from quod.model import (
     MatchArm,
     SizeOf,
     TryExpr,
-    NonNegativeClaim,
     Not,
     NullPtr,
     Param,
@@ -116,7 +114,6 @@ from quod.model import (
     PtrOffset,
     Return,
     ReturnExpr,
-    ReturnInRangeClaim,
     ReturnRef,
     Unreachable,
     ShortCircuitAnd,
@@ -803,21 +800,6 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
     },
 
     # ---------- claim ----------
-    "non_negative": {
-        "class": NonNegativeClaim,
-        "summary": "Asserts param >= 0. Subsumed by int_range(min=0); kept as a convenience.",
-        "example": {"kind": "non_negative", "param": "x"},
-    },
-    "int_range": {
-        "class": IntRangeClaim,
-        "summary": "Asserts min <= param <= max. Either bound optional (omit for unbounded on that side).",
-        "example": {"kind": "int_range", "param": "x", "min": 0, "max": 100},
-    },
-    "return_in_range": {
-        "class": ReturnInRangeClaim,
-        "summary": "Asserts the function's return value is in [min, max]. Function-scoped — no `param` field.",
-        "example": {"kind": "return_in_range", "min": -1},
-    },
     "predicate": {
         "class": PredicateClaim,
         "summary": (
@@ -837,7 +819,7 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
                 "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0},
             },
         },
-        "see_also": ["non_negative", "int_range", "return_in_range", "quod.return_ref"],
+        "see_also": ["quod.return_ref", "quod.not"],
     },
 
     # ---------- justification (evidence on a claim) ----------
@@ -933,7 +915,14 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             ],
             "return_type": {"kind": "llvm.i64"},
             "linkage": {"kind": "linkage.libc"},
-            "claims": [{"kind": "return_in_range", "min": -1}],
+            "claims": [{
+                "kind": "predicate",
+                "expr": {
+                    "kind": "llvm.binop", "op": "sle",
+                    "lhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": -1},
+                    "rhs": {"kind": "quod.return_ref"},
+                },
+            }],
         },
     },
     "LibcLinkage": {
@@ -1531,7 +1520,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "llvm.i8_ptr", "llvm.struct", "llvm.enum", "llvm.void",
         "quod.type_param", "quod.self_type",
     ],
-    "claim": ["non_negative", "int_range", "return_in_range", "predicate", "equivalent_to"],
+    "claim": ["predicate", "equivalent_to"],
     "justification": [
         "z3", "manual", "derived", "lift_equivalence", "family_lowering",
     ],

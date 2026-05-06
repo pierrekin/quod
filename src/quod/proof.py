@@ -9,7 +9,7 @@ The encoding lives entirely in this module — `model` knows nothing about SMT.
 Coverage:
   expressions: IntLit, ParamRef, BinOp(add, sub, mul, slt, eq), Call (cross-procedural)
   statements:  ReturnExpr, If (both branches return), ExprStmt (skipped)
-  claims:      NonNegativeClaim, IntRangeClaim, ReturnInRangeClaim
+  claims:      PredicateClaim (canonical predicate body)
                  - as hypotheses on the function under analysis (via `hypotheses=`)
                  - as hypotheses on calls to *other* user functions (via `program=`),
                    so the callee's return claims constrain the call result
@@ -50,23 +50,19 @@ from quod.model import (
     If,
     IfExpr,
     IntLit,
-    IntRangeClaim,
     IntType,
     Let,
     LocalRef,
-    NonNegativeClaim,
     Not,
     ParamRef,
     PredicateClaim,
     Program,
     ReturnExpr,
-    ReturnInRangeClaim,
     ReturnRef,
     ShortCircuitAnd,
     ShortCircuitOr,
     StringRef,
     While,
-    claim_param,
 )
 
 
@@ -129,7 +125,7 @@ class _SmtState:
     extra_decls: list[str] = field(default_factory=list)
     extra_asserts: list[str] = field(default_factory=list)
     asserted_preds: set[str] = field(default_factory=set)
-    fn_return_claims: dict[str, tuple[ReturnInRangeClaim, ...]] = field(default_factory=dict)
+    fn_return_claims: dict[str, tuple[PredicateClaim, ...]] = field(default_factory=dict)
 
 
 def _expr_to_smt(expr, state: _SmtState) -> str:
@@ -184,11 +180,11 @@ def _expr_to_smt(expr, state: _SmtState) -> str:
             # the same args produce the same SMT term, so duplicate assertions
             # are filtered via asserted_preds.
             for rc in state.fn_return_claims.get(fname, ()):
-                pred = claim_smt_predicate(rc, call_term)
+                pred = predicate_to_smt(rc.expr, call_term)
                 if pred not in state.asserted_preds:
                     state.asserted_preds.add(pred)
                     state.extra_asserts.append(
-                        f";   {fname}'s {rc.kind} return claim, on {call_term}"
+                        f";   {fname}'s return claim, on {call_term}"
                     )
                     state.extra_asserts.append(f"(assert {pred})")
             return call_term
@@ -221,12 +217,12 @@ def _stmts_to_return_smt(stmts, state: _SmtState) -> str:
     raise NotImplementedError("function body has no terminating return")
 
 
-def _build_fn_return_claims_index(program: Program | None) -> dict[str, tuple[ReturnInRangeClaim, ...]]:
+def _build_fn_return_claims_index(program: Program | None) -> dict[str, tuple[PredicateClaim, ...]]:
     if program is None:
         return {}
-    out: dict[str, tuple[ReturnInRangeClaim, ...]] = {}
+    out: dict[str, tuple[PredicateClaim, ...]] = {}
     for fn in program.functions:
-        rcs = tuple(c for c in fn.claims if isinstance(c, ReturnInRangeClaim))
+        rcs = tuple(c for c in fn.claims if predicate_uses_return(c.expr))
         if rcs:
             out[fn.name] = rcs
     return out
@@ -242,37 +238,6 @@ def function_return_term(fn: Function, *, program: Program | None = None) -> tup
     state = _SmtState(fn_return_claims=_build_fn_return_claims_index(program))
     term = _stmts_to_return_smt(list(fn.body.stmts), state)
     return term, state
-
-
-# ---------- Claim → SMT predicate ----------
-
-def claim_smt_predicate(c: Claim, return_term: str) -> str:
-    """SMT-LIB Bool-valued predicate the claim *asserts*.
-
-    Param-scoped claims read the param by name. Return-scoped claims read
-    the supplied return-value term.
-    """
-    match c:
-        case NonNegativeClaim(param=p):
-            return f"(>= {p} 0)"
-        case IntRangeClaim(param=p, min=lo, max=hi):
-            return _range_pred(p, lo, hi)
-        case ReturnInRangeClaim(min=lo, max=hi):
-            return _range_pred(return_term, lo, hi)
-    raise NotImplementedError(f"can't lower claim {c!r} for SMT")
-
-
-def _range_pred(term: str, lo: int | None, hi: int | None) -> str:
-    parts: list[str] = []
-    if lo is not None:
-        parts.append(f"(>= {term} {lo})")
-    if hi is not None:
-        parts.append(f"(<= {term} {hi})")
-    if not parts:
-        return "true"
-    if len(parts) == 1:
-        return parts[0]
-    return f"(and {' '.join(parts)})"
 
 
 # Bool-valued BinOp ops used inside predicates. Map to SMT-LIB native names.
@@ -399,8 +364,9 @@ def goal_smt_lib(
         lines.append("")
         lines.append("; hypotheses (existing claims on this function)")
         for h in hypotheses:
-            lines.append(f";   {h.kind}({claim_param(h) or 'return'})")
-            lines.append(f"(assert {claim_smt_predicate(h, return_term)})")
+            scope = "return" if predicate_uses_return(h.expr) else "params"
+            lines.append(f";   predicate ({scope}-scoped)")
+            lines.append(f"(assert {predicate_to_smt(h.expr, return_term)})")
 
     if state.extra_asserts:
         lines.append("")
@@ -409,7 +375,7 @@ def goal_smt_lib(
 
     lines.append("")
     lines.append("; goal (negated; we ask Z3 to find a counterexample)")
-    lines.append(f"(assert (not {claim_smt_predicate(goal, return_term)}))")
+    lines.append(f"(assert (not {predicate_to_smt(goal.expr, return_term)}))")
     lines.append("")
     lines.append("(check-sat)")
     lines.append("(exit)")

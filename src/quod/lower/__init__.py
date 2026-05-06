@@ -19,6 +19,7 @@ from llvmlite import binding as llvm
 from llvmlite import ir
 
 from quod.analysis import derive_lattice_claims, elaborate
+from quod.proof import predicate_uses_return
 from quod.runtime import build_runtime_archive
 from quod.resolve import resolve_imports
 from quod.validate import validate_or_raise
@@ -55,7 +56,6 @@ from quod.model import (
     If,
     IfExpr,
     IntLit,
-    IntRangeClaim,
     int_type_width,
     Let,
     CharLit,
@@ -63,7 +63,6 @@ from quod.model import (
     LoadField,
     LocalRef,
     Match,
-    NonNegativeClaim,
     Not,
     NullPtr,
     Return,
@@ -73,7 +72,6 @@ from quod.model import (
     ReturnExpr,
     SizeOf,
     TryExpr,
-    ReturnInRangeClaim,
     ReturnRef,
     ShortCircuitAnd,
     ShortCircuitOr,
@@ -797,7 +795,7 @@ def _lower_stmt(
     match stmt:
         case ReturnExpr(value=expr):
             ret_val = lower_expr(expr)
-            _emit_return_claims(builder, ret_val, return_claims, llvm_fn, module, overrides)
+            _emit_return_claims(builder, ret_val, return_claims, llvm_fn, module, params, overrides)
             builder.ret(ret_val)
             return
         case Return():
@@ -1144,72 +1142,102 @@ def _lower_stmt(
     raise ValueError(f"unhandled stmt: {stmt!r}")
 
 
-def _icmp_for_bound(
-    builder: ir.IRBuilder, predicate: str, val: ir.Value, bound: int,
+def _lower_predicate(
+    builder: ir.IRBuilder, expr,
+    params: dict[str, ir.Value], ret_val: ir.Value | None,
 ) -> ir.Value:
-    """Emit an icmp comparing `val` against an integer bound from a claim.
+    """Lower a predicate body to its IR value. Binds `ReturnRef` to
+    `ret_val` (None for preconditions; required when the predicate
+    references the return value).
 
-    i1 uses unsigned comparison (the boolean {0, 1} interpretation that
-    matches clang's _Bool). At signed-1-bit, bit pattern 1 sign-extends to
-    -1, so `signed >= 0` on an i1 would assert "value is 0 (false)" — a
-    silent corruption of any non_negative or return_in_range(min=0) claim
-    on an i1 function.
-
-    Wider ints stay signed: quod programs use signed arithmetic (slt, sge,
-    srem) by convention, and a claim's min=-N is meant in signed terms.
+    Predicates are restricted to the side-effect-free expression
+    vocabulary admitted by `quod.validate.assert_is_predicate`: int
+    literals, param/return references, comparisons, integer
+    arithmetic on terms, boolean combinators, negation. This walker
+    is intentionally separate from `_lower_expr` — it doesn't need
+    constants, locals, externs, or aggregate machinery.
     """
-    const = ir.Constant(val.type, bound)
-    if val.type.width == 1:
-        return builder.icmp_unsigned(predicate, val, const)
-    return builder.icmp_signed(predicate, val, const)
+    def go(e):
+        return _lower_predicate(builder, e, params, ret_val)
+
+    match expr:
+        case IntLit(type=t, value=v):
+            return ir.Constant(_type_to_llvm(t), v)
+        case ParamRef(name=n):
+            return params[n]
+        case ReturnRef():
+            if ret_val is None:
+                raise AssertionError(
+                    "ReturnRef in predicate but no return value in scope"
+                )
+            return ret_val
+        case Not(operand=op):
+            return builder.xor(go(op), ir.Constant(I1, 1))
+        case BinOp(op="add", lhs=l, rhs=r):
+            return builder.add(go(l), go(r))
+        case BinOp(op="sub", lhs=l, rhs=r):
+            return builder.sub(go(l), go(r))
+        case BinOp(op="mul", lhs=l, rhs=r):
+            return builder.mul(go(l), go(r))
+        case BinOp(op=op, lhs=l, rhs=r) if op in _ICMP_SIGNED:
+            return builder.icmp_signed(_ICMP_SIGNED[op], go(l), go(r))
+        case BinOp(op=op, lhs=l, rhs=r) if op in _ICMP_UNSIGNED:
+            return builder.icmp_unsigned(_ICMP_UNSIGNED[op], go(l), go(r))
+        case BinOp(op="or", lhs=l, rhs=r):
+            return builder.or_(go(l), go(r))
+        case BinOp(op="and", lhs=l, rhs=r):
+            return builder.and_(go(l), go(r))
+        case BinOp(op="xor", lhs=l, rhs=r):
+            return builder.xor(go(l), go(r))
+    raise ValueError(f"unhandled predicate expr: {expr!r}")
 
 
 def _emit_extern_call_postconditions(
     builder: ir.IRBuilder, module: ir.Module,
     ret_val: ir.Value, claims: tuple,
 ) -> None:
-    """Emit `llvm.assume` against an extern call's return value, one assume
-    per bound carried by a `ReturnInRangeClaim`.
+    """Emit `llvm.assume` against an extern call's return value, one
+    assume per claim that references `ReturnRef`. Preconditions on
+    extern params are emitted at the call site by the caller.
 
     Only `enforcement="trust"` is supported here. The verify path needs
-    `llvm_fn` for basic-block creation, which `_lower_expr` doesn't carry.
-    Extern claims default to axiom + trust today, so this is sufficient;
-    add the verify path when there's a real demand.
+    `llvm_fn` for basic-block creation, which the call-site lowering
+    doesn't carry. Extern claims default to axiom + trust today, so this
+    is sufficient; add the verify path when there's a real demand.
     """
+    assume = None
     for claim in claims:
-        if not isinstance(claim, ReturnInRangeClaim):
+        if not predicate_uses_return(claim.expr):
             continue
         if claim.enforcement != "trust":
             raise NotImplementedError(
                 f"extern return-claim with enforcement={claim.enforcement!r}: "
                 f"only 'trust' is supported in this revision"
             )
-        assume = _get_or_declare_assume(module)
-        if claim.min is not None:
-            cmp = _icmp_for_bound(builder, ">=", ret_val, claim.min)
-            builder.call(assume, [cmp])
-        if claim.max is not None:
-            cmp = _icmp_for_bound(builder, "<=", ret_val, claim.max)
-            builder.call(assume, [cmp])
+        if assume is None:
+            assume = _get_or_declare_assume(module)
+        cmp = _lower_predicate(builder, claim.expr, params={}, ret_val=ret_val)
+        builder.call(assume, [cmp])
 
 
 def _emit_return_claims(
     builder: ir.IRBuilder, ret_val: ir.Value, return_claims: tuple,
-    llvm_fn: ir.Function, module: ir.Module, overrides: dict[str, str],
+    llvm_fn: ir.Function, module: ir.Module, params: dict[str, ir.Value],
+    overrides: dict[str, str],
 ) -> None:
     """Emit llvm.assume / runtime-check predicates against the return value
     just before `ret`. The optimizer learns the bound; after inlining, callers
-    learn it too."""
+    learn it too.
+
+    `params` are in scope for postconditions that mention both ReturnRef
+    and parameters.
+    """
     for claim in return_claims:
-        if not isinstance(claim, ReturnInRangeClaim):
+        if not predicate_uses_return(claim.expr):
             continue
         enforcement = overrides.get(claim.regime, claim.enforcement)
-        if claim.min is not None:
-            cmp = _icmp_for_bound(builder, ">=", ret_val, claim.min)
-            _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
-        if claim.max is not None:
-            cmp = _icmp_for_bound(builder, "<=", ret_val, claim.max)
-            _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
+        cmp = _lower_predicate(builder, claim.expr, params, ret_val)
+        _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
 
 
 def _lower_claim(
@@ -1221,29 +1249,16 @@ def _lower_claim(
     *,
     overrides: dict[str, str],
 ) -> None:
-    # The build's per-regime override (if any) replaces the claim's stored
-    # enforcement; otherwise the stored value wins.
+    """Lower a precondition (no `ReturnRef`) at function entry.
+    Postconditions are emitted per return site by `_emit_return_claims`."""
+    if predicate_uses_return(claim.expr):
+        raise AssertionError(
+            "postcondition (ReturnRef-bearing) reached entry-injection path; "
+            "_lower_function_body should split these into return_claims"
+        )
     enforcement = overrides.get(claim.regime, claim.enforcement)
-    match claim:
-        case NonNegativeClaim(param=name):
-            cmp = _icmp_for_bound(builder, ">=", params[name], 0)
-            _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
-            return
-        case IntRangeClaim(param=name, min=lo, max=hi):
-            val = params[name]
-            if lo is not None:
-                cmp = _icmp_for_bound(builder, ">=", val, lo)
-                _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
-            if hi is not None:
-                cmp = _icmp_for_bound(builder, "<=", val, hi)
-                _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
-            return
-        case ReturnInRangeClaim():
-            # Function-scoped — handled per-ret in _emit_return_claims, not at
-            # function entry. _lower_function_body filters these out before
-            # calling _lower_claim, so we should never reach here.
-            raise AssertionError("ReturnInRangeClaim should be handled per-ret")
-    raise ValueError(f"unhandled claim: {claim!r}")
+    cmp = _lower_predicate(builder, claim.expr, params, ret_val=None)
+    _emit_for_enforcement(builder, cmp, enforcement, llvm_fn, module)
 
 
 def _declare_function(
@@ -1292,10 +1307,11 @@ def _lower_function_body(
         arg.name = p.name
     params = {p.name: arg for p, arg in zip(fn.params, llvm_fn.args)}
 
-    # Split claims by scope: param-scoped at function entry, return-scoped
-    # at every ret site (so callers benefit after inlining).
-    entry_claims = tuple(c for c in fn.claims if not isinstance(c, ReturnInRangeClaim))
-    return_claims = tuple(c for c in fn.claims if isinstance(c, ReturnInRangeClaim))
+    # Split claims by scope. A predicate is a postcondition iff it
+    # references ReturnRef; otherwise it's a precondition and is
+    # injected at function entry.
+    entry_claims = tuple(c for c in fn.claims if not predicate_uses_return(c.expr))
+    return_claims = tuple(c for c in fn.claims if predicate_uses_return(c.expr))
 
     entry_bb = llvm_fn.append_basic_block(name="entry")
     builder = ir.IRBuilder(entry_bb)

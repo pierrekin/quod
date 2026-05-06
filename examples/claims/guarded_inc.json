@@ -11,62 +11,85 @@
           }
         }
       ],
-      "body": {"id": "@blk_guarded_inc_3", "stmts": [
-        {
-          "kind": "quod.if",
-          "cond": {
-            "kind": "llvm.binop",
-            "op": "slt",
-            "lhs": {
-              "kind": "llvm.param_ref",
-              "name": "x"
-            },
-            "rhs": {
-              "kind": "llvm.const_int",
-              "value": 0,
-              "type": {
-                "kind": "llvm.i32"
-              }
-            }
-          },
-          "then_body": {"id": "@blk_guarded_inc_1", "stmts": [
-            {
-              "kind": "quod.return_expr",
-              "value": {
+      "body": {
+        "id": "@blk_guarded_inc_3",
+        "stmts": [
+          {
+            "kind": "quod.if",
+            "cond": {
+              "kind": "llvm.binop",
+              "op": "slt",
+              "lhs": {
+                "kind": "llvm.param_ref",
+                "name": "x"
+              },
+              "rhs": {
                 "kind": "llvm.const_int",
-                "value": -1,
+                "value": 0,
                 "type": {
                   "kind": "llvm.i32"
                 }
               }
-            }
-          ]},
-          "else_body": {"id": "@blk_guarded_inc_2", "stmts": [
-            {
-              "kind": "quod.return_expr",
-              "value": {
-                "kind": "llvm.binop",
-                "op": "add",
-                "lhs": {
-                  "kind": "llvm.param_ref",
-                  "name": "x"
-                },
-                "rhs": {
-                  "kind": "llvm.const_int",
-                  "value": 1,
-                  "type": {
-                    "kind": "llvm.i32"
+            },
+            "then_body": {
+              "id": "@blk_guarded_inc_1",
+              "stmts": [
+                {
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "llvm.const_int",
+                    "value": -1,
+                    "type": {
+                      "kind": "llvm.i32"
+                    }
                   }
                 }
-              }
+              ]
+            },
+            "else_body": {
+              "id": "@blk_guarded_inc_2",
+              "stmts": [
+                {
+                  "kind": "quod.return_expr",
+                  "value": {
+                    "kind": "llvm.binop",
+                    "op": "add",
+                    "lhs": {
+                      "kind": "llvm.param_ref",
+                      "name": "x"
+                    },
+                    "rhs": {
+                      "kind": "llvm.const_int",
+                      "value": 1,
+                      "type": {
+                        "kind": "llvm.i32"
+                      }
+                    }
+                  }
+                }
+              ]
             }
-          ]}
-        }
-      ]},
+          }
+        ]
+      },
       "claims": [
         {
-          "kind": "non_negative",
-          "param": "x"
+          "kind": "predicate",
+          "expr": {
+            "kind": "llvm.binop",
+            "op": "sle",
+            "lhs": {
+              "kind": "llvm.const_int",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "value": 0
+            },
+            "rhs": {
+              "kind": "llvm.param_ref",
+              "name": "x"
+            }
+          }
         }
       ],
       "return_type": {

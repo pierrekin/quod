@@ -61,10 +61,14 @@ from quod.editor import (
 from quod.hashing import HASH_DISPLAY_LEN, find_by_prefix, node_hash, short_hash, walk
 from quod.ingest import IngestError, ingest_c, ingest_header
 from quod.merge import merge_program
+from quod.canonicalize import (
+    PARAM_SUGAR_KINDS,
+    RETURN_SUGAR_KINDS,
+    SUGAR_KINDS,
+    predicate_for_param_range,
+    predicate_for_return_range,
+)
 from quod.model import (
-    CLAIM_KINDS,
-    PARAM_CLAIM_KINDS,
-    RETURN_CLAIM_KINDS,
     CFn,
     Claim,
     DerivedJustification,
@@ -85,15 +89,13 @@ from quod.model import (
     U64Type,
     IsizeType,
     UsizeType,
-    IntRangeClaim,
     Justification,
     LibcLinkage,
     LiftEquivalence,
     Linkage,
     ManualJustification,
-    NonNegativeClaim,
+    PredicateClaim,
     Program,
-    ReturnInRangeClaim,
     RuntimeLinkage,
     StringConstant,
     StructDef,
@@ -1488,10 +1490,19 @@ def _parse_justification_spec(raw: str) -> Justification:
 
 
 def _build_claim(
+    target_fn: Function | ExternFunction,
     kind: str, target: str | None, *,
     lo: int | None, hi: int | None,
     regime: str, enforcement: str, justification: Justification | None,
-):
+) -> PredicateClaim:
+    """Desugar a sugar-form claim invocation against `target_fn` into a
+    `PredicateClaim` carrying the canonical predicate.
+
+    `target_fn` is the function or extern the claim attaches to — needed
+    to look up the param's type (for `non_negative`/`int_range`) or the
+    return type (for `return_in_range`) so the IntLit bounds in the
+    predicate are well-typed.
+    """
     if regime not in STORED_REGIMES:
         raise typer.BadParameter(
             f"can't add claim with regime={regime!r}: stored claims must be one of "
@@ -1499,36 +1510,67 @@ def _build_claim(
         )
     if enforcement not in ENFORCEMENTS:
         raise typer.BadParameter(f"unknown enforcement {enforcement!r}; choices: {', '.join(ENFORCEMENTS)}")
-    if kind in PARAM_CLAIM_KINDS and target is None:
+    if kind in PARAM_SUGAR_KINDS and target is None:
         raise typer.BadParameter(f"{kind!r} requires --target / -t (the parameter name)")
-    if kind in RETURN_CLAIM_KINDS and target is not None:
+    if kind in RETURN_SUGAR_KINDS and target is not None:
         raise typer.BadParameter(f"{kind!r} is function-scoped; --target / -t must not be set")
-    common = {"regime": regime, "enforcement": enforcement, "justification": justification}
+    expr = _predicate_for_sugar(target_fn, kind, target, lo, hi)
+    return PredicateClaim(
+        regime=regime, enforcement=enforcement, justification=justification,
+        expr=expr,
+    )
+
+
+def _predicate_for_sugar(
+    target_fn: Function | ExternFunction,
+    kind: str, target: str | None,
+    lo: int | None, hi: int | None,
+):
+    """Build the canonical predicate for one of the named sugar shapes."""
     if kind == "non_negative":
         if lo is not None or hi is not None:
             raise typer.BadParameter("non_negative does not take --min / --max")
-        return NonNegativeClaim(param=target, **common)
+        param_ty = _param_type(target_fn, target)
+        return predicate_for_param_range(target, param_ty, lo=0, hi=None)
     if kind == "int_range":
         if lo is None and hi is None:
             raise typer.BadParameter("int_range requires --min and/or --max")
-        return IntRangeClaim(param=target, min=lo, max=hi, **common)
+        param_ty = _param_type(target_fn, target)
+        return predicate_for_param_range(target, param_ty, lo, hi)
     if kind == "return_in_range":
         if lo is None and hi is None:
             raise typer.BadParameter("return_in_range requires --min and/or --max")
-        return ReturnInRangeClaim(min=lo, max=hi, **common)
-    raise typer.BadParameter(f"unknown claim kind {kind!r}; choices: {', '.join(CLAIM_KINDS)}")
+        return predicate_for_return_range(target_fn.return_type, lo, hi)
+    raise typer.BadParameter(f"unknown claim kind {kind!r}; choices: {', '.join(SUGAR_KINDS)}")
+
+
+def _param_type(target_fn: Function | ExternFunction, name: str):
+    """Resolve a param's type. Externs don't carry param names, so
+    param-scoped claims aren't supported on them — this helper raises a
+    user-facing error in that case."""
+    if isinstance(target_fn, ExternFunction):
+        raise typer.BadParameter(
+            "extern claims are return-scoped only — externs don't carry "
+            "named parameters in the model"
+        )
+    p = target_fn.param(name)
+    if p is None:
+        raise KeyError(
+            f"function {target_fn.name!r} has no parameter {name!r}"
+        )
+    return p.type
 
 
 @claim_app.command("add")
 def claim_add(
     function: str = typer.Argument(..., help="Function name or hash prefix.",
                                     autocompletion=_comp.function_or_hash),
-    kind: str = typer.Argument(..., help=f"Claim kind. One of: {', '.join(CLAIM_KINDS)}.",
+    kind: str = typer.Argument(..., help=f"Claim kind. One of: {', '.join(SUGAR_KINDS)}.",
                                autocompletion=_comp.claim_kinds),
     target: str | None = typer.Argument(
         None,
-        help=f"Parameter name. Required for: {', '.join(PARAM_CLAIM_KINDS)}. "
-             f"Must be omitted for: {', '.join(RETURN_CLAIM_KINDS)}.",
+        help=f"Parameter name. Required for: {', '.join(PARAM_SUGAR_KINDS)}. "
+             f"Must be omitted for: {', '.join(RETURN_SUGAR_KINDS)}.",
         autocompletion=_comp.param_names_for_function,
     ),
     lo: int | None = typer.Option(None, "--min"),
@@ -1556,7 +1598,7 @@ def claim_add(
             fn = find_function_ref(program, function)
             just_obj = _parse_justification_spec(justification) if justification else None
             claim = _build_claim(
-                kind, target, lo=lo, hi=hi,
+                fn, kind, target, lo=lo, hi=hi,
                 regime=regime, enforcement=enforcement, justification=just_obj,
             )
             program = add_claim(program, fn.name, claim)
@@ -1571,18 +1613,26 @@ def claim_add(
 def claim_relax(
     function: str = typer.Argument(..., help="Function name or hash prefix.",
                                     autocompletion=_comp.function_or_hash),
-    kind: str = typer.Argument(..., help=f"Claim kind. One of: {', '.join(CLAIM_KINDS)}.",
+    kind: str = typer.Argument(..., help=f"Claim kind. One of: {', '.join(SUGAR_KINDS)}.",
                                autocompletion=_comp.claim_kinds),
     target: str | None = typer.Argument(None, help="Parameter name (omit for return-scoped claims).",
                                         autocompletion=_comp.param_names_for_function),
+    lo: int | None = typer.Option(None, "--min"),
+    hi: int | None = typer.Option(None, "--max"),
 ) -> None:
-    """Remove a claim (always safe — drops an assertion)."""
+    """Remove a claim (always safe — drops an assertion).
+
+    Symmetric to `claim add`: pass the same sugar arguments that were
+    used to add the claim. Multiple `int_range`s on the same param are
+    distinct predicates — `--min`/`--max` are required to disambiguate.
+    """
     with _exclusive_lock():
         program = _load()
         try:
             fn = find_function_ref(program, function)
-            program = relax_claim(program, fn.name, kind, target)
-        except KeyError as e:
+            expr = _predicate_for_sugar(fn, kind, target, lo, hi)
+            program = relax_claim(program, fn.name, expr)
+        except (KeyError, typer.BadParameter) as e:
             typer.echo(f"error: {e}", err=True)
             raise typer.Exit(1)
         _save(program)
@@ -2019,17 +2069,31 @@ def _ir_line_count(program: Program) -> int:
     return len(str(parsed).splitlines())
 
 
-def _generate_candidates(program: Program) -> list[tuple[str, object]]:
-    out: list[tuple[str, object]] = []
+_INT_TYPE_CLASSES = (
+    I1Type, I8Type, I16Type, I32Type, I64Type,
+    U8Type, U16Type, U32Type, U64Type, IsizeType, UsizeType,
+)
+
+
+def _generate_candidates(program: Program) -> list[tuple[str, PredicateClaim]]:
+    """Enumerate candidate sugar-shape claims for `claim suggest`. One
+    `non_negative(p)` per param, plus `return_in_range([-1, +inf])` and
+    `return_in_range([0, +inf])` for int-returning functions. Skips any
+    candidate already present (by canonical predicate equality)."""
+    out: list[tuple[str, PredicateClaim]] = []
     for fn in program.functions:
-        existing = {(claim_param(c), c.kind) for c in fn.claims}
+        existing_exprs = {c.expr for c in fn.claims}
         for p in fn.params:
-            if (p.name, "non_negative") not in existing:
-                out.append((fn.name, NonNegativeClaim(param=p.name, regime="axiom")))
-        has_return_claim = any(c.kind == "return_in_range" for c in fn.claims)
-        if not has_return_claim:
+            if not isinstance(p.type, _INT_TYPE_CLASSES):
+                continue
+            cand = predicate_for_param_range(p.name, p.type, lo=0, hi=None)
+            if cand not in existing_exprs:
+                out.append((fn.name, PredicateClaim(regime="axiom", expr=cand)))
+        if isinstance(fn.return_type, _INT_TYPE_CLASSES):
             for lo in (-1, 0):
-                out.append((fn.name, ReturnInRangeClaim(min=lo, regime="axiom")))
+                cand = predicate_for_return_range(fn.return_type, lo=lo, hi=None)
+                if cand not in existing_exprs:
+                    out.append((fn.name, PredicateClaim(regime="axiom", expr=cand)))
     return out
 
 
@@ -2067,7 +2131,7 @@ def claim_derive(
 def claim_prove(
     function: str = typer.Argument(..., help="Function name or hash prefix.",
                                     autocompletion=_comp.function_or_hash),
-    kind: str = typer.Argument(..., help=f"Claim kind to prove. One of: {', '.join(CLAIM_KINDS)}.",
+    kind: str = typer.Argument(..., help=f"Claim kind to prove. One of: {', '.join(SUGAR_KINDS)}.",
                                autocompletion=_comp.claim_kinds),
     target: str | None = typer.Argument(None, help="Parameter name (omit for return-scoped claims).",
                                         autocompletion=_comp.param_names_for_function),
@@ -2092,8 +2156,8 @@ def claim_prove(
     if prov.prove is None:
         typer.echo(f"error: provider {prov.name!r} does not support prove mode", err=True)
         raise typer.Exit(1)
-    if kind not in CLAIM_KINDS:
-        typer.echo(f"error: unknown claim kind {kind!r}; one of: {', '.join(CLAIM_KINDS)}", err=True)
+    if kind not in SUGAR_KINDS:
+        typer.echo(f"error: unknown claim kind {kind!r}; one of: {', '.join(SUGAR_KINDS)}", err=True)
         raise typer.Exit(2)
     if enforcement not in ENFORCEMENTS:
         typer.echo(f"error: --enforcement must be one of {ENFORCEMENTS}", err=True)
@@ -2105,14 +2169,12 @@ def claim_prove(
         program = _load()
         try:
             fn = find_function_ref(program, function)
-        except (KeyError, ValueError) as e:
+            expr = _predicate_for_sugar(fn, kind, target, lo, hi)
+        except (KeyError, ValueError, typer.BadParameter) as e:
             typer.echo(f"error: {e}", err=True)
             raise typer.Exit(1)
 
-        request = ClaimRequest(
-            function=fn.name, kind=kind, target=target,
-            min=lo, max=hi, enforcement=enforcement,
-        )
+        request = ClaimRequest(function=fn.name, expr=expr, enforcement=enforcement)
         result = prov.prove(program, request, proofs_dir)
         if result.status != "proven":
             tag = result.status
@@ -2484,7 +2546,7 @@ def extern_claim_ls(
 def extern_claim_add(
     extern: str = typer.Argument(..., help="Extern name.",
                                  autocompletion=_comp.extern_names),
-    kind: str = typer.Argument(..., help=f"Claim kind. Externs currently support: {', '.join(RETURN_CLAIM_KINDS)}.",
+    kind: str = typer.Argument(..., help=f"Claim kind. Externs currently support: {', '.join(RETURN_SUGAR_KINDS)}.",
                                autocompletion=_comp.claim_kinds),
     lo: int | None = typer.Option(None, "--min"),
     hi: int | None = typer.Option(None, "--max"),
@@ -2510,19 +2572,23 @@ def extern_claim_add(
     Externs currently only support return-scoped claims (e.g. return_in_range).
     Param-scoped claims need named extern params, which is a follow-up.
     """
-    if kind not in RETURN_CLAIM_KINDS:
+    if kind not in RETURN_SUGAR_KINDS:
         typer.echo(
-            f"error: extern claims currently only support: {', '.join(RETURN_CLAIM_KINDS)}. "
+            f"error: extern claims currently only support: {', '.join(RETURN_SUGAR_KINDS)}. "
             f"Param-scoped kinds need named extern params (not yet on the model).",
             err=True,
         )
         raise typer.Exit(1)
     with _exclusive_lock():
         program = _load()
+        ext = next((e for e in program.externs if e.name == extern), None)
+        if ext is None:
+            typer.echo(f"error: no extern named {extern!r}", err=True)
+            raise typer.Exit(1)
         try:
             just_obj = _parse_justification_spec(justification) if justification else None
             claim = _build_claim(
-                kind, target=None, lo=lo, hi=hi,
+                ext, kind, target=None, lo=lo, hi=hi,
                 regime=regime, enforcement=enforcement, justification=just_obj,
             )
             program = add_extern_claim(program, extern, claim)
@@ -2537,15 +2603,23 @@ def extern_claim_add(
 def extern_claim_relax(
     extern: str = typer.Argument(..., help="Extern name.",
                                  autocompletion=_comp.extern_names),
-    kind: str = typer.Argument(..., help=f"Claim kind to remove. One of: {', '.join(CLAIM_KINDS)}.",
+    kind: str = typer.Argument(..., help=f"Claim kind to remove. One of: {', '.join(RETURN_SUGAR_KINDS)}.",
                                autocompletion=_comp.claim_kinds),
+    lo: int | None = typer.Option(None, "--min"),
+    hi: int | None = typer.Option(None, "--max"),
 ) -> None:
-    """Remove a claim from an extern. Use this before re-adding with new bounds."""
+    """Remove a claim from an extern. Symmetric to `extern claim add`:
+    pass the same sugar arguments that were used to add the claim."""
     with _exclusive_lock():
         program = _load()
+        ext = next((e for e in program.externs if e.name == extern), None)
+        if ext is None:
+            typer.echo(f"error: no extern named {extern!r}", err=True)
+            raise typer.Exit(1)
         try:
-            program = relax_extern_claim(program, extern, kind, target=None)
-        except KeyError as e:
+            expr = _predicate_for_sugar(ext, kind, None, lo, hi)
+            program = relax_extern_claim(program, extern, expr)
+        except (KeyError, typer.BadParameter) as e:
             typer.echo(f"error: {e}", err=True)
             raise typer.Exit(1)
         _save(program)
