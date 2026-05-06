@@ -1980,6 +1980,20 @@ class _ProgramBase(_Node):
     # the durable property (preserves source-language structure via
     # extension nodes) without committing to "layer B" terminology.
     structured_functions: tuple[Function, ...] = ()
+    # Version stamp: which build of quod produced the pinned claims in
+    # this Program. During R&D this is the commit hash of the quod
+    # source tree at pin time; later it can be a release tag. `None`
+    # means "no version on record" — under the strict policy this is
+    # always treated as a mismatch by `quod equiv verify` etc., so a
+    # `None` Program with pinned claims fails verification until
+    # re-pinned from a clean checkout.
+    #
+    # Set by `quod.version.stamp_quod_version` at any operation that
+    # produces or refreshes pinned claims (ingest's `prove_lifts`,
+    # `equiv prove --bump`, etc.). Pinning from a dirty quod tree
+    # captures `None` deliberately — only clean checkouts produce
+    # verifiable pins.
+    quod_version: str | None = None
 
     @model_serializer(mode="wrap")
     def _drop_empty_collections(self, handler, info):
@@ -2004,6 +2018,8 @@ class _ProgramBase(_Node):
             data.pop("source_units", None)
         if not self.structured_functions:
             data.pop("structured_functions", None)
+        if self.quod_version is None:
+            data.pop("quod_version", None)
         return data
 
     @field_validator("imports", mode="before")

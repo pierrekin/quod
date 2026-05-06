@@ -434,14 +434,17 @@ def _prove_lifts_for_ingest(program: Program, cfg) -> Program:
 
     Called at ingest time so the saved program.json carries pinned
     transcription proofs by default. `quod equiv prove --bump`
-    re-runs this for hand-edited programs."""
+    re-runs this for hand-edited programs. Stamps the program with
+    the current quod version after pinning — see
+    `quod.version.stamp_quod_version`."""
     from quod.lift_check import LiftCheckError, prove_lifts
+    from quod.version import stamp_quod_version
     write_dir = cfg.resolve(cfg.proofs_dir) / "lift"
     # rel_prefix mirrors the cfg.proofs_dir name so equiv verify can
     # resolve the artifact relative to cfg.root.
     rel_prefix = f"{cfg.proofs_dir}/lift" if not Path(cfg.proofs_dir).is_absolute() else "proofs/lift"
     try:
-        return prove_lifts(
+        program = prove_lifts(
             program,
             write_dir=write_dir,
             rel_prefix=rel_prefix,
@@ -450,6 +453,7 @@ def _prove_lifts_for_ingest(program: Program, cfg) -> Program:
     except LiftCheckError as e:
         typer.echo(f"error: lift check failed: {e}", err=True)
         raise typer.Exit(1)
+    return stamp_quod_version(program)
 
 
 @ingest_app.callback(invoke_without_command=True)
@@ -1595,8 +1599,16 @@ def claim_verify(
     ),
 ) -> None:
     """Re-check evidence attached to stored claims."""
+    from quod.version import check_program_version
+
     cfg = _cfg()
     program = _load()
+
+    version_ok, version_msg = check_program_version(program)
+    if not version_ok:
+        typer.echo(f"error: {version_msg}", err=True)
+        raise typer.Exit(1)
+
     resolve_root = root if root is not None else cfg.root
     theme = _theme()
     failures = 0
@@ -1661,6 +1673,7 @@ def equiv_prove(
     different problem (drift detection — see `02-next.md`).
     """
     from quod.lift_check import LiftCheckError, prove_lifts
+    from quod.version import check_program_version, stamp_quod_version
     from pathlib import Path
 
     cfg = _cfg()
@@ -1684,7 +1697,13 @@ def equiv_prove(
         except LiftCheckError as e:
             typer.echo(f"error: lift check failed: {e}", err=True)
             raise typer.Exit(1)
+        program = stamp_quod_version(program)
         save_program(program, _path())
+
+    version_ok, version_msg = check_program_version(program)
+    if not version_ok:
+        typer.echo(f"error: {version_msg}", err=True)
+        raise typer.Exit(1)
 
     failures = 0
     checked = 0
@@ -1798,7 +1817,15 @@ def equiv_verify() -> None:
     installed package's location, so verification works regardless
     of the user's working directory.
     """
+    from quod.version import check_program_version
+
     program = _load()
+
+    version_ok, version_msg = check_program_version(program)
+    if not version_ok:
+        typer.echo(f"error: {version_msg}", err=True)
+        raise typer.Exit(1)
+
     theme = _theme()
     failures = 0
     checked = 0
@@ -2100,6 +2127,8 @@ def claim_prove(
         except (KeyError, ValueError) as e:
             typer.echo(f"error: {e}", err=True)
             raise typer.Exit(1)
+        from quod.version import stamp_quod_version
+        program = stamp_quod_version(program)
         _save(program)
 
     theme = _theme()

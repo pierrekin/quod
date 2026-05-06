@@ -63,6 +63,24 @@ from quod.lower import compile_program
 from quod.model import Program
 
 
+# Stub the quod-version probe across the whole test suite. Real
+# `current_quod_version()` shells out to git and may return None when
+# the working tree is dirty (which it usually is during dev) — that
+# would cause every CLI test that exercises `equiv verify` /
+# `claim verify` / `equiv prove` to fail with "running quod has no
+# version available." Tests that specifically care about version
+# behavior (`tests/test_quod_version.py`) override the stub locally.
+@pytest.fixture(autouse=True)
+def _stub_quod_version(monkeypatch):
+    from quod import version as quod_version
+    monkeypatch.setattr(
+        quod_version, "_compute_quod_version", lambda: "test-version-stub",
+    )
+    quod_version.reset_cache()
+    yield
+    quod_version.reset_cache()
+
+
 _CASES_ROOT = Path(__file__).parent / "cases"
 
 
