@@ -50,13 +50,19 @@ class BinOp(_Node):
       arith (u) — udiv, urem                        : iN in / iN out
       cmp (s)   — slt, sle, sgt, sge, eq, ne       : iN in / i1 out
       cmp (u)   — ult, ule, ugt, uge               : iN in / i1 out
-      bitwise   — or, and                           : iN in / iN out
+      bitwise   — or, and, xor                      : iN in / iN out
+      shifts    — shl, ashr, lshr                   : iN in / iN out
 
     Operands of arith/bitwise/cmp must have the same type; LLVM's verifier
     enforces this at lower time. The signed/unsigned distinction matches
     LLVM IR predicates — signedness lives on the op, not the type. Division
     by zero is undefined behaviour (matches LLVM); guard with an int_range
     or runtime branch if the divisor isn't statically nonzero.
+
+    Shifts: `shl` is logical left, `ashr` is arithmetic (sign-extending)
+    right, `lshr` is logical (zero-extending) right. Shift count must
+    have the same iN type as the value; shift count >= bitwidth is
+    undefined behaviour (matches LLVM).
 
     For short-circuit boolean combinators (correct in the presence of
     side-effecting operands), use `ShortCircuitOr` / `ShortCircuitAnd` —
@@ -67,7 +73,8 @@ class BinOp(_Node):
         "add", "sub", "mul", "sdiv", "udiv", "srem", "urem",
         "slt", "sle", "sgt", "sge", "eq", "ne",
         "ult", "ule", "ugt", "uge",
-        "or", "and",
+        "or", "and", "xor",
+        "shl", "ashr", "lshr",
     ]
     lhs: "Expr"
     rhs: "Expr"
@@ -1770,9 +1777,30 @@ class CAddressOf(_Node):
     target: "CExpr"
 
 
+class CUnary(_Node):
+    """Unary prefix operator on an expression: `-x`, `!x`, `~x`.
+
+    Layer A preserves the source operator faithfully; the lift to
+    layer B desugars each via the standard identity:
+
+      -x  ↔  BinOp("sub", IntLit(0), x')      (zero-minus form)
+      !x  ↔  BinOp("eq",  x',         IntLit(0))   (i1-typed)
+      ~x  ↔  BinOp("xor", x',         IntLit(-1))  (one's-complement)
+
+    The lift-checker pairs CUnary with the corresponding layer-B
+    BinOp shape. (Earlier ingest revisions folded `-x` directly to
+    the BinOp form at lift time — that was a documented infraction
+    of the "layer A is source-form" contract; CUnary is the fix.)
+    """
+    kind: Literal["c.unary"] = "c.unary"
+    id: str = Field(default_factory=lambda: _mint_node_id("cunary"))
+    op: Literal["-", "!", "~"]
+    value: "CExpr"
+
+
 CExpr = Annotated[
     Union[CIntLit, CVarRef, CEnumConstRef, CBinOp, CStringLit, CCall,
-          CArraySubscript, CAddressOf],
+          CArraySubscript, CAddressOf, CUnary],
     Field(discriminator="kind"),
 ]
 

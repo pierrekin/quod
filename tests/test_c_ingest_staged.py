@@ -183,6 +183,71 @@ def test_existing_c_examples_get_full_three_layer_lift():
     assert len(a_to_b) == 3
 
 
+BITWISE_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/bitwise/bitwise.c"
+
+
+def test_bitwise_example_lifts_three_layers():
+    """`<< >> ^ ~ !` round-trip through the staged lift. `~` and `!`
+    are layer-A `CUnary` nodes (preserving source) that pair with the
+    standard layer-B BinOp identities (`xor x, -1` and `eq x, 0`)."""
+    from quod.model import CUnary
+    p = ingest_c(BITWISE_C)
+
+    names = {fn.name for fn in p.functions}
+    assert names == {"low_bits", "swap_nibbles", "xor_round_trip", "complement", "is_zero", "main"}
+
+    # Every example function got a layer-A subtree.
+    assert len(p.source_units) == 1
+    cfn_names = {cfn.name for cfn in p.source_units[0].functions}
+    assert cfn_names == names
+
+    # `~x` at layer A is preserved as CUnary("~"); the lift's layer-B
+    # form is BinOp("xor", x, IntLit(-1)).
+    [cfn_complement] = [cfn for cfn in p.source_units[0].functions if cfn.name == "complement"]
+    cret = cfn_complement.body[0]
+    assert isinstance(cret.value, CUnary) and cret.value.op == "~"
+
+    # `!x` at layer A is CUnary("!"); paired with BinOp("eq", x, 0)
+    # under the i1-widening shape.
+    [cfn_is_zero] = [cfn for cfn in p.source_units[0].functions if cfn.name == "is_zero"]
+    cret = cfn_is_zero.body[0]
+    assert isinstance(cret.value, CUnary) and cret.value.op == "!"
+
+
+def test_bitwise_example_compiles_and_runs(tmp_path):
+    import subprocess
+    from quod.lower import compile_program
+    p = ingest_c(BITWISE_C)
+    res = compile_program(
+        p, build_dir=tmp_path, bins=(("bitwise", "main"),),
+        profile=2, link=True,
+    )
+    binary = res.bins[0].binary
+    assert binary is not None
+    out = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10)
+    assert out.returncode == 0
+    expected = (
+        "low_bits(0xFF, 4)     = 15\n"
+        "swap_nibbles(0x12)    = 33\n"
+        "xor_round_trip(7, 13) = 7\n"
+        "complement(5)         = -6\n"
+        "is_zero(0)            = 1\n"
+        "is_zero(42)           = 0\n"
+    )
+    assert out.stdout == expected
+
+
+def test_bitwise_example_passes_lift_check():
+    """The CUnary↔BinOp pairings round-trip through walk_lift cleanly
+    for every function in the bitwise example."""
+    from quod.lift_check import walk_lift
+    p = ingest_c(BITWISE_C)
+    cfns_by_name = {cfn.name: cfn for cfn in p.source_units[0].functions}
+    fns_by_name = {fn.name: fn for fn in p.structured_functions}
+    for name, cfn in cfns_by_name.items():
+        walk_lift(cfn, fns_by_name[name], program=p)
+
+
 def test_every_c_corpus_example_emits_layer_a():
     """Coverage sweep: every example now produces a `source_units`
     entry. The layer-A widening landed in three steps (calls /

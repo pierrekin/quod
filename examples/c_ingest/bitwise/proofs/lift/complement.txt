@@ -1,0 +1,38 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_complement",
+    "b_id": "@fn_c_complement",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_4",
+      "stmts": [
+        {
+          "a_id": "@creturn_c_complement_1",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "unary(~) \u2194 xor(_, -1)",
+            "value": {
+              "kind": "var_ref \u2194 param_ref",
+              "name": "x"
+            }
+          }
+        }
+      ]
+    },
+    "name": "complement",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "x"
+      }
+    ],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

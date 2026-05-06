@@ -46,6 +46,7 @@ from quod.model import (
     CScopedBlock,
     CStringLit,
     CStyleFor,
+    CUnary,
     CUnit,
     CVarDecl,
     CVarRef,
@@ -1060,6 +1061,21 @@ _KIND_INFO["c.array_subscript"] = {
     },
 }
 
+_KIND_INFO["c.unary"] = {
+    "class": CUnary,
+    "summary": (
+        "Unary prefix operator on an expression: `-x`, `!x`, `~x`. "
+        "Layer A preserves the source operator; the lift pairs each "
+        "with a layer-B BinOp identity (`-x ↔ sub(0, _)`, `!x ↔ "
+        "eq(_, 0)`, `~x ↔ xor(_, -1)`)."
+    ),
+    "example": {
+        "kind": "c.unary",
+        "op": "~",
+        "value": {"kind": "c.var_ref", "name": "x"},
+    },
+}
+
 _KIND_INFO["c.addr_of"] = {
     "class": CAddressOf,
     "summary": (
@@ -1288,7 +1304,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "c.if", "c.while", "c.expr_stmt",
         "c.binop", "c.lit_int", "c.lit_str", "c.var_ref",
         "c.enum_const_ref", "c.call",
-        "c.array_subscript", "c.addr_of",
+        "c.array_subscript", "c.addr_of", "c.unary",
     ],
     # Layer-B `c.*` extensions — constructs core quod can't represent;
     # lowered to core by lower/c_family.py (step 5).

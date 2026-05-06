@@ -68,6 +68,7 @@ from quod.model import (
     CStringLit,
     CStyleFor,
     CType,
+    CUnary,
     CUnit,
     CVarDecl,
     CVarRef,
@@ -155,7 +156,11 @@ def _is_i1_typed(expr: Expr) -> bool:
 
 
 # Mapping from C operator spellings (read from tokens) to quod BinOp.op.
-# Signedness defaults to signed since v1 only supports `int`.
+# Signedness defaults to signed because the supported C subset is int-only.
+# Right-shift defaults to `ashr` (arithmetic) for the same reason — C's `>>`
+# on a signed operand is implementation-defined; mainstream targets (LLVM
+# included) sign-extend, which `ashr` matches. The `lshr` op is reachable
+# only once `unsigned int` operands are supported.
 _BIN_OP_TABLE: dict[str, str] = {
     "+": "add",
     "-": "sub",
@@ -170,6 +175,9 @@ _BIN_OP_TABLE: dict[str, str] = {
     "!=": "ne",
     "|": "or",
     "&": "and",
+    "^": "xor",
+    "<<": "shl",
+    ">>": "ashr",
 }
 
 
@@ -444,6 +452,16 @@ class _FunctionTranslator:
                 return BinOp(op="sub", lhs=IntLit(type=_I32, value=0), rhs=inner_expr)
             if op == "+":
                 return inner_expr
+            if op == "!":
+                # C's logical-not is i1-typed (`!x` == 1 iff x == 0). Lower
+                # to `eq(x, 0)` so the result type matches its uses
+                # (cond positions, etc.). The lift-checker pairs CUnary("!")
+                # with this BinOp shape.
+                return BinOp(op="eq", lhs=inner_expr, rhs=IntLit(type=_I32, value=0))
+            if op == "~":
+                # One's complement is `x ^ -1` over two's-complement
+                # ints. Lift-checker pairs CUnary("~") with this shape.
+                return BinOp(op="xor", lhs=inner_expr, rhs=IntLit(type=_I32, value=-1))
             raise _refuse(c, f"unsupported unary operator {op!r}")
 
         if k == cx.CursorKind.BINARY_OPERATOR:
@@ -820,17 +838,23 @@ class _LayerATranslator:
                     )
                 raise _refuse(c, "layer A: address-of only supported for array subscripts (e.g. `&buf[k]`)")
             inner = self.expr(children[0])
-            # Layer A: preserve unary minus / plus as-is. v3 treats `-x`
-            # as `0 - x` (mirrors the layer-B fold) so we don't need a
-            # CUnaryOp node yet; the lifter will add one if needed.
+            # Layer A preserves the source operator faithfully via CUnary.
+            # Constant-folding of `-N` to a single CIntLit is OK because
+            # the layer-B side does the same fold (lift-checker compares
+            # values, not tree shapes, for IntLits).
             if op == "-":
                 if isinstance(inner, CIntLit):
                     return CIntLit(value=-inner.value)
-                return CBinOp(
-                    id=self._mint("cbinop"),
-                    op="-", lhs=CIntLit(value=0), rhs=inner,
-                )
+                return CUnary(id=self._mint("cunary"), op="-", value=inner)
+            if op == "!":
+                return CUnary(id=self._mint("cunary"), op="!", value=inner)
+            if op == "~":
+                return CUnary(id=self._mint("cunary"), op="~", value=inner)
             if op == "+":
+                # Unary plus is a no-op in C; layer A drops it (the
+                # source-form lossiness here matches the BinOp side and
+                # is a known minor infraction; preserving it would need
+                # CUnary("+") which has no observable effect).
                 return inner
             raise _refuse(c, f"layer A: unsupported unary operator {op!r}")
         raise _refuse(c, f"layer A: unsupported expression kind: {k.name}")

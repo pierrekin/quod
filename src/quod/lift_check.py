@@ -81,6 +81,7 @@ from quod.model import (
     CScopedBlock,
     CStringLit,
     CStyleFor,
+    CUnary,
     CVarDecl,
     CVarRef,
     CWhile,
@@ -124,6 +125,9 @@ _BINOP_LAYER_A_TO_B = {
     "!=": "ne",
     "|": "or",
     "&": "and",
+    "^": "xor",
+    "<<": "shl",
+    ">>": "ashr",
 }
 
 
@@ -460,8 +464,14 @@ _LAYER_A_I1_OPS = frozenset({"<", "<=", ">", ">=", "==", "!=", "&&", "||"})
 
 def _is_layer_a_i1_typed(expr) -> bool:
     """True iff `expr` is a layer-A boolean expression — a comparison
-    or short-circuit binop. Mirrors `_is_i1_typed` in ingest/c.py."""
-    return isinstance(expr, CBinOp) and expr.op in _LAYER_A_I1_OPS
+    or short-circuit binop, or `!x` (which lifts to `eq(x, 0)` on the
+    layer-B side and is therefore i1-typed too). Mirrors `_is_i1_typed`
+    in ingest/c.py."""
+    if isinstance(expr, CBinOp) and expr.op in _LAYER_A_I1_OPS:
+        return True
+    if isinstance(expr, CUnary) and expr.op == "!":
+        return True
+    return False
 
 
 def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
@@ -609,6 +619,61 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
                 for i, (aa, ba) in enumerate(zip(a.args, b.args))
             ],
         }
+
+    if isinstance(a, CUnary):
+        # CUnary preserves source-form unary operators; the lift
+        # desugars each via the standard identity. We pair with the
+        # exact layer-B BinOp shape produced by the ingester.
+        if not isinstance(b, BinOp):
+            raise LiftCheckError(
+                f"{path}: layer-A CUnary({a.op!r}) vs layer-B {type(b).__name__}"
+            )
+        if a.op == "-":
+            # `-x` ↔ `BinOp("sub", IntLit(0), x')`.
+            if b.op != "sub":
+                raise LiftCheckError(
+                    f"{path}: CUnary('-') expects layer-B BinOp('sub'), got {b.op!r}"
+                )
+            if not (isinstance(b.lhs, IntLit) and b.lhs.value == 0):
+                raise LiftCheckError(
+                    f"{path}: CUnary('-') expects layer-B sub's LHS to be IntLit(0), "
+                    f"got {type(b.lhs).__name__}"
+                )
+            return {
+                "kind": "unary(-) ↔ sub(0, _)",
+                "value": _check_expr(a.value, b.rhs, path=f"{path}.value", ctx=ctx),
+            }
+        if a.op == "!":
+            # `!x` ↔ `BinOp("eq", x', IntLit(0))`.
+            if b.op != "eq":
+                raise LiftCheckError(
+                    f"{path}: CUnary('!') expects layer-B BinOp('eq'), got {b.op!r}"
+                )
+            if not (isinstance(b.rhs, IntLit) and b.rhs.value == 0):
+                raise LiftCheckError(
+                    f"{path}: CUnary('!') expects layer-B eq's RHS to be IntLit(0), "
+                    f"got {type(b.rhs).__name__}"
+                )
+            return {
+                "kind": "unary(!) ↔ eq(_, 0)",
+                "value": _check_expr(a.value, b.lhs, path=f"{path}.value", ctx=ctx),
+            }
+        if a.op == "~":
+            # `~x` ↔ `BinOp("xor", x', IntLit(-1))`.
+            if b.op != "xor":
+                raise LiftCheckError(
+                    f"{path}: CUnary('~') expects layer-B BinOp('xor'), got {b.op!r}"
+                )
+            if not (isinstance(b.rhs, IntLit) and b.rhs.value == -1):
+                raise LiftCheckError(
+                    f"{path}: CUnary('~') expects layer-B xor's RHS to be IntLit(-1), "
+                    f"got {type(b.rhs).__name__}"
+                )
+            return {
+                "kind": "unary(~) ↔ xor(_, -1)",
+                "value": _check_expr(a.value, b.lhs, path=f"{path}.value", ctx=ctx),
+            }
+        raise LiftCheckError(f"{path}: unknown CUnary op {a.op!r}")
 
     if isinstance(a, CAddressOf):
         # `&p[k]` is C's pointer-arithmetic spelling — equivalent to

@@ -39,6 +39,7 @@ from quod.model import (
     Equivalence,
     Function,
     I32Type,
+    If,
     IntLit,
     Let,
     LiftEquivalence,
@@ -166,6 +167,91 @@ def test_walk_lift_rejects_kind_mismatch():
         body=Block(stmts=(Assign(name="x", value=IntLit(type=I32Type(), value=0)),)),
     )
     with pytest.raises(LiftCheckError, match="return e.* vs layer-B Assign"):
+        walk_lift(cfn, fn)
+
+
+def test_walk_lift_pairs_cunary_with_layer_b_binop():
+    """CUnary preserves source-form `-x`, `!x`, `~x` at layer A;
+    the lift-checker pairs each with the layer-B BinOp identity:
+    sub(0,_), eq(_,0), xor(_,-1)."""
+    from quod.model import CUnary
+    int_t = CNamedType(name="int")
+    # `int neg(int x) { return -x; }` ↔ `BinOp("sub", IntLit(0), x')`.
+    cfn_neg = CFn(
+        id="@cfn_neg", name="neg", return_type=int_t,
+        params=(CParam(name="x", type=int_t),),
+        body=(CReturn(value=CUnary(op="-", value=CVarRef(name="x"))),),
+    )
+    fn_neg = Function(
+        id="@fn_neg", name="neg", return_type=I32Type(),
+        params=(Param(name="x", type=I32Type()),),
+        body=Block(stmts=(ReturnExpr(value=BinOp(
+            op="sub", lhs=IntLit(type=I32Type(), value=0),
+            rhs=ParamRef(name="x"),
+        )),)),
+    )
+    rec = walk_lift(cfn_neg, fn_neg)
+    assert rec["fn"]["body"]["stmts"][0]["value"]["kind"] == "unary(-) ↔ sub(0, _)"
+
+    # `int notz(int x) { return !x; }` — `!x` is i1-typed, so the
+    # ingester wraps the layer-B side in If(cond, return 1, return 0).
+    cfn_notz = CFn(
+        id="@cfn_notz", name="notz", return_type=int_t,
+        params=(CParam(name="x", type=int_t),),
+        body=(CReturn(value=CUnary(op="!", value=CVarRef(name="x"))),),
+    )
+    fn_notz = Function(
+        id="@fn_notz", name="notz", return_type=I32Type(),
+        params=(Param(name="x", type=I32Type()),),
+        body=Block(stmts=(If(
+            cond=BinOp(op="eq", lhs=ParamRef(name="x"),
+                       rhs=IntLit(type=I32Type(), value=0)),
+            then_body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=1)),)),
+            else_body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
+        ),)),
+    )
+    rec = walk_lift(cfn_notz, fn_notz)
+    assert rec["fn"]["body"]["stmts"][0]["cond"]["kind"] == "unary(!) ↔ eq(_, 0)"
+
+    # `int comp(int x) { return ~x; }` ↔ `BinOp("xor", x', IntLit(-1))`.
+    cfn_comp = CFn(
+        id="@cfn_comp", name="comp", return_type=int_t,
+        params=(CParam(name="x", type=int_t),),
+        body=(CReturn(value=CUnary(op="~", value=CVarRef(name="x"))),),
+    )
+    fn_comp = Function(
+        id="@fn_comp", name="comp", return_type=I32Type(),
+        params=(Param(name="x", type=I32Type()),),
+        body=Block(stmts=(ReturnExpr(value=BinOp(
+            op="xor", lhs=ParamRef(name="x"),
+            rhs=IntLit(type=I32Type(), value=-1),
+        )),)),
+    )
+    rec = walk_lift(cfn_comp, fn_comp)
+    assert rec["fn"]["body"]["stmts"][0]["value"]["kind"] == "unary(~) ↔ xor(_, -1)"
+
+
+def test_walk_lift_rejects_cunary_paired_with_wrong_constant():
+    """A CUnary('!', x) must pair with eq(_, IntLit(0)) — not eq(_, 1)."""
+    from quod.model import CUnary
+    int_t = CNamedType(name="int")
+    cfn = CFn(
+        id="@cfn_q", name="q", return_type=int_t,
+        params=(CParam(name="x", type=int_t),),
+        body=(CReturn(value=CUnary(op="!", value=CVarRef(name="x"))),),
+    )
+    # Bad pairing: layer-B has eq(x, 1) — wrong constant.
+    fn = Function(
+        id="@fn_q", name="q", return_type=I32Type(),
+        params=(Param(name="x", type=I32Type()),),
+        body=Block(stmts=(If(
+            cond=BinOp(op="eq", lhs=ParamRef(name="x"),
+                       rhs=IntLit(type=I32Type(), value=1)),
+            then_body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=1)),)),
+            else_body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)),
+        ),)),
+    )
+    with pytest.raises(LiftCheckError, match="IntLit\\(0\\)"):
         walk_lift(cfn, fn)
 
 

@@ -1,0 +1,70 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_swap_nibbles",
+    "b_id": "@fn_c_swap_nibbles",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_2",
+      "stmts": [
+        {
+          "a_id": "@creturn_c_swap_nibbles_1",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "binop(|) \u2194 binop(or)",
+            "lhs": {
+              "kind": "binop(<<) \u2194 binop(shl)",
+              "lhs": {
+                "kind": "binop(&) \u2194 binop(and)",
+                "lhs": {
+                  "kind": "var_ref \u2194 param_ref",
+                  "name": "x"
+                },
+                "rhs": {
+                  "kind": "int_lit",
+                  "value": 15
+                }
+              },
+              "rhs": {
+                "kind": "int_lit",
+                "value": 4
+              }
+            },
+            "rhs": {
+              "kind": "binop(&) \u2194 binop(and)",
+              "lhs": {
+                "kind": "binop(>>) \u2194 binop(ashr)",
+                "lhs": {
+                  "kind": "var_ref \u2194 param_ref",
+                  "name": "x"
+                },
+                "rhs": {
+                  "kind": "int_lit",
+                  "value": 4
+                }
+              },
+              "rhs": {
+                "kind": "int_lit",
+                "value": 15
+              }
+            }
+          }
+        }
+      ]
+    },
+    "name": "swap_nibbles",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "x"
+      }
+    ],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

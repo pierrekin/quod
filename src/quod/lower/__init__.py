@@ -253,6 +253,14 @@ def _lower_expr(
             return builder.or_(go(l), go(r))
         case BinOp(op="and", lhs=l, rhs=r):
             return builder.and_(go(l), go(r))
+        case BinOp(op="xor", lhs=l, rhs=r):
+            return builder.xor(go(l), go(r))
+        case BinOp(op="shl", lhs=l, rhs=r):
+            return builder.shl(go(l), go(r))
+        case BinOp(op="ashr", lhs=l, rhs=r):
+            return builder.ashr(go(l), go(r))
+        case BinOp(op="lshr", lhs=l, rhs=r):
+            return builder.lshr(go(l), go(r))
         case ShortCircuitOr(lhs=l, rhs=r):
             return _lower_short_circuit(builder, l, r, kind="or", lower=go)
         case ShortCircuitAnd(lhs=l, rhs=r):

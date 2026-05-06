@@ -249,7 +249,8 @@ _BINOP_SYMBOL = {
     "add": "+", "sub": "-", "mul": "*", "sdiv": "/", "udiv": "/u", "srem": "%",
     "slt": "<", "sle": "<=", "sgt": ">", "sge": ">=", "eq": "==", "ne": "!=",
     "ult": "<u", "ule": "<=u", "ugt": ">u", "uge": ">=u",
-    "or": "|", "and": "&",
+    "or": "|", "and": "&", "xor": "^",
+    "shl": "<<", "ashr": ">>", "lshr": ">>l",
 }
 
 
