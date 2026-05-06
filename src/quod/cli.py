@@ -1561,12 +1561,58 @@ def _param_type(target_fn: Function | ExternFunction, name: str):
     return p.type
 
 
+def _parse_predicate_arg(target_fn: Function | ExternFunction, src: str):
+    """Parse a `--predicate` source string against `target_fn`'s param
+    scope, validate it's a side-effect-free predicate, and canonicalize.
+    Returns the canonical `Expr`."""
+    from quod.canonicalize import canonicalize
+    from quod.script import ScriptError, parse_predicate
+    from quod.validate import PredicateError, assert_is_predicate
+
+    param_names = (
+        frozenset(p.name for p in target_fn.params)
+        if isinstance(target_fn, Function) else frozenset()
+    )
+    try:
+        expr = parse_predicate(src, param_names=param_names)
+    except ScriptError as e:
+        raise typer.BadParameter(f"--predicate: {e}")
+    try:
+        assert_is_predicate(expr)
+    except PredicateError as e:
+        raise typer.BadParameter(f"--predicate: {e}")
+    return canonicalize(expr)
+
+
+def _build_predicate_claim(
+    target_fn: Function | ExternFunction, src: str, *,
+    regime: str, enforcement: str, justification,
+) -> PredicateClaim:
+    """Parse a quod-script predicate body and wrap it in a `PredicateClaim`."""
+    if regime not in STORED_REGIMES:
+        raise typer.BadParameter(
+            f"can't add claim with regime={regime!r}: stored claims must be one of "
+            f"{', '.join(STORED_REGIMES)}. Lattice claims are derived; see `quod claim derive`."
+        )
+    if enforcement not in ENFORCEMENTS:
+        raise typer.BadParameter(f"unknown enforcement {enforcement!r}; choices: {', '.join(ENFORCEMENTS)}")
+    expr = _parse_predicate_arg(target_fn, src)
+    return PredicateClaim(
+        regime=regime, enforcement=enforcement, justification=justification,
+        expr=expr,
+    )
+
+
 @claim_app.command("add")
 def claim_add(
     function: str = typer.Argument(..., help="Function name or hash prefix.",
                                     autocompletion=_comp.function_or_hash),
-    kind: str = typer.Argument(..., help=f"Claim kind. One of: {', '.join(SUGAR_KINDS)}.",
-                               autocompletion=_comp.claim_kinds),
+    kind: str | None = typer.Argument(
+        None,
+        help=f"Sugar claim kind. One of: {', '.join(SUGAR_KINDS)}. "
+             f"Omit when using --predicate.",
+        autocompletion=_comp.claim_kinds,
+    ),
     target: str | None = typer.Argument(
         None,
         help=f"Parameter name. Required for: {', '.join(PARAM_SUGAR_KINDS)}. "
@@ -1575,6 +1621,12 @@ def claim_add(
     ),
     lo: int | None = typer.Option(None, "--min"),
     hi: int | None = typer.Option(None, "--max"),
+    predicate: str | None = typer.Option(
+        None, "--predicate",
+        help='Quod-script predicate body, e.g. "x >= 0 && x <= y" or '
+             '"return > 0". Mutually exclusive with the sugar arguments. '
+             'Use bare param names for ParamRef and `return` for ReturnRef.',
+    ),
     regime: str = typer.Option(
         "axiom", "--regime",
         help=f"Epistemic source. One of: {', '.join(STORED_REGIMES)}.",
@@ -1592,52 +1644,99 @@ def claim_add(
     ),
 ) -> None:
     """Attach a claim to a function. The optimizer will trust this assertion."""
+    if predicate is not None and (kind is not None or target is not None or lo is not None or hi is not None):
+        typer.echo(
+            "error: --predicate is mutually exclusive with the sugar arguments "
+            "(kind / target / --min / --max)",
+            err=True,
+        )
+        raise typer.Exit(2)
+    if predicate is None and kind is None:
+        typer.echo(
+            f"error: provide a sugar kind ({', '.join(SUGAR_KINDS)}) or --predicate",
+            err=True,
+        )
+        raise typer.Exit(2)
     with _exclusive_lock():
         program = _load()
         try:
             fn = find_function_ref(program, function)
             just_obj = _parse_justification_spec(justification) if justification else None
-            claim = _build_claim(
-                fn, kind, target, lo=lo, hi=hi,
-                regime=regime, enforcement=enforcement, justification=just_obj,
-            )
+            if predicate is not None:
+                claim = _build_predicate_claim(
+                    fn, predicate,
+                    regime=regime, enforcement=enforcement, justification=just_obj,
+                )
+                summary = "predicate"
+            else:
+                claim = _build_claim(
+                    fn, kind, target, lo=lo, hi=hi,
+                    regime=regime, enforcement=enforcement, justification=just_obj,
+                )
+                summary = f"{kind}({target})" if target is not None else kind
             program = add_claim(program, fn.name, claim)
         except (KeyError, ValueError) as e:
             typer.echo(f"error: {e}", err=True)
             raise typer.Exit(1)
         _save(program)
-    typer.echo(f"added {kind}({target}) on {fn.name} [regime={regime}, enforcement={enforcement}]")
+    typer.echo(f"added {summary} on {fn.name} [regime={regime}, enforcement={enforcement}]")
 
 
 @claim_app.command("relax")
 def claim_relax(
     function: str = typer.Argument(..., help="Function name or hash prefix.",
                                     autocompletion=_comp.function_or_hash),
-    kind: str = typer.Argument(..., help=f"Claim kind. One of: {', '.join(SUGAR_KINDS)}.",
-                               autocompletion=_comp.claim_kinds),
+    kind: str | None = typer.Argument(
+        None,
+        help=f"Sugar claim kind. One of: {', '.join(SUGAR_KINDS)}. "
+             f"Omit when using --predicate.",
+        autocompletion=_comp.claim_kinds,
+    ),
     target: str | None = typer.Argument(None, help="Parameter name (omit for return-scoped claims).",
                                         autocompletion=_comp.param_names_for_function),
     lo: int | None = typer.Option(None, "--min"),
     hi: int | None = typer.Option(None, "--max"),
+    predicate: str | None = typer.Option(
+        None, "--predicate",
+        help="Quod-script predicate body. Mutually exclusive with the sugar arguments.",
+    ),
 ) -> None:
     """Remove a claim (always safe — drops an assertion).
 
-    Symmetric to `claim add`: pass the same sugar arguments that were
-    used to add the claim. Multiple `int_range`s on the same param are
-    distinct predicates — `--min`/`--max` are required to disambiguate.
+    Symmetric to `claim add`: pass the same sugar arguments — or the
+    same `--predicate` — that were used to add the claim. Multiple
+    predicates over the same param are distinct; bounds are part of
+    the match.
     """
+    if predicate is not None and (kind is not None or target is not None or lo is not None or hi is not None):
+        typer.echo(
+            "error: --predicate is mutually exclusive with the sugar arguments",
+            err=True,
+        )
+        raise typer.Exit(2)
+    if predicate is None and kind is None:
+        typer.echo(
+            f"error: provide a sugar kind ({', '.join(SUGAR_KINDS)}) or --predicate",
+            err=True,
+        )
+        raise typer.Exit(2)
     with _exclusive_lock():
         program = _load()
         try:
             fn = find_function_ref(program, function)
-            expr = _predicate_for_sugar(fn, kind, target, lo, hi)
+            if predicate is not None:
+                expr = _parse_predicate_arg(fn, predicate)
+                summary = "predicate"
+            else:
+                expr = _predicate_for_sugar(fn, kind, target, lo, hi)
+                scope = f"({target})" if target is not None else "(return)"
+                summary = f"{kind}{scope}"
             program = relax_claim(program, fn.name, expr)
         except (KeyError, typer.BadParameter) as e:
             typer.echo(f"error: {e}", err=True)
             raise typer.Exit(1)
         _save(program)
-    scope = f"({target})" if target is not None else "(return)"
-    typer.echo(f"relaxed {kind}{scope} on {fn.name}")
+    typer.echo(f"relaxed {summary} on {fn.name}")
 
 
 @claim_app.command("verify")
@@ -2131,12 +2230,20 @@ def claim_derive(
 def claim_prove(
     function: str = typer.Argument(..., help="Function name or hash prefix.",
                                     autocompletion=_comp.function_or_hash),
-    kind: str = typer.Argument(..., help=f"Claim kind to prove. One of: {', '.join(SUGAR_KINDS)}.",
-                               autocompletion=_comp.claim_kinds),
+    kind: str | None = typer.Argument(
+        None,
+        help=f"Sugar claim kind. One of: {', '.join(SUGAR_KINDS)}. "
+             f"Omit when using --predicate.",
+        autocompletion=_comp.claim_kinds,
+    ),
     target: str | None = typer.Argument(None, help="Parameter name (omit for return-scoped claims).",
                                         autocompletion=_comp.param_names_for_function),
     lo: int | None = typer.Option(None, "--min"),
     hi: int | None = typer.Option(None, "--max"),
+    predicate: str | None = typer.Option(
+        None, "--predicate",
+        help="Quod-script predicate body. Mutually exclusive with the sugar arguments.",
+    ),
     enforcement: str = typer.Option("trust", "--enforcement",
                                     autocompletion=_comp.enforcements),
     provider: str | None = typer.Option(
@@ -2156,9 +2263,22 @@ def claim_prove(
     if prov.prove is None:
         typer.echo(f"error: provider {prov.name!r} does not support prove mode", err=True)
         raise typer.Exit(1)
-    if kind not in SUGAR_KINDS:
-        typer.echo(f"error: unknown claim kind {kind!r}; one of: {', '.join(SUGAR_KINDS)}", err=True)
+    if predicate is not None and (kind is not None or target is not None or lo is not None or hi is not None):
+        typer.echo(
+            "error: --predicate is mutually exclusive with the sugar arguments",
+            err=True,
+        )
         raise typer.Exit(2)
+    if predicate is None:
+        if kind is None:
+            typer.echo(
+                f"error: provide a sugar kind ({', '.join(SUGAR_KINDS)}) or --predicate",
+                err=True,
+            )
+            raise typer.Exit(2)
+        if kind not in SUGAR_KINDS:
+            typer.echo(f"error: unknown claim kind {kind!r}; one of: {', '.join(SUGAR_KINDS)}", err=True)
+            raise typer.Exit(2)
     if enforcement not in ENFORCEMENTS:
         typer.echo(f"error: --enforcement must be one of {ENFORCEMENTS}", err=True)
         raise typer.Exit(2)
@@ -2169,7 +2289,12 @@ def claim_prove(
         program = _load()
         try:
             fn = find_function_ref(program, function)
-            expr = _predicate_for_sugar(fn, kind, target, lo, hi)
+            if predicate is not None:
+                expr = _parse_predicate_arg(fn, predicate)
+                summary = "predicate"
+            else:
+                expr = _predicate_for_sugar(fn, kind, target, lo, hi)
+                summary = kind
         except (KeyError, ValueError, typer.BadParameter) as e:
             typer.echo(f"error: {e}", err=True)
             raise typer.Exit(1)
@@ -2178,7 +2303,7 @@ def claim_prove(
         result = prov.prove(program, request, proofs_dir)
         if result.status != "proven":
             tag = result.status
-            typer.echo(f"could not prove {kind}: {prov.name} reported {tag} ({result.detail})", err=True)
+            typer.echo(f"could not prove {summary}: {prov.name} reported {tag} ({result.detail})", err=True)
             if tag == "refuted":
                 typer.echo("(provider found a counterexample; the claim does not hold)", err=True)
             raise typer.Exit(1)

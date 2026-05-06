@@ -115,6 +115,7 @@ from quod.model import (
     PtrOffset,
     Return,
     ReturnExpr,
+    ReturnRef,
     ShortCircuitAnd,
     ShortCircuitOr,
     Store,
@@ -800,6 +801,13 @@ class Parser:
                 case "false":
                     self.eat()
                     return IntLit(type=I1Type(), value=0)
+                case "return":
+                    # `return` in expression position yields the symbolic
+                    # return value. Only meaningful inside a predicate; the
+                    # statement-level `return EXPR` consumes the keyword
+                    # before the expression parser ever sees it.
+                    self.eat()
+                    return ReturnRef()
                 case "load":
                     return self._load()
                 case "widen":
@@ -949,3 +957,29 @@ def parse_function(src: str, *, enum_names: frozenset[str] = frozenset()) -> Fun
             t.line, t.col,
         )
     return fn
+
+
+def parse_predicate(src: str, *, param_names: frozenset[str] = frozenset()):
+    """Parse a quod-script expression as a predicate body.
+
+    Bare identifiers in `param_names` parse as `ParamRef`; the keyword
+    `return` parses as `ReturnRef`. Anything else (locals, calls,
+    aggregate access) is rejected by the predicate validator at the
+    call site — `parse_predicate` only handles the syntactic shape.
+
+    Returns the parsed `Expr` unchanged; the caller is responsible for
+    calling `validate.assert_is_predicate` and `canonicalize.canonicalize`.
+
+    Raises `ScriptError` on syntax errors (with line/col).
+    """
+    tokens = tokenize(src)
+    parser = Parser(tokens)
+    parser.param_names = param_names
+    expr = parser._expr()
+    if not parser.at("EOF"):
+        t = parser.peek()
+        raise ScriptError(
+            f"trailing tokens after predicate: {t.kind} {t.value!r}",
+            t.line, t.col,
+        )
+    return expr
