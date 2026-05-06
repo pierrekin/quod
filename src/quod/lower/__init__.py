@@ -513,8 +513,22 @@ def _coerce_int_lit(expr, dest_ty):
     The rule is bare-literals-only: `parser.had_error = 1` retypes 1 to
     i8 because the field is i8, but `parser.had_error = (x + 1)` does
     NOT — composite expressions don't auto-narrow (silent truncation
-    would hide bugs). Same shape as how `return 0` adopts the function's
-    return type.
+    would hide bugs).
+
+    The script-time type-resolution pass handles the cases it can see
+    (`let x: i32 = 5`, `return 5`, `x < 5` where x is a typed param).
+    What's left for this lower-time coercion is exactly the contexts
+    the script can't reach without dragging the whole Program into the
+    parser:
+      - Call args (callee param_types live on a Function/ExternFunction
+        in the same Program)
+      - StructInit / EnumInit field values (field types live on the
+        StructDef / EnumVariant)
+      - FieldSet / StoreField (struct field destinations)
+      - Store (the destination type comes from the value being written;
+        for bare literals, it's the post-coercion type)
+    Programs authored as raw JSON or lifted from C also bypass the
+    resolver, so this fallback covers them too.
     """
     if not isinstance(expr, IntLit):
         return expr

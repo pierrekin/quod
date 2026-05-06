@@ -1564,17 +1564,26 @@ def _param_type(target_fn: Function | ExternFunction, name: str):
 def _parse_predicate_arg(target_fn: Function | ExternFunction, src: str):
     """Parse a `--predicate` source string against `target_fn`'s param
     scope, validate it's a side-effect-free predicate, and canonicalize.
-    Returns the canonical `Expr`."""
+    Returns the canonical `Expr`.
+
+    Resolves bare integer literals from the function's signature (param
+    types + return type), so `x >= 0` against an i32 param produces an
+    i32 IntLit. Externs don't supply named params, so the resolver only
+    has return-type context for them — predicates against externs that
+    need param shape are filtered out earlier in the claim-add path.
+    """
     from quod.canonicalize import canonicalize
     from quod.script import ScriptError, parse_predicate
     from quod.validate import PredicateError, assert_is_predicate
 
-    param_names = (
-        frozenset(p.name for p in target_fn.params)
-        if isinstance(target_fn, Function) else frozenset()
-    )
+    if isinstance(target_fn, Function):
+        param_types = {p.name: p.type for p in target_fn.params}
+    else:
+        param_types = {}
     try:
-        expr = parse_predicate(src, param_names=param_names)
+        expr = parse_predicate(
+            src, param_types=param_types, return_type=target_fn.return_type,
+        )
     except ScriptError as e:
         raise typer.BadParameter(f"--predicate: {e}")
     try:
