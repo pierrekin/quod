@@ -107,14 +107,17 @@ from quod.model import (
     SizeOf,
     TryExpr,
     NonNegativeClaim,
+    Not,
     NullPtr,
     Param,
     ParamRef,
+    PredicateClaim,
     ProvenanceEdge,
     PtrOffset,
     Return,
     ReturnExpr,
     ReturnInRangeClaim,
+    ReturnRef,
     Unreachable,
     ShortCircuitAnd,
     ShortCircuitOr,
@@ -293,6 +296,32 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
             "else_value": {"kind": "llvm.param_ref", "name": "x"},
         },
         "see_also": ["quod.if", "quod.sc_or", "quod.sc_and"],
+    },
+    "quod.not": {
+        "class": Not,
+        "summary": (
+            "Boolean negation. Operand must lower to i1; result is i1. "
+            "Lowered to `xor operand, 1`. Used in predicate expressions; "
+            "prefer over `eq(x, 0)` for booleans."
+        ),
+        "example": {
+            "kind": "quod.not",
+            "operand": {"kind": "llvm.binop", "op": "eq",
+                        "lhs": {"kind": "llvm.param_ref", "name": "x"},
+                        "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0}},
+        },
+        "see_also": ["llvm.binop", "quod.sc_or", "quod.sc_and"],
+    },
+    "quod.return_ref": {
+        "class": ReturnRef,
+        "summary": (
+            "Symbolic reference to the enclosing function's return "
+            "value. Valid only inside `PredicateClaim.expr`. Type is "
+            "the function's return type — there's no type field, "
+            "mirroring `llvm.param_ref`."
+        ),
+        "example": {"kind": "quod.return_ref"},
+        "see_also": ["predicate", "llvm.param_ref"],
     },
     "llvm.call": {
         "class": Call,
@@ -788,6 +817,27 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
         "class": ReturnInRangeClaim,
         "summary": "Asserts the function's return value is in [min, max]. Function-scoped — no `param` field.",
         "example": {"kind": "return_in_range", "min": -1},
+    },
+    "predicate": {
+        "class": PredicateClaim,
+        "summary": (
+            "Single canonical claim: a predicate over the function's "
+            "params and (optionally) `quod.return_ref`. Pre/post is "
+            "implicit — a predicate referencing return_ref is a "
+            "postcondition, otherwise a precondition. Stored in "
+            "canonical form so identical predicates hash identically. "
+            "The named claim shapes (non_negative, int_range, "
+            "return_in_range) are CLI sugar that desugar to this kind."
+        ),
+        "example": {
+            "kind": "predicate",
+            "expr": {
+                "kind": "llvm.binop", "op": "sge",
+                "lhs": {"kind": "llvm.param_ref", "name": "x"},
+                "rhs": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 0},
+            },
+        },
+        "see_also": ["non_negative", "int_range", "return_in_range", "quod.return_ref"],
     },
 
     # ---------- justification (evidence on a claim) ----------
@@ -1461,7 +1511,7 @@ _KIND_INFO["c.for_general"] = {
 _CATEGORIES: dict[str, list[str]] = {
     "expression": [
         "llvm.const_int", "llvm.param_ref", "quod.local_ref", "llvm.binop",
-        "quod.sc_or", "quod.sc_and", "quod.if_expr",
+        "quod.sc_or", "quod.sc_and", "quod.if_expr", "quod.not", "quod.return_ref",
         "llvm.call", "quod.string_ref",
         "quod.struct_init", "quod.field", "quod.load_field",
         "quod.ptr_offset", "quod.widen", "quod.load", "quod.null_ptr",
@@ -1481,7 +1531,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "llvm.i8_ptr", "llvm.struct", "llvm.enum", "llvm.void",
         "quod.type_param", "quod.self_type",
     ],
-    "claim": ["non_negative", "int_range", "return_in_range", "equivalent_to"],
+    "claim": ["non_negative", "int_range", "return_in_range", "predicate", "equivalent_to"],
     "justification": [
         "z3", "manual", "derived", "lift_equivalence", "family_lowering",
     ],

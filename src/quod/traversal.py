@@ -44,6 +44,7 @@ from .model import (
     LoadField,
     LocalRef,
     Match,
+    Not,
     NullPtr,
     ParamRef,
     PtrOffset,
@@ -52,6 +53,7 @@ from .model import (
     DoWhile,
     Return,
     ReturnExpr,
+    ReturnRef,
     ShortCircuitAnd,
     ShortCircuitOr,
     SizeOf,
@@ -119,6 +121,10 @@ def substitute_in_expr(expr, type_fn: Callable):
             "lhs": substitute_in_expr(expr.lhs, type_fn),
             "rhs": substitute_in_expr(expr.rhs, type_fn),
         })
+    if isinstance(expr, Not):
+        return expr.model_copy(update={
+            "operand": substitute_in_expr(expr.operand, type_fn),
+        })
     if isinstance(expr, Call):
         new_args = tuple(substitute_in_expr(a, type_fn) for a in expr.args)
         new_type_args = tuple(type_fn(a) for a in expr.type_args)
@@ -149,7 +155,7 @@ def substitute_in_expr(expr, type_fn: Callable):
             "dispatch_type": type_fn(expr.dispatch_type),
             "args":          tuple(substitute_in_expr(a, type_fn) for a in expr.args),
         })
-    if isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit)):
+    if isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit, ReturnRef)):
         return expr
     raise AssertionError(f"unhandled expr in substitute: {type(expr).__name__}")
 

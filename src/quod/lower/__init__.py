@@ -64,6 +64,7 @@ from quod.model import (
     LocalRef,
     Match,
     NonNegativeClaim,
+    Not,
     NullPtr,
     Return,
     ParamRef,
@@ -73,6 +74,7 @@ from quod.model import (
     SizeOf,
     TryExpr,
     ReturnInRangeClaim,
+    ReturnRef,
     ShortCircuitAnd,
     ShortCircuitOr,
     StringRef,
@@ -271,6 +273,13 @@ def _lower_expr(
             return _lower_short_circuit(builder, l, r, kind="and", lower=go)
         case IfExpr(cond=cond, then_value=t, else_value=e):
             return _lower_if_expr(builder, cond, t, e, lower=go)
+        case Not(operand=op):
+            return builder.xor(go(op), ir.Constant(I1, 1))
+        case ReturnRef():
+            raise AssertionError(
+                "ReturnRef encountered outside a predicate-lowering context "
+                "— ReturnRef is only valid inside PredicateClaim.expr"
+            )
         case StringRef(name=n):
             gv = constants[n]
             return builder.bitcast(gv, I8.as_pointer())

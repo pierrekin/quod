@@ -60,6 +60,7 @@ from .model import (
     LocalRef,
     Match,
     MatchArm,
+    Not,
     NullPtr,
     Param,
     ParamRef,
@@ -70,6 +71,7 @@ from .model import (
     DoWhile,
     Return,
     ReturnExpr,
+    ReturnRef,
     ShortCircuitAnd,
     ShortCircuitOr,
     SizeOf,
@@ -258,6 +260,10 @@ def _walk_types_in_expr(expr, fn):
             "then_value": _walk_types_in_expr(expr.then_value, fn),
             "else_value": _walk_types_in_expr(expr.else_value, fn),
         })
+    if isinstance(expr, Not):
+        return expr.model_copy(update={
+            "operand": _walk_types_in_expr(expr.operand, fn),
+        })
     if isinstance(expr, Call):
         new_args = tuple(_walk_types_in_expr(a, fn) for a in expr.args)
         if expr.type_args:
@@ -302,7 +308,7 @@ def _walk_types_in_expr(expr, fn):
             "args": tuple(_walk_types_in_expr(a, fn) for a in expr.args),
         })
     # Leaf expressions with no nested Type or Expr.
-    if isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit)):
+    if isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit, ReturnRef)):
         return expr
     raise AssertionError(f"unhandled expr in type rewrite: {type(expr).__name__}")
 
@@ -485,6 +491,8 @@ def _collect_in_expr(expr, sink: set):
         _collect_in_expr(expr.cond, sink)
         _collect_in_expr(expr.then_value, sink)
         _collect_in_expr(expr.else_value, sink)
+    elif isinstance(expr, Not):
+        _collect_in_expr(expr.operand, sink)
     elif isinstance(expr, Call):
         if expr.type_args:
             sink.add((expr.function, tuple(_type_key(a) for a in expr.type_args)))
@@ -507,7 +515,7 @@ def _collect_in_expr(expr, sink: set):
         _collect_instantiations(expr.dispatch_type, sink)
         for a in expr.args:
             _collect_in_expr(a, sink)
-    elif isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit)):
+    elif isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit, ReturnRef)):
         return
     else:
         raise AssertionError(f"unhandled expr in collect: {type(expr).__name__}")
@@ -803,6 +811,10 @@ def _resolve_trait_calls_in_expr(expr, impl_index):
             "then_value": _resolve_trait_calls_in_expr(expr.then_value, impl_index),
             "else_value": _resolve_trait_calls_in_expr(expr.else_value, impl_index),
         })
+    if isinstance(expr, Not):
+        return expr.model_copy(update={
+            "operand": _resolve_trait_calls_in_expr(expr.operand, impl_index),
+        })
     if isinstance(expr, Call):
         return expr.model_copy(update={
             "args": tuple(_resolve_trait_calls_in_expr(a, impl_index) for a in expr.args),
@@ -824,7 +836,7 @@ def _resolve_trait_calls_in_expr(expr, impl_index):
         return expr.model_copy(update={
             "value": _resolve_trait_calls_in_expr(expr.value, impl_index),
         })
-    if isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit)):
+    if isinstance(expr, (ParamRef, LocalRef, StringRef, NullPtr, CharLit, ReturnRef)):
         return expr
     raise AssertionError(f"unhandled expr in trait-call resolve: {type(expr).__name__}")
 

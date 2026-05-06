@@ -28,6 +28,7 @@ from quod.model import (
     For,
     If,
     IfExpr,
+    Not,
     IntLit,
     IntRangeClaim,
     Let,
@@ -165,6 +166,8 @@ def _walk_calls_in_expr(expr) -> Iterator[Call]:
             yield from _walk_calls_in_expr(cond)
             yield from _walk_calls_in_expr(t)
             yield from _walk_calls_in_expr(e)
+        case Not(operand=op):
+            yield from _walk_calls_in_expr(op)
         case FieldRead(value=inner):
             yield from _walk_calls_in_expr(inner)
         case StructInit(fields=field_inits):

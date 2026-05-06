@@ -55,10 +55,13 @@ from quod.model import (
     Let,
     LocalRef,
     NonNegativeClaim,
+    Not,
     ParamRef,
+    PredicateClaim,
     Program,
     ReturnExpr,
     ReturnInRangeClaim,
+    ReturnRef,
     ShortCircuitAnd,
     ShortCircuitOr,
     StringRef,
@@ -270,6 +273,86 @@ def _range_pred(term: str, lo: int | None, hi: int | None) -> str:
     if len(parts) == 1:
         return parts[0]
     return f"(and {' '.join(parts)})"
+
+
+# Bool-valued BinOp ops used inside predicates. Map to SMT-LIB native names.
+# `and`/`or`/`xor` are treated as Bool combinators here — predicates use
+# i1 operands, where the bitwise and Boolean readings coincide.
+_PRED_BOOL_BINOP = {"and": "and", "or": "or", "xor": "xor"}
+
+
+def predicate_to_smt(expr, return_term: str | None = None) -> str:
+    """Translate a `PredicateClaim.expr` into an SMT-LIB Bool predicate.
+
+    Recursive walk over the expression vocabulary admitted by the
+    predicate validator (i1-typed, side-effect-free). Unknown shapes
+    raise NotImplementedError so we fail loudly rather than silently
+    losing soundness.
+
+    `return_term` names the SMT term standing for the function's
+    return value; required iff the predicate references `ReturnRef`.
+    """
+    match expr:
+        case IntLit(type=I1Type(), value=v):
+            return "true" if v else "false"
+        case IntLit(value=v):
+            return str(v)
+        case ParamRef(name=n):
+            return n
+        case ReturnRef():
+            if return_term is None:
+                raise ValueError(
+                    "ReturnRef in predicate but no return_term provided"
+                )
+            return return_term
+        case Not(operand=op):
+            return f"(not {predicate_to_smt(op, return_term)})"
+        case BinOp(op=op, lhs=l, rhs=r) if op in _PRED_BOOL_BINOP:
+            return (
+                f"({_PRED_BOOL_BINOP[op]} "
+                f"{predicate_to_smt(l, return_term)} "
+                f"{predicate_to_smt(r, return_term)})"
+            )
+        case BinOp(op="ne", lhs=l, rhs=r):
+            return (
+                f"(distinct {predicate_to_smt(l, return_term)} "
+                f"{predicate_to_smt(r, return_term)})"
+            )
+        case BinOp(op=op, lhs=l, rhs=r) if op in _SMT_BINOP:
+            return (
+                f"({_SMT_BINOP[op]} "
+                f"{predicate_to_smt(l, return_term)} "
+                f"{predicate_to_smt(r, return_term)})"
+            )
+        case BinOp(op=op):
+            raise NotImplementedError(
+                f"can't lower BinOp(op={op!r}) for SMT in predicate "
+                f"(unsigned comparisons and div/rem don't translate to QF_LIA)"
+            )
+    raise NotImplementedError(f"can't lower expr {expr!r} for SMT predicate")
+
+
+def predicate_uses_return(expr) -> bool:
+    """True iff `expr` references `ReturnRef` anywhere in its subtree.
+
+    Used to decide whether a `PredicateClaim` is a precondition (over
+    params only) or a postcondition (over params and the return value).
+    """
+    if isinstance(expr, ReturnRef):
+        return True
+    if isinstance(expr, BinOp):
+        return predicate_uses_return(expr.lhs) or predicate_uses_return(expr.rhs)
+    if isinstance(expr, ShortCircuitOr) or isinstance(expr, ShortCircuitAnd):
+        return predicate_uses_return(expr.lhs) or predicate_uses_return(expr.rhs)
+    if isinstance(expr, Not):
+        return predicate_uses_return(expr.operand)
+    if isinstance(expr, IfExpr):
+        return (
+            predicate_uses_return(expr.cond)
+            or predicate_uses_return(expr.then_value)
+            or predicate_uses_return(expr.else_value)
+        )
+    return False
 
 
 # ---------- Full SMT-LIB problem ----------

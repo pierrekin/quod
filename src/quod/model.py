@@ -114,6 +114,28 @@ class ShortCircuitAnd(_Node):
     rhs: "Expr"
 
 
+class Not(_Node):
+    """Boolean negation. Operand must lower to i1; result is i1.
+
+    Lowered to `xor operand, 1` (cheap on every backend). Cleaner than
+    encoding negation as `eq(x, 0)` — the latter conflates "is this
+    value zero" (defined for any iN) with "is this boolean false."
+    """
+    kind: Literal["quod.not"] = "quod.not"
+    operand: "Expr"
+
+
+class ReturnRef(_Node):
+    """Symbolic reference to the enclosing function's return value.
+
+    Valid only inside `PredicateClaim.expr`. The validator rejects
+    ReturnRef outside a predicate context. Type is determined by the
+    enclosing function's return type — there's no type field, mirroring
+    `ParamRef`.
+    """
+    kind: Literal["quod.return_ref"] = "quod.return_ref"
+
+
 class Call(_Node):
     """Call a user function or an extern in the same Program.
 
@@ -395,7 +417,7 @@ class CharLit(_Node):
 Expr = Annotated[
     Union[
         IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
-        IfExpr,
+        IfExpr, Not, ReturnRef,
         Call, StringRef, FieldRead, LoadField, StructInit, PtrOffset, Widen,
         Load, NullPtr, CharLit, EnumInit, SizeOf, TryExpr, TraitCall,
     ],
@@ -1063,6 +1085,29 @@ class ReturnInRangeClaim(_Claim):
     kind: Literal["return_in_range"] = "return_in_range"
     min: int | None = None
     max: int | None = None
+
+
+class PredicateClaim(_Claim):
+    """Single canonical claim form: a predicate over the function's
+    parameters and (optionally) `ReturnRef`.
+
+    Pre/post is implicit: a predicate that mentions `ReturnRef` is a
+    postcondition, otherwise a precondition. The body says everything
+    about scope — there is no separate scope field.
+
+    `expr` must satisfy `assert_is_predicate`: i1-typed, side-effect-free,
+    references resolve against the enclosing function. Stored in
+    canonical form (see `quod.canonicalize`) so identical predicates
+    produce identical hashes for proof pinning, dedup, and equivalence
+    edges.
+
+    The named claim kinds (`non_negative`, `int_range`, `return_in_range`)
+    are CLI sugar that desugar to canonicalized PredicateClaim at parse
+    time and resugar via a recognizer at render time. Sugar shapes are
+    never stored.
+    """
+    kind: Literal["predicate"] = "predicate"
+    expr: "Expr"
 
 
 Claim = Annotated[
