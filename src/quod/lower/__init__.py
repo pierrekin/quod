@@ -1563,7 +1563,16 @@ def lower(
     """
     program = _desugar_with_arena(program)
 
-    module = ir.Module(name="quod")
+    # Fresh context per module: llvmlite's default `ir.Module()` shares
+    # one process-global LLVMContext, so identified types interned by
+    # name (struct/enum bodies) leak between independent `lower()`
+    # calls in the same Python process. That's invisible in production
+    # (one program per CLI invocation) but breaks tests under
+    # pytest-xdist when two cases name a type the same and give it a
+    # different layout — the second build sees the first's body and
+    # emits insertvalue at the wrong field type. Isolating the context
+    # makes every lower() build a clean type universe.
+    module = ir.Module(name="quod", context=ir.Context())
     module.triple = target or llvm.get_default_triple()
     # CRITICAL: set the data layout from the target. With an empty
     # datalayout string, LLVM falls back to its "neutral" defaults
@@ -1598,13 +1607,6 @@ def lower(
 
     for sd in program.structs:
         ty = struct_tys[sd.name]
-        # llvmlite shares one LLVMContext across every Module in a Python
-        # process, so identified types interned by name persist between
-        # builds. The same struct identity coming back is fine — the body
-        # was set on a prior pass, and we've already verified our model
-        # rejects redefinitions with conflicting layouts.
-        if not ty.is_opaque:
-            continue
         body = [_type_to_llvm(f.type, struct_tys, enum_tys) for f in sd.fields]
         ty.set_body(*body)
 
@@ -1619,8 +1621,6 @@ def lower(
     # arbitrary types (other structs, even other enums).
     for ed in program.enums:
         ty = enum_tys[ed.name]
-        if not ty.is_opaque:
-            continue
         # Largest variant payload size in bytes. ceil-divide by 8.
         max_payload = max(
             (_variant_struct_layout(v, struct_defs_for_layout, enum_defs)[0]
