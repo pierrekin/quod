@@ -1,110 +1,62 @@
-"""Schema introspection for the `quod schema` CLI / `quod_schema` tool.
+"""Core kind catalog: llvm.* and quod.* node kinds.
 
-Renders a condensed text description of any node kind: required/optional
-fields with types, plus a hand-curated minimal example. Field info is read
-from the pydantic model so types stay in sync; summaries and examples are
-hand-curated next to the model.
-
-Three query modes:
-    schema()                 -> list categories + one-line summary each
-    schema(category="...")   -> list kinds in the category, one-liner each
-    schema(kind="quod.let")  -> full per-kind schema with example
-
-Categories: expression, statement, type, claim, justification, program.
+Each entry maps a canonical name (the discriminator string for nodes that
+have one; a stable label for top-level types that don't) to:
+    class:    the Pydantic model class (used for field introspection)
+    summary:  one-line description shown in listings and at the top of
+              per-kind output
+    example:  a hand-curated minimal valid instance, rendered as JSON
+    field_descriptions: optional per-field human notes (overrides default)
+    see_also: optional cross-references to related kinds
 """
 
 from __future__ import annotations
 
-import json
-import types
-import typing
-from typing import Any, get_args, get_origin
+from typing import Any
 
-from pydantic import BaseModel
-
-from quod import model
 from quod.model import (
     Assign,
     BinOp,
+    Block,
     Break,
     Call,
     CharLit,
-    CAddressOf,
-    CArraySubscript,
-    CAssign,
-    CBinOp,
-    CBreak,
-    CCall,
-    CCompoundAssign,
-    CContinue,
-    CDoWhile,
     Continue,
-    CEnumConstRef,
-    CSwitch,
-    CSwitchCase,
-    DoWhile,
-    CExprStmt,
-    CFn,
-    CFor,
-    CIf,
-    CIntLit,
-    CMultiVarDecl,
-    CNamedType,
-    CParam,
-    CPointerType,
-    CReturn,
-    CScopedBlock,
-    CStringLit,
-    CStyleFor,
-    CTernary,
-    CUnary,
-    CUnit,
-    CVarDecl,
-    CVarRef,
-    CWhile,
     DerivedJustification,
-    Equivalence,
+    DoWhile,
     EnumDef,
     EnumInit,
     EnumPayloadField,
     EnumType,
     EnumVariant,
+    Equivalence,
     ExprStmt,
     ExternFunction,
-    LibcLinkage,
-    RuntimeLinkage,
+    FamilyLowering,
     FieldInit,
     FieldRead,
     FieldSet,
-    Block,
     For,
     Function,
-    I1Type,
-    I8PtrType,
-    I8Type,
     I16Type,
+    I1Type,
     I32Type,
     I64Type,
-    U8Type,
-    U16Type,
-    U32Type,
-    U64Type,
-    IsizeType,
-    UsizeType,
+    I8PtrType,
+    I8Type,
     If,
     IfExpr,
     IntLit,
+    IsizeType,
     Let,
+    LibcLinkage,
+    LiftEquivalence,
     Load,
     LoadField,
     LocalRef,
-    FamilyLowering,
-    LiftEquivalence,
     ManualJustification,
     Match,
     MatchArm,
-    SizeOf,
-    TryExpr,
     Not,
     NullPtr,
     Param,
@@ -115,24 +67,28 @@ from quod.model import (
     Return,
     ReturnExpr,
     ReturnRef,
-    Unreachable,
+    RuntimeLinkage,
+    SelfType,
     ShortCircuitAnd,
     ShortCircuitOr,
+    SizeOf,
+    Store,
+    StoreField,
     StringConstant,
     StringRef,
     StructDef,
     StructField,
     StructInit,
     StructType,
-    Store,
-    StoreField,
-    SelfType,
     TraitCall,
-    TraitDef,
-    TraitMethodSig,
-    ImplDef,
-    TypeParam,
+    TryExpr,
     TypeParamRef,
+    U16Type,
+    U32Type,
+    U64Type,
+    U8Type,
+    Unreachable,
+    UsizeType,
     VoidType,
     While,
     Widen,
@@ -141,55 +97,7 @@ from quod.model import (
 )
 
 
-# Discriminated-union aliases. When a field is typed as one of these, render
-# its alias name instead of expanding the full member list — keeps output
-# terse and points the reader at the right category for further lookup.
-_ALIASES = [
-    (lambda: model.Expr, "Expr"),
-    (lambda: model.Statement, "Statement"),
-    (lambda: model.Type, "Type"),
-    (lambda: model.IntType, "IntType"),
-    (lambda: model.Justification, "Justification"),
-    (lambda: model.Claim, "Claim"),
-]
-
-
-def _union_args(t: Any) -> tuple | None:
-    """Return Union args if `t` is a Union/Annotated[Union]; else None."""
-    if hasattr(t, "__metadata__"):
-        t = t.__origin__
-    origin = get_origin(t)
-    if origin is typing.Union or origin is types.UnionType:
-        return tuple(get_args(t))
-    return None
-
-
-def _matches_alias(annotation: Any) -> str | None:
-    """Match `annotation` against a registered alias by union-arg set."""
-    a_args = _union_args(annotation)
-    if a_args is None:
-        return None
-    a_set = frozenset(a_args)
-    for alias_fn, name in _ALIASES:
-        b_args = _union_args(alias_fn())
-        if b_args is not None and frozenset(b_args) == a_set:
-            return name
-    return None
-
-
-# ---------- Catalog ----------
-#
-# Each entry maps a canonical name (the discriminator string for nodes that
-# have one; a stable label for top-level types that don't) to:
-#   class:    the Pydantic model class (used for field introspection)
-#   summary:  one-line description shown in listings and at the top of
-#             per-kind output
-#   example:  a hand-curated minimal valid instance, rendered as JSON
-#   field_descriptions: optional per-field human notes (overrides default)
-#   see_also: optional cross-references to related kinds
-
-
-_KIND_INFO: dict[str, dict[str, Any]] = {
+_CORE_CATALOG: dict[str, dict[str, Any]] = {
     # ---------- expression ----------
     "llvm.const_int": {
         "class": IntLit,
@@ -1039,7 +947,7 @@ _KIND_INFO: dict[str, dict[str, Any]] = {
 }
 
 
-_KIND_INFO["quod.match"] = {
+_CORE_CATALOG["quod.match"] = {
     "class": Match,
     "summary": (
         "Pattern-match on an enum value. One arm per variant, exhaustive. "
@@ -1060,630 +968,3 @@ _KIND_INFO["quod.match"] = {
     },
     "see_also": ["EnumDef", "quod.enum_init"],
 }
-
-
-# ---------- Layer-A: C source-language nodes ----------
-#
-# Inert structural nodes that preserve the original C as a subtree of
-# the program graph. The supported subset is int-only, no
-# structs/floats/switch — matching what the C ingester emits.
-
-_KIND_INFO["c.type"] = {
-    "class": CNamedType,
-    "summary": (
-        "A named scalar C type. Currently supports `int` and `char` "
-        "(`char*` is `c.type.ptr` wrapping `c.type` with name='char')."
-    ),
-    "example": {"kind": "c.type", "name": "int"},
-}
-
-_KIND_INFO["c.type.ptr"] = {
-    "class": CPointerType,
-    "summary": (
-        "A pointer C type — `T*`. The pointee is any `c.type` or "
-        "another `c.type.ptr` (for `int**` etc.). All pointers "
-        "collapse to `i8_ptr` at layer B; the pointee name is "
-        "informational at the layer-A surface."
-    ),
-    "example": {
-        "kind": "c.type.ptr",
-        "pointee": {"kind": "c.type", "name": "char"},
-    },
-}
-
-_KIND_INFO["c.lit_int"] = {
-    "class": CIntLit,
-    "summary": "A C integer literal.",
-    "example": {"kind": "c.lit_int", "value": 0},
-}
-
-_KIND_INFO["c.var_ref"] = {
-    "class": CVarRef,
-    "summary": "A C identifier reference (parameter, local, …).",
-    "example": {"kind": "c.var_ref", "name": "i"},
-}
-
-_KIND_INFO["c.enum_const_ref"] = {
-    "class": CEnumConstRef,
-    "summary": (
-        "A C enum-constant reference. The layer-B lifter resolves "
-        "these to integer values; layer A preserves both the "
-        "source-level identifier (`name`) and the resolved integer "
-        "(`value`) so the lift-check can verify equivalence without "
-        "re-running libclang. If the enum's resolved value drifts, "
-        "the pinned `value` disagrees with layer-B's IntLit and "
-        "`equiv verify` catches it."
-    ),
-    "example": {"kind": "c.enum_const_ref", "name": "CURLOPT_URL", "value": 10002},
-}
-
-_KIND_INFO["c.binop"] = {
-    "class": CBinOp,
-    "summary": (
-        "A C binary operator. `op` is the source-form spelling "
-        "(`+`, `<`, `&&`, …). The lifter is responsible for refusing "
-        "operators outside the supported subset."
-    ),
-    "example": {
-        "kind": "c.binop", "op": "<",
-        "lhs": {"kind": "c.var_ref", "name": "i"},
-        "rhs": {"kind": "c.var_ref", "name": "n"},
-    },
-}
-
-_KIND_INFO["c.lit_str"] = {
-    "class": CStringLit,
-    "summary": (
-        "A C string literal. Layer A preserves the decoded payload "
-        "(escapes resolved); the layer-B lifter interns these into "
-        "a `StringConstant` and references via `StringRef`."
-    ),
-    "example": {"kind": "c.lit_str", "value": "hello, world\n"},
-}
-
-_KIND_INFO["c.call"] = {
-    "class": CCall,
-    "summary": (
-        "A C function call expression. Only direct calls are supported "
-        "(no indirect / function-pointer calls)."
-    ),
-    "example": {
-        "kind": "c.call", "callee": "printf",
-        "args": [
-            {"kind": "c.lit_str", "value": "%d\n"},
-            {"kind": "c.var_ref", "name": "x"},
-        ],
-    },
-}
-
-_KIND_INFO["c.array_subscript"] = {
-    "class": CArraySubscript,
-    "summary": (
-        "`base[index]` — array subscript. Only emitted inside a "
-        "`c.addr_of`; bare reads aren't yet supported."
-    ),
-    "example": {
-        "kind": "c.array_subscript",
-        "base": {"kind": "c.var_ref", "name": "buf"},
-        "index": {"kind": "c.lit_int", "value": 7},
-    },
-}
-
-_KIND_INFO["c.break"] = {
-    "class": CBreak,
-    "summary": "`break;` — exit the innermost enclosing loop. Lifts to layer-B `Break`.",
-    "example": {"kind": "c.break"},
-}
-
-_KIND_INFO["c.continue"] = {
-    "class": CContinue,
-    "summary": (
-        "`continue;` — skip to the next iteration. Lifts to layer-B "
-        "`Continue`. Inside a c.for_general body, the c-family lowering "
-        "pre-rewrites this to `inc; continue` so C semantics are preserved."
-    ),
-    "example": {"kind": "c.continue"},
-}
-
-_KIND_INFO["c.ternary"] = {
-    "class": CTernary,
-    "summary": (
-        "`cond ? then_value : else_value` — the C ternary operator. "
-        "Layer A preserves source form; the lift maps each CTernary "
-        "to a layer-B `IfExpr` with the same three sub-expressions."
-    ),
-    "example": {
-        "kind": "c.ternary",
-        "cond": {"kind": "c.binop", "op": "<",
-                 "lhs": {"kind": "c.var_ref", "name": "x"},
-                 "rhs": {"kind": "c.lit_int", "value": 0}},
-        "then_value": {"kind": "c.unary", "op": "-",
-                       "value": {"kind": "c.var_ref", "name": "x"}},
-        "else_value": {"kind": "c.var_ref", "name": "x"},
-    },
-}
-
-_KIND_INFO["c.unary"] = {
-    "class": CUnary,
-    "summary": (
-        "Unary prefix operator on an expression: `-x`, `!x`, `~x`. "
-        "Layer A preserves the source operator; the lift pairs each "
-        "with a layer-B BinOp identity (`-x ↔ sub(0, _)`, `!x ↔ "
-        "eq(_, 0)`, `~x ↔ xor(_, -1)`)."
-    ),
-    "example": {
-        "kind": "c.unary",
-        "op": "~",
-        "value": {"kind": "c.var_ref", "name": "x"},
-    },
-}
-
-_KIND_INFO["c.addr_of"] = {
-    "class": CAddressOf,
-    "summary": (
-        "`&expr` — address-of. Only emitted with a "
-        "`c.array_subscript` target (`&p[k]` is C's pointer-arithmetic "
-        "spelling, equivalent to `p + k` for char*)."
-    ),
-    "example": {
-        "kind": "c.addr_of",
-        "target": {
-            "kind": "c.array_subscript",
-            "base": {"kind": "c.var_ref", "name": "buf"},
-            "index": {"kind": "c.lit_int", "value": 7},
-        },
-    },
-}
-
-_KIND_INFO["c.param"] = {
-    "class": CParam,
-    "summary": "A function parameter in C source.",
-    "example": {"kind": "c.param", "name": "n", "type": {"kind": "c.type", "name": "int"}},
-}
-
-_KIND_INFO["c.var_decl"] = {
-    "class": CVarDecl,
-    "summary": "`int s = 0;` — a local variable declaration.",
-    "example": {
-        "kind": "c.var_decl",
-        "type": {"kind": "c.type", "name": "int"},
-        "name": "s",
-        "init": {"kind": "c.lit_int", "value": 0},
-    },
-}
-
-_KIND_INFO["c.multi_var_decl"] = {
-    "class": CMultiVarDecl,
-    "summary": (
-        "`int a, b, c;` — a single declaration statement introducing "
-        "multiple locals. Layer-A only: the lift expands each sub-decl "
-        "to a separate layer-B `Let`, and the lift-checker pairs the "
-        "multi-decl with the resulting N consecutive Lets."
-    ),
-    "example": {
-        "kind": "c.multi_var_decl",
-        "decls": [
-            {"kind": "c.var_decl", "type": {"kind": "c.type", "name": "int"},
-             "name": "a", "init": {"kind": "c.lit_int", "value": 0}},
-            {"kind": "c.var_decl", "type": {"kind": "c.type", "name": "int"},
-             "name": "b", "init": {"kind": "c.lit_int", "value": 1}},
-        ],
-    },
-}
-
-_KIND_INFO["c.compound_assign"] = {
-    "class": CCompoundAssign,
-    "summary": (
-        "`x += y`, `x -= y`, etc. — compound assignment combining a "
-        "binary operator with assignment. Layer-A only: the lift "
-        "desugars to `Assign(x, BinOp(op_translated, LocalRef(x), y'))` "
-        "on the layer-B side, paired by the lift-checker."
-    ),
-    "example": {
-        "kind": "c.compound_assign",
-        "target": "s",
-        "op": "+=",
-        "value": {"kind": "c.var_ref", "name": "i"},
-    },
-}
-
-_KIND_INFO["c.assign"] = {
-    "class": CAssign,
-    "summary": (
-        "`s = s + i;` — assignment to an in-scope variable. Layer A doesn't "
-        "model field/indexed/dereferenced targets."
-    ),
-    "example": {
-        "kind": "c.assign", "target": "i",
-        "value": {"kind": "c.binop", "op": "+",
-                  "lhs": {"kind": "c.var_ref", "name": "i"},
-                  "rhs": {"kind": "c.lit_int", "value": 1}},
-    },
-}
-
-_KIND_INFO["c.return"] = {
-    "class": CReturn,
-    "summary": "`return s;` or `return;`.",
-    "example": {"kind": "c.return", "value": {"kind": "c.var_ref", "name": "s"}},
-}
-
-_KIND_INFO["c.for"] = {
-    "class": CFor,
-    "summary": (
-        "`for (init; cond; inc) { body }` — the C for loop verbatim. "
-        "Each of init/cond/inc is independently optional."
-    ),
-    "example": {
-        "kind": "c.for",
-        "init": {"kind": "c.var_decl",
-                 "type": {"kind": "c.type", "name": "int"},
-                 "name": "i", "init": {"kind": "c.lit_int", "value": 0}},
-        "cond": {"kind": "c.binop", "op": "<",
-                 "lhs": {"kind": "c.var_ref", "name": "i"},
-                 "rhs": {"kind": "c.var_ref", "name": "n"}},
-        "inc":  {"kind": "c.assign", "target": "i",
-                 "value": {"kind": "c.binop", "op": "+",
-                           "lhs": {"kind": "c.var_ref", "name": "i"},
-                           "rhs": {"kind": "c.lit_int", "value": 1}}},
-        "body": [],
-    },
-}
-
-_KIND_INFO["c.if"] = {
-    "class": CIf,
-    "summary": (
-        "`if (cond) { then_body } else { else_body }` — empty "
-        "`else_body` represents an if without else."
-    ),
-    "example": {
-        "kind": "c.if",
-        "cond": {"kind": "c.binop", "op": "<",
-                 "lhs": {"kind": "c.var_ref", "name": "x"},
-                 "rhs": {"kind": "c.lit_int", "value": 0}},
-        "then_body": [
-            {"kind": "c.return", "value": {"kind": "c.lit_int", "value": -1}},
-        ],
-        "else_body": [],
-    },
-}
-
-_KIND_INFO["c.switch"] = {
-    "class": CSwitch,
-    "summary": (
-        "`switch (scrutinee) { case ...: ...; default: ...; }` — "
-        "multiway dispatch on an integer value. The lift produces an "
-        "if-else-if chain at layer B (each case becomes one If with "
-        "`scrutinee == value` cond, possibly OR'd for stacked cases). "
-        "Each case body must end with `break;` or `return ...;`; "
-        "implicit fallthrough refuses at ingest."
-    ),
-    "example": {
-        "kind": "c.switch",
-        "scrutinee": {"kind": "c.var_ref", "name": "x"},
-        "cases": [
-            {"kind": "c.switch_case",
-             "values": [{"kind": "c.lit_int", "value": 1}],
-             "body": [{"kind": "c.return", "value": {"kind": "c.lit_int", "value": 100}}]},
-        ],
-        "default": [{"kind": "c.return", "value": {"kind": "c.lit_int", "value": 0}}],
-    },
-}
-
-_KIND_INFO["c.switch_case"] = {
-    "class": CSwitchCase,
-    "summary": (
-        "One arm of a `c.switch`. Stacked-empty-case labels (`case 1: "
-        "case 2: shared;`) share one body, encoded as a single "
-        "CSwitchCase with multiple values."
-    ),
-    "example": {
-        "kind": "c.switch_case",
-        "values": [
-            {"kind": "c.lit_int", "value": 1},
-            {"kind": "c.lit_int", "value": 2},
-        ],
-        "body": [{"kind": "c.return", "value": {"kind": "c.lit_int", "value": 12}}],
-    },
-}
-
-_KIND_INFO["c.do_while"] = {
-    "class": CDoWhile,
-    "summary": (
-        "`do { body } while (cond);` — post-test loop. Layer A "
-        "preserves the source statement; lifts to layer-B `DoWhile` "
-        "(core)."
-    ),
-    "example": {
-        "kind": "c.do_while",
-        "body": [],
-        "cond": {"kind": "c.lit_int", "value": 1},
-    },
-}
-
-_KIND_INFO["c.while"] = {
-    "class": CWhile,
-    "summary": "`while (cond) { body }` — pre-test loop.",
-    "example": {
-        "kind": "c.while",
-        "cond": {"kind": "c.binop", "op": "<",
-                 "lhs": {"kind": "c.var_ref", "name": "i"},
-                 "rhs": {"kind": "c.var_ref", "name": "n"}},
-        "body": [],
-    },
-}
-
-_KIND_INFO["c.expr_stmt"] = {
-    "class": CExprStmt,
-    "summary": (
-        "A C expression evaluated for its side effect — typically a "
-        "call like `printf(...)`. Only emitted for calls; bare "
-        "expression statements (e.g. `x;`) are refused at ingest time."
-    ),
-    "example": {
-        "kind": "c.expr_stmt",
-        "value": {"kind": "c.call", "callee": "printf",
-                  "args": [{"kind": "c.lit_str", "value": "hi\n"}]},
-    },
-}
-
-_KIND_INFO["c.fn"] = {
-    "class": CFn,
-    "summary": "A C function definition: `int sum(int n) { ... }`.",
-    "example": {
-        "kind": "c.fn", "name": "sum",
-        "return_type": {"kind": "c.type", "name": "int"},
-        "params": [{"kind": "c.param", "name": "n",
-                    "type": {"kind": "c.type", "name": "int"}}],
-        "body": [],
-    },
-}
-
-_KIND_INFO["c_unit"] = {
-    "class": CUnit,
-    "summary": (
-        "A C translation unit — one source file's contents preserved as "
-        "layer-A nodes. Lives in `Program.source_units`."
-    ),
-    "example": {"kind": "c_unit", "source_path": "sum.c", "functions": []},
-}
-
-
-# ---------- Layer-B: c.* extension nodes ----------
-
-_KIND_INFO["c.scoped_block"] = {
-    "class": CScopedBlock,
-    "summary": (
-        "C-style block wrapper. `block` is the inner core.Block that "
-        "edges anchor on; the wrapper carries family-specific scope "
-        "semantics (which decls die at the closing brace). Lowered by "
-        "c-family lowering to its inner block — `lower.py` refuses to "
-        "see this wrapper."
-    ),
-    "example": {
-        "kind": "c.scoped_block",
-        "block": {"id": "@blk_for_body", "stmts": []},
-        "scope_locals": ["i"],
-    },
-}
-
-_KIND_INFO["c.for_general"] = {
-    "class": CStyleFor,
-    "summary": (
-        "C-style for loop with arbitrary init/cond/inc — the layer-B "
-        "transcription of `c.for` from layer A. Lowered to "
-        "`Let + While + Assign` by c-family lowering, with the rule "
-        "cited as `FamilyLowering(\"c.for_general\")` in the resulting "
-        "equivalence claim. `lower.py` refuses to consume this — the "
-        "c-family lowering pass must run first."
-    ),
-    "example": {
-        "kind": "c.for_general",
-        "init": {"kind": "quod.let", "name": "i",
-                 "type": {"kind": "llvm.i32"},
-                 "init": {"kind": "llvm.const_int",
-                          "type": {"kind": "llvm.i32"}, "value": 0}},
-        "cond": {"kind": "llvm.binop", "op": "lt",
-                 "lhs": {"kind": "quod.local_ref", "name": "i"},
-                 "rhs": {"kind": "llvm.param_ref", "name": "n"}},
-        "inc": {"kind": "quod.assign", "name": "i",
-                "value": {"kind": "llvm.binop", "op": "add",
-                          "lhs": {"kind": "quod.local_ref", "name": "i"},
-                          "rhs": {"kind": "llvm.const_int",
-                                  "type": {"kind": "llvm.i32"}, "value": 1}}},
-        "body": {"stmts": []},
-    },
-}
-
-
-_CATEGORIES: dict[str, list[str]] = {
-    "expression": [
-        "llvm.const_int", "llvm.param_ref", "quod.local_ref", "llvm.binop",
-        "quod.sc_or", "quod.sc_and", "quod.if_expr", "quod.not", "quod.return_ref",
-        "llvm.call", "quod.string_ref",
-        "quod.struct_init", "quod.field", "quod.load_field",
-        "quod.ptr_offset", "quod.widen", "quod.load", "quod.null_ptr",
-        "quod.char_lit", "quod.enum_init", "quod.sizeof", "quod.try",
-        "quod.trait_call",
-    ],
-    "statement": [
-        "quod.return_expr", "quod.return", "quod.unreachable",
-        "quod.break", "quod.continue", "quod.if",
-        "quod.let", "quod.assign", "quod.while", "quod.do_while",
-        "quod.for", "quod.expr_stmt",
-        "quod.field_set", "quod.store", "quod.store_field",
-        "quod.with_arena", "quod.match",
-    ],
-    "type": [
-        "llvm.i1", "llvm.i8", "llvm.i16", "llvm.i32", "llvm.i64",
-        "llvm.i8_ptr", "llvm.struct", "llvm.enum", "llvm.void",
-        "quod.type_param", "quod.self_type",
-    ],
-    "claim": ["predicate", "equivalent_to"],
-    "justification": [
-        "z3", "manual", "derived", "lift_equivalence", "family_lowering",
-    ],
-    "program": [
-        "StringConstant", "ExternFunction", "Function", "Param",
-        "StructDef", "StructField", "FieldInit",
-        "EnumDef", "EnumVariant", "EnumPayloadField", "MatchArm", "Block",
-    ],
-    "edge": ["edge.provenance"],
-    "linkage": ["LibcLinkage", "RuntimeLinkage"],
-    # Layer-A nodes — original C source preserved as quod nodes.
-    "source.c": [
-        "c_unit", "c.fn", "c.param", "c.type", "c.type.ptr",
-        "c.var_decl", "c.multi_var_decl", "c.assign", "c.compound_assign",
-        "c.return", "c.for", "c.if", "c.while", "c.do_while", "c.expr_stmt",
-        "c.break", "c.continue", "c.switch", "c.switch_case",
-        "c.binop", "c.lit_int", "c.lit_str", "c.var_ref",
-        "c.enum_const_ref", "c.call",
-        "c.array_subscript", "c.addr_of", "c.unary", "c.ternary",
-    ],
-    # Layer-B `c.*` extensions — constructs core quod can't represent;
-    # lowered to core by lower/c_family.py.
-    "c": ["c.scoped_block", "c.for_general"],
-}
-
-
-# ---------- Type rendering ----------
-
-def _render_type(annotation: Any) -> str:
-    """Render a Python type annotation as a short human label."""
-    # Recognized discriminated-union aliases — render as alias name and stop.
-    alias = _matches_alias(annotation)
-    if alias is not None:
-        return alias
-
-    # Strip Annotated[...] metadata (e.g. `Annotated[Union[...], Field(discriminator=...)]`).
-    if hasattr(annotation, "__metadata__"):
-        annotation = annotation.__origin__
-
-    # Forward refs ("Expr" string annotations not yet resolved): use the name.
-    if isinstance(annotation, typing.ForwardRef):
-        # Pydantic sometimes stores a doubly-quoted name — strip stray quotes.
-        return annotation.__forward_arg__.strip("'\"")
-
-    if annotation is type(None):
-        return "null"
-
-    origin = get_origin(annotation)
-    args = get_args(annotation)
-
-    # Union / Optional. typing.Union and `X | Y` (PEP 604 / types.UnionType) both apply.
-    if origin is typing.Union or origin is types.UnionType:
-        has_none = type(None) in args
-        non_none = [a for a in args if a is not type(None)]
-        rendered = [_render_type(a) for a in non_none]
-        joined = " | ".join(rendered)
-        return f"{joined}?" if has_none else joined
-
-    # Literal["a", "b", ...] — render as `'a' | 'b' | ...` for closed-set fields.
-    if origin is typing.Literal:
-        return " | ".join(repr(a) for a in args)
-
-    # tuple[X, ...] is the canonical container shape we use throughout.
-    if origin is tuple:
-        if len(args) == 2 and args[1] is Ellipsis:
-            return f"list[{_render_type(args[0])}]"
-        return f"tuple[{', '.join(_render_type(a) for a in args)}]"
-    if origin is list:
-        return f"list[{_render_type(args[0])}]" if args else "list"
-
-    # Plain types.
-    if isinstance(annotation, type):
-        return annotation.__name__
-    return str(annotation).replace("typing.", "")
-
-
-def _render_default(default: Any) -> str:
-    if default is None:
-        return "null"
-    if default == ():
-        return "[]"
-    return repr(default)
-
-
-# ---------- Render functions ----------
-
-def _resolve_name(name: str) -> str:
-    """Accept canonical kinds, also aliases like 'function' → 'Function'."""
-    if name in _KIND_INFO:
-        return name
-    # Try case-insensitive match for top-level types.
-    for k in _KIND_INFO:
-        if k.lower() == name.lower():
-            return k
-    return name  # caller decides how to error
-
-
-def _resolved_hints(cls: type[BaseModel]) -> dict[str, Any]:
-    """Resolve forward refs in `cls`'s annotations against `quod.model`'s globals.
-
-    Pydantic stores raw annotations (often ForwardRefs containing strings like
-    `tuple['Statement', ...]`); typing.get_type_hints walks the type and resolves
-    those refs by looking up names in the provided globals.
-    """
-    return typing.get_type_hints(
-        cls, globalns=vars(model), include_extras=True,
-    )
-
-
-def render_kind(name: str) -> str:
-    """Render a single kind's schema as a condensed text block."""
-    name = _resolve_name(name)
-    if name not in _KIND_INFO:
-        known = ", ".join(sorted(_KIND_INFO.keys()))
-        raise KeyError(f"unknown kind {name!r}. Known kinds:\n  {known}")
-    info = _KIND_INFO[name]
-    cls: type[BaseModel] = info["class"]
-    cat = _category_of(name) or "?"
-    lines = [f"{name} ({cat}) — {info['summary']}"]
-    field_descriptions = info.get("field_descriptions", {})
-    hints = _resolved_hints(cls)
-    for fname, finfo in cls.model_fields.items():
-        if fname == "kind":
-            continue
-        annotation = hints.get(fname, finfo.annotation)
-        ty = _render_type(annotation)
-        if finfo.is_required():
-            req = "required"
-        else:
-            req = f"optional, default={_render_default(finfo.default)}"
-        desc = field_descriptions.get(fname, "")
-        suffix = f" — {desc}" if desc else ""
-        lines.append(f"  {fname} ({ty}, {req}){suffix}")
-    lines.append("example:")
-    lines.append(f"  {json.dumps(info['example'], separators=(', ', ': '))}")
-    if info.get("see_also"):
-        lines.append(f"see also: {', '.join(info['see_also'])}")
-    return "\n".join(lines)
-
-
-def render_category(cat: str) -> str:
-    """Render all kinds in a category as one-liners."""
-    if cat not in _CATEGORIES:
-        known = ", ".join(_CATEGORIES.keys())
-        raise KeyError(f"unknown category {cat!r}. Known categories: {known}")
-    lines = [f"category: {cat}"]
-    for name in _CATEGORIES[cat]:
-        info = _KIND_INFO[name]
-        lines.append(f"  {name} — {info['summary']}")
-    lines.append(f"\nFor full schema of one kind: quod schema KIND")
-    return "\n".join(lines)
-
-
-def render_categories() -> str:
-    """Render all categories with kind counts."""
-    lines = ["categories:"]
-    for cat, kinds in _CATEGORIES.items():
-        lines.append(f"  {cat} ({len(kinds)} kinds): {', '.join(kinds)}")
-    lines.append("\nFor a category overview: quod schema --category CAT")
-    lines.append("For a kind's full schema: quod schema KIND")
-    return "\n".join(lines)
-
-
-def _category_of(name: str) -> str | None:
-    for cat, kinds in _CATEGORIES.items():
-        if name in kinds:
-            return cat
-    return None
