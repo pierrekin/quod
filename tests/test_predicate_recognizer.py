@@ -22,7 +22,7 @@ from quod.model import (
     ParamRef,
     ReturnRef,
 )
-from quod.render import predicate_spans, recognize_predicate
+from quod.predicate_render import predicate_spans, recognize_predicate
 
 
 def _x():

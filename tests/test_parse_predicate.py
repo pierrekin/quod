@@ -26,7 +26,7 @@ from quod.model import (
     ShortCircuitAnd,
     ShortCircuitOr,
 )
-from quod.render import recognize_predicate
+from quod.predicate_render import recognize_predicate
 from quod.script import ScriptError, parse_predicate
 from quod.predicate_validate import PredicateError, assert_is_predicate
 
