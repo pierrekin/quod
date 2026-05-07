@@ -50,6 +50,8 @@ from ..model import (
     StoreField,
     StringRef,
     Cast,
+    FloatLit,
+    FNeg,
     StructInit,
     StructType,
     TraitCall,
@@ -259,6 +261,10 @@ def _resolve_trait_calls_in_expr(expr, impl_index):
         return _resolve_trait_call(expr.model_copy(update={"args": resolved_args}), impl_index)
     if isinstance(expr, IntLit):
         return expr
+    if isinstance(expr, FloatLit):
+        return expr
+    if isinstance(expr, FNeg):
+        return expr.model_copy(update={"operand": _resolve_trait_calls_in_expr(expr.operand, impl_index)})
     if isinstance(expr, Load):
         return expr.model_copy(update={"ptr": _resolve_trait_calls_in_expr(expr.ptr, impl_index)})
     if isinstance(expr, SizeOf):

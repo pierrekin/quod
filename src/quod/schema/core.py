@@ -39,6 +39,8 @@ from quod.model import (
     FieldInit,
     FieldRead,
     FieldSet,
+    FloatLit,
+    FNeg,
     For,
     Function,
     I16Type,
@@ -106,6 +108,30 @@ _CORE_CATALOG: dict[str, dict[str, Any]] = {
         "summary": "Literal integer of an explicit width. The `type` field decides which iN constant is emitted.",
         "example": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 42},
     },
+    "quod.float_lit": {
+        "class": FloatLit,
+        "summary": (
+            "IEEE 754 finite floating-point literal. Distinct kind from "
+            "llvm.const_int — `type` selects f32 vs f64. Special values "
+            "(+inf / -inf / NaN) are not yet representable; constructing "
+            "with a non-finite value fails Pydantic validation."
+        ),
+        "example": {"kind": "quod.float_lit", "type": {"kind": "llvm.f64"}, "value": 1.5},
+        "see_also": ["llvm.f32", "llvm.f64", "quod.fneg", "quod.cast"],
+    },
+    "quod.fneg": {
+        "class": FNeg,
+        "summary": (
+            "IEEE 754 unary float negation: flips the sign bit. Distinct "
+            "from `0.0 - x` because that returns +0.0 for -0.0 input. "
+            "Lowers to LLVM `fneg`."
+        ),
+        "example": {
+            "kind": "quod.fneg",
+            "operand": {"kind": "quod.float_lit", "type": {"kind": "llvm.f64"}, "value": 1.5},
+        },
+        "see_also": ["quod.float_lit", "llvm.f32", "llvm.f64"],
+    },
     "llvm.param_ref": {
         "class": ParamRef,
         "summary": "Read a function parameter.",
@@ -123,11 +149,13 @@ _CORE_CATALOG: dict[str, dict[str, Any]] = {
         "field_descriptions": {
             "op": (
                 "one of: add, sub, mul, sdiv, srem (signed iN→iN); "
-                "udiv (unsigned iN→iN); "
+                "udiv, urem (unsigned iN→iN); "
                 "slt, sle, sgt, sge, eq, ne (signed cmp, iN→i1); "
                 "ult, ule, ugt, uge (unsigned cmp, iN→i1); "
-                "or, and (iN→iN, bitwise). "
-                "Division by zero is UB. Use quod.sc_or/sc_and for short-circuit booleans."
+                "or, and, xor (iN→iN, bitwise); shl, ashr, lshr (iN→iN, shifts); "
+                "fadd, fsub, fmul, fdiv, frem (fN→fN, IEEE 754 arith — frem is fmod-like); "
+                "feq, fne, flt, fle, fgt, fge (fN→i1, IEEE 754 cmp — fne uses LLVM `une` so NaN!=NaN is true; the rest use ordered preds). "
+                "Division by zero is UB on int ops. Use quod.sc_or/sc_and for short-circuit booleans."
             ),
         },
         "example": {

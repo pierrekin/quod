@@ -69,6 +69,8 @@ from quod.model.expressions import (
     Expr,
     FieldInit,
     FieldRead,
+    FloatLit,
+    FNeg,
     IfExpr,
     IntLit,
     Load,

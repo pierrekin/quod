@@ -56,6 +56,8 @@ from quod.model import (
     UsizeType,
     F32Type,
     F64Type,
+    FloatLit,
+    FNeg,
     I8PtrType,
     If,
     IfExpr,
@@ -109,6 +111,7 @@ SpanStyle = Literal[
     "local",         # let-introduced local (declarations and LocalRef)
     "const_name",    # name of a string constant (decl or &-reference)
     "literal_int",   # integer literals
+    "literal_float", # float literals
     "literal_str",   # string-constant value (the quoted literal)
     "op",            # +, -, ==, &&, ||, =, ->, ..
     "punct",         # parens, braces, commas, colons
@@ -161,6 +164,7 @@ _ANSI_DEFAULT: dict[SpanStyle, str] = {
     "local":        "38;5;180",
     "const_name":   "38;5;179",
     "literal_int":  "38;5;180",
+    "literal_float": "38;5;180",  # same tone as literal_int
     "literal_str":  "38;5;108",   # sage
     "op":           "38;5;245",   # mid grey
     "punct":        "38;5;245",
@@ -255,6 +259,9 @@ _BINOP_SYMBOL = {
     "ult": "<u", "ule": "<=u", "ugt": ">u", "uge": ">=u",
     "or": "|", "and": "&", "xor": "^",
     "shl": "<<", "ashr": ">>", "lshr": ">>l",
+    "fadd": "+f", "fsub": "-f", "fmul": "*f", "fdiv": "/f", "frem": "%f",
+    "feq": "==f", "fne": "!=f",
+    "flt": "<f", "fle": "<=f", "fgt": ">f", "fge": ">=f",
 }
 
 
@@ -262,6 +269,14 @@ def _expr_spans(expr) -> tuple[Span, ...]:
     match expr:
         case IntLit(value=v):
             return (Span(str(v), "literal_int"),)
+        case FloatLit(value=v):
+            return (Span(repr(v), "literal_float"),)
+        case FNeg(operand=op):
+            return (
+                Span("fneg", "fn_name"), Span("(", "punct"),
+                *_expr_spans(op),
+                Span(")", "punct"),
+            )
         case ParamRef(name=n):
             return (Span(n, "param"),)
         case LocalRef(name=n):

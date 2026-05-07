@@ -38,6 +38,8 @@ from ..model import (
     ShortCircuitAnd,
     ShortCircuitOr,
     Cast,
+    FloatLit,
+    FNeg,
     SizeOf,
     Store,
     StoreField,
@@ -80,6 +82,11 @@ def _type_key(t):
 def _collect_in_expr(expr, sink: set):
     if isinstance(expr, IntLit):
         _collect_instantiations(expr.type, sink)
+    elif isinstance(expr, FloatLit):
+        # F32Type / F64Type carry no instantiations; nothing to collect.
+        pass
+    elif isinstance(expr, FNeg):
+        _collect_in_expr(expr.operand, sink)
     elif isinstance(expr, SizeOf):
         _collect_instantiations(expr.type, sink)
     elif isinstance(expr, Load):

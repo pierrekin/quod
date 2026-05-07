@@ -57,6 +57,17 @@ _ICMP_UNSIGNED = {
     "ult": "<", "ule": "<=", "ugt": ">", "uge": ">=",
 }
 
+# Float comparison predicate maps. `feq` and the magnitude comparisons
+# use ordered preds (`oeq`, `olt`, `ole`, `ogt`, `oge`) — false if either
+# operand is NaN. `fne` uses LLVM `une` so `NaN != NaN` returns true.
+# Rust + C agree on this mapping.
+_FCMP_ORDERED = {
+    "feq": "==", "flt": "<", "fle": "<=", "fgt": ">", "fge": ">=",
+}
+_FCMP_UNORDERED = {
+    "fne": "!=",
+}
+
 
 def _type_to_llvm(
     t,

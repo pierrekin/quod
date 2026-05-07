@@ -21,6 +21,8 @@ from ..model import (
     FieldInit,
     FieldRead,
     FieldSet,
+    FloatLit,
+    FNeg,
     For,
     If,
     IfExpr,
@@ -70,6 +72,12 @@ def _walk_types_in_expr(expr, fn):
     expr). Also handles type-bearing inits like StructInit/EnumInit."""
     if isinstance(expr, IntLit):
         return expr.model_copy(update={"type": fn(expr.type)})
+    if isinstance(expr, FloatLit):
+        return expr.model_copy(update={"type": fn(expr.type)})
+    if isinstance(expr, FNeg):
+        return expr.model_copy(update={
+            "operand": _walk_types_in_expr(expr.operand, fn),
+        })
     if isinstance(expr, Load):
         return expr.model_copy(update={
             "ptr":  _walk_types_in_expr(expr.ptr,  fn),

@@ -23,6 +23,8 @@ from quod.model.expressions import (
     LoadField,
     LocalRef,
     Cast,
+    FloatLit,
+    FNeg,
     NullPtr,
     ParamRef,
     PtrOffset,
@@ -504,9 +506,14 @@ def _format_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
 
 _BINOP_SYMBOL = {
     "add": "+", "sub": "-", "mul": "*", "sdiv": "/", "udiv": "/u", "srem": "%",
+    "urem": "%u",
     "slt": "<", "sle": "<=", "sgt": ">", "sge": ">=", "eq": "==", "ne": "!=",
     "ult": "<u", "ule": "<=u", "ugt": ">u", "uge": ">=u",
-    "or": "|", "and": "&",
+    "or": "|", "and": "&", "xor": "^",
+    "shl": "<<", "ashr": ">>", "lshr": ">>l",
+    "fadd": "+f", "fsub": "-f", "fmul": "*f", "fdiv": "/f", "frem": "%f",
+    "feq": "==f", "fne": "!=f",
+    "flt": "<f", "fle": "<=f", "fgt": ">f", "fge": ">=f",
 }
 
 
@@ -514,6 +521,10 @@ def _format_expr(expr) -> str:
     match expr:
         case IntLit(value=v):
             return str(v)
+        case FloatLit(value=v):
+            return repr(v)
+        case FNeg(operand=op):
+            return f"fneg({_format_expr(op)})"
         case ParamRef(name=n):
             return n
         case LocalRef(name=n):

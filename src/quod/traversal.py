@@ -58,6 +58,8 @@ from .model import (
     ShortCircuitOr,
     SizeOf,
     Cast,
+    FloatLit,
+    FNeg,
     Store,
     StoreField,
     StringRef,
@@ -75,6 +77,12 @@ def substitute_in_expr(expr, type_fn: Callable):
     (including nested type_args on Init/Call/TraitCall nodes)."""
     if isinstance(expr, IntLit):
         return expr.model_copy(update={"type": type_fn(expr.type)})
+    if isinstance(expr, FloatLit):
+        return expr.model_copy(update={"type": type_fn(expr.type)})
+    if isinstance(expr, FNeg):
+        return expr.model_copy(update={
+            "operand": substitute_in_expr(expr.operand, type_fn),
+        })
     if isinstance(expr, Load):
         return expr.model_copy(update={
             "ptr":  substitute_in_expr(expr.ptr, type_fn),

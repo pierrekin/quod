@@ -24,6 +24,8 @@ from quod.lower.types import (
     I8,
     I32,
     I64,
+    _FCMP_ORDERED,
+    _FCMP_UNORDERED,
     _ICMP_SIGNED,
     _ICMP_UNSIGNED,
     _coerce_int_lit,
@@ -42,6 +44,8 @@ from quod.model import (
     F32Type,
     F64Type,
     FieldRead,
+    FloatLit,
+    FNeg,
     Function,
     IfExpr,
     IntLit,
@@ -89,6 +93,10 @@ def _lower_expr(
     match expr:
         case IntLit(type=t, value=v):
             return ir.Constant(_type_to_llvm(t), v)
+        case FloatLit(type=t, value=v):
+            return ir.Constant(_type_to_llvm(t), v)
+        case FNeg(operand=op):
+            return builder.fneg(go(op))
         case ParamRef(name=n):
             return params[n]
         case LocalRef(name=n):
@@ -126,6 +134,20 @@ def _lower_expr(
             return builder.icmp_signed(_ICMP_SIGNED[op], go(l), go(r))
         case BinOp(op=op, lhs=l, rhs=r) if op in _ICMP_UNSIGNED:
             return builder.icmp_unsigned(_ICMP_UNSIGNED[op], go(l), go(r))
+        case BinOp(op="fadd", lhs=l, rhs=r):
+            return builder.fadd(go(l), go(r))
+        case BinOp(op="fsub", lhs=l, rhs=r):
+            return builder.fsub(go(l), go(r))
+        case BinOp(op="fmul", lhs=l, rhs=r):
+            return builder.fmul(go(l), go(r))
+        case BinOp(op="fdiv", lhs=l, rhs=r):
+            return builder.fdiv(go(l), go(r))
+        case BinOp(op="frem", lhs=l, rhs=r):
+            return builder.frem(go(l), go(r))
+        case BinOp(op=op, lhs=l, rhs=r) if op in _FCMP_ORDERED:
+            return builder.fcmp_ordered(_FCMP_ORDERED[op], go(l), go(r))
+        case BinOp(op=op, lhs=l, rhs=r) if op in _FCMP_UNORDERED:
+            return builder.fcmp_unordered(_FCMP_UNORDERED[op], go(l), go(r))
         case BinOp(op="or", lhs=l, rhs=r):
             return builder.or_(go(l), go(r))
         case BinOp(op="and", lhs=l, rhs=r):
@@ -500,11 +522,20 @@ def _quod_type_of(
             return local_qtypes[n]
         case Cast(target_type=t):
             return t
+        case FloatLit(type=t):
+            return t
+        case FNeg(operand=op):
+            return _quod_type_of(
+                op, fn=fn, local_qtypes=local_qtypes,
+                extern_sigs=extern_sigs, fn_returns=fn_returns,
+                struct_defs=struct_defs, enum_defs=enum_defs,
+            )
         case Load(type=t):
             return t
         case BinOp(op=op, lhs=l):
             if op in ("eq", "ne", "slt", "sle", "sgt", "sge",
-                      "ult", "ule", "ugt", "uge"):
+                      "ult", "ule", "ugt", "uge",
+                      "feq", "fne", "flt", "fle", "fgt", "fge"):
                 from quod.model import I1Type
                 return I1Type()
             return _quod_type_of(

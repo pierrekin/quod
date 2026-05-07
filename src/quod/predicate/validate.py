@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from quod.model import (
     BinOp,
+    FloatLit,
+    FNeg,
     IntLit,
     Not,
     ParamRef,
@@ -28,12 +30,26 @@ class PredicateError(ValueError):
     offending node kind."""
 
 
+# BinOp.op values that may appear in a predicate. Float ops are
+# excluded — `predicate_to_smt` and `_lower_predicate` are int-only,
+# so float predicates fail at SMT/lowering. Reject early to surface a
+# clean diagnostic rather than a deep crash.
+_PREDICATE_BINOP_OPS = frozenset({
+    "add", "sub", "mul", "sdiv", "udiv", "srem", "urem",
+    "slt", "sle", "sgt", "sge", "eq", "ne",
+    "ult", "ule", "ugt", "uge",
+    "or", "and", "xor",
+    "shl", "ashr", "lshr",
+})
+
+
 def assert_is_predicate(expr) -> None:
     """Raise `PredicateError` if `expr` is not a valid predicate body.
 
-    Allowed: IntLit, ParamRef, ReturnRef, BinOp, ShortCircuitOr/And,
-    Not. Forbidden: Calls, aggregate access, memory ops, locals, or
-    anything else with side effects or non-predicate semantics.
+    Allowed: IntLit, ParamRef, ReturnRef, BinOp (int ops only),
+    ShortCircuitOr/And, Not. Forbidden: Calls, aggregate access,
+    memory ops, locals, FloatLit, FNeg, float `BinOp` ops, or anything
+    else with side effects or non-predicate semantics.
     """
     _walk_predicate(expr)
 
@@ -41,6 +57,17 @@ def assert_is_predicate(expr) -> None:
 def _walk_predicate(expr) -> None:
     if isinstance(expr, IntLit):
         return
+    if isinstance(expr, FloatLit):
+        raise PredicateError(
+            "predicate cannot contain FloatLit — float predicates "
+            "are not yet supported (predicate_to_smt and "
+            "_lower_predicate are int-only)"
+        )
+    if isinstance(expr, FNeg):
+        raise PredicateError(
+            "predicate cannot contain FNeg — float predicates "
+            "are not yet supported"
+        )
     if isinstance(expr, ParamRef):
         return
     if isinstance(expr, ReturnRef):
@@ -49,6 +76,12 @@ def _walk_predicate(expr) -> None:
         _walk_predicate(expr.operand)
         return
     if isinstance(expr, BinOp):
+        if expr.op not in _PREDICATE_BINOP_OPS:
+            raise PredicateError(
+                f"predicate cannot use BinOp.op={expr.op!r} — "
+                f"float ops (fadd/fsub/.../feq/fne/...) are not "
+                f"yet supported in predicates"
+            )
         _walk_predicate(expr.lhs)
         _walk_predicate(expr.rhs)
         return

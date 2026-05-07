@@ -17,6 +17,7 @@ from quod.model.expressions import (
     Call,
     Cast,
     EnumInit,
+    FNeg,
     FieldRead,
     Load,
     PtrOffset,
@@ -379,6 +380,8 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
                 visit_expr(o)
             case Cast(value=v):
                 visit_expr(v)
+            case FNeg(operand=op):
+                visit_expr(op)
             case Load(ptr=p):
                 visit_expr(p)
             case TryExpr(value=v):

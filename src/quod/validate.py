@@ -29,6 +29,8 @@ from quod.model import (
     BinOp,
     Call,
     Cast,
+    FloatLit,
+    FNeg,
     CharLit,
     EnumDef,
     EnumInit,
@@ -137,6 +139,9 @@ CONTINUE_OUTSIDE_LOOP = "continue_outside_loop"
 FIELD_READ_NON_STRUCT = "field_read_non_struct"
 FIELDSET_NON_STRUCT_LOCAL = "fieldset_non_struct_local"
 CAST_NON_NUMERIC = "cast_non_numeric"
+BINOP_FLOAT_NON_FLOAT = "binop_float_non_float"
+BINOP_FLOAT_OPERAND_MISMATCH = "binop_float_operand_mismatch"
+FNEG_NON_FLOAT = "fneg_non_float"
 
 
 # ---------- Diagnostic ----------
@@ -666,6 +671,8 @@ def _check_expr_reads(ctx: _Ctx, expr, defined: set[str]) -> None:
             _check_expr_reads(ctx, o, defined)
         case Cast(value=v):
             _check_expr_reads(ctx, v, defined)
+        case FNeg(operand=op):
+            _check_expr_reads(ctx, op, defined)
         case Load(ptr=p):
             _check_expr_reads(ctx, p, defined)
         case LoadField(ptr=p):
@@ -827,9 +834,14 @@ def _check_expr(ctx: _Ctx, expr) -> None:
                 ctx.emit(UNKNOWN_FIELD,
                          f"load_field references unknown field {fname!r} "
                          f"of struct {tname!r}")
-        case BinOp(lhs=l, rhs=r):
+        case BinOp(op=op, lhs=l, rhs=r):
             _check_expr(ctx, l)
             _check_expr(ctx, r)
+            if op in _FLOAT_BINOP_OPS:
+                _check_float_binop_operands(ctx, op, l, r)
+        case FNeg(operand=op):
+            _check_expr(ctx, op)
+            _check_fneg_operand(ctx, op)
         case Call(function=fname, args=args):
             if fname not in ctx.callables:
                 ctx.emit(UNDEFINED_FUNCTION,
@@ -911,6 +923,15 @@ _NUMERIC_INT_CLASSES = (
 _NUMERIC_FLOAT_CLASSES = (F32Type, F64Type)
 _NUMERIC_CLASSES = _NUMERIC_INT_CLASSES + _NUMERIC_FLOAT_CLASSES
 
+# BinOp.op subsets for type-rule dispatch.
+_FLOAT_ARITH_BINOP_OPS = frozenset({"fadd", "fsub", "fmul", "fdiv", "frem"})
+_FLOAT_CMP_BINOP_OPS = frozenset({"feq", "fne", "flt", "fle", "fgt", "fge"})
+_FLOAT_BINOP_OPS = _FLOAT_ARITH_BINOP_OPS | _FLOAT_CMP_BINOP_OPS
+_INT_CMP_BINOP_OPS = frozenset({
+    "eq", "ne", "slt", "sle", "sgt", "sge", "ult", "ule", "ugt", "uge",
+})
+_CMP_BINOP_OPS = _INT_CMP_BINOP_OPS | _FLOAT_CMP_BINOP_OPS
+
 
 def _check_cast_arm(ctx: _Ctx, value, target_type) -> None:
     """A `Cast` is legal iff both source and target are numeric (int or
@@ -941,6 +962,43 @@ def _check_cast_arm(ctx: _Ctx, value, target_type) -> None:
         ctx.emit(CAST_NON_NUMERIC,
                  f"cast source must be a numeric value (int or float); "
                  f"got {_type_name(src_ty)}")
+
+
+def _check_float_binop_operands(ctx: _Ctx, op: str, lhs, rhs) -> None:
+    """Float BinOp ops require both operands to be the same float type.
+    `TypeParamRef` is accepted (pre-mono); the post-mono pass re-checks.
+    """
+    lty = _infer_type(ctx, lhs)
+    rty = _infer_type(ctx, rhs)
+    if lty is None or rty is None:
+        return  # let other validation pick it up
+    if isinstance(lty, TypeParamRef) or isinstance(rty, TypeParamRef):
+        return
+    if not isinstance(lty, _NUMERIC_FLOAT_CLASSES):
+        ctx.emit(BINOP_FLOAT_NON_FLOAT,
+                 f"BinOp.op={op!r} requires float operands; "
+                 f"lhs is {_type_name(lty)}")
+        return
+    if not isinstance(rty, _NUMERIC_FLOAT_CLASSES):
+        ctx.emit(BINOP_FLOAT_NON_FLOAT,
+                 f"BinOp.op={op!r} requires float operands; "
+                 f"rhs is {_type_name(rty)}")
+        return
+    if type(lty) is not type(rty):
+        ctx.emit(BINOP_FLOAT_OPERAND_MISMATCH,
+                 f"BinOp.op={op!r} operands must have the same float type; "
+                 f"got {_type_name(lty)} and {_type_name(rty)}")
+
+
+def _check_fneg_operand(ctx: _Ctx, operand) -> None:
+    """`FNeg` operand must be a float value."""
+    ty = _infer_type(ctx, operand)
+    if ty is None or isinstance(ty, TypeParamRef):
+        return
+    if not isinstance(ty, _NUMERIC_FLOAT_CLASSES):
+        ctx.emit(FNEG_NON_FLOAT,
+                 f"FNeg operand must be a float value; "
+                 f"got {_type_name(ty)}")
 
 
 def _check_field_inits(
@@ -1003,6 +1061,10 @@ def _infer_type(ctx: _Ctx, expr) -> object | None:
             return I64Type()
         case Cast(target_type=t):
             return t
+        case FloatLit(type=t):
+            return t
+        case FNeg(operand=op):
+            return _infer_type(ctx, op)
         case ShortCircuitAnd() | ShortCircuitOr():
             return I1Type()
         case IfExpr(then_value=t, else_value=e):
@@ -1011,7 +1073,7 @@ def _infer_type(ctx: _Ctx, expr) -> object | None:
             return _infer_type(ctx, t) or _infer_type(ctx, e)
         case BinOp(op=op, lhs=l, rhs=r):
             # Comparisons return i1; arithmetic propagates the LHS type.
-            if op in ("eq", "ne", "slt", "sle", "sgt", "sge", "ult", "ule", "ugt", "uge"):
+            if op in _CMP_BINOP_OPS:
                 return I1Type()
             return _infer_type(ctx, l) or _infer_type(ctx, r)
         case PtrOffset():

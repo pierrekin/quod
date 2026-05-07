@@ -10,8 +10,10 @@ from __future__ import annotations
 
 _CATEGORIES: dict[str, list[str]] = {
     "expression": [
-        "llvm.const_int", "llvm.param_ref", "quod.local_ref", "llvm.binop",
-        "quod.sc_or", "quod.sc_and", "quod.if_expr", "quod.not", "quod.return_ref",
+        "llvm.const_int", "quod.float_lit",
+        "llvm.param_ref", "quod.local_ref", "llvm.binop",
+        "quod.sc_or", "quod.sc_and", "quod.if_expr", "quod.not", "quod.fneg",
+        "quod.return_ref",
         "llvm.call", "quod.string_ref",
         "quod.struct_init", "quod.field", "quod.load_field",
         "quod.ptr_offset", "quod.cast", "quod.load", "quod.null_ptr",

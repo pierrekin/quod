@@ -12,7 +12,7 @@ from typing import Annotated, Literal, Union
 from pydantic import Field, field_validator, model_serializer
 
 from quod.model.base import _Node
-from quod.model.types import IntType, Type
+from quod.model.types import FloatType, IntType, Type
 
 
 class StringConstant(_Node):
@@ -24,6 +24,53 @@ class IntLit(_Node):
     kind: Literal["llvm.const_int"] = "llvm.const_int"
     type: "IntType"
     value: int
+
+
+class FloatLit(_Node):
+    """IEEE 754 finite floating-point literal.
+
+    Distinct kind from `IntLit` so the discriminator stays unambiguous
+    and the type union is cleanly partitioned. The strict-IEEE
+    decisions (NaN-payload-undefined, subnormals preserved, no FMA
+    contraction, default rounding) live on the `F32Type` / `F64Type`
+    docstrings.
+
+    Special values (`+inf`, `-inf`, `NaN`) are not yet representable.
+    Pydantic's JSON mode silently coerces non-finite floats to `null`
+    on serialize (round-tripping as a parse error), so we reject them
+    at construction with `field_validator` to fail loudly. The design
+    chose to defer the special-value vocabulary until a real consumer
+    arrives — see ".scratch/floats/00-overview.md" §"Open:
+    special-value literals" for the recommended option.
+    """
+    kind: Literal["quod.float_lit"] = "quod.float_lit"
+    type: "FloatType"
+    value: float
+
+    @field_validator("value")
+    @classmethod
+    def _reject_non_finite(cls, v: float) -> float:
+        import math
+        if not math.isfinite(v):
+            raise ValueError(
+                f"FloatLit value must be finite; got {v!r}. "
+                "Special values (+inf / -inf / NaN) are deferred — "
+                "see .scratch/floats/00-overview.md."
+            )
+        return v
+
+
+class FNeg(_Node):
+    """IEEE 754 unary negation: flip the sign bit unconditionally,
+    including for NaN and `-0.0`.
+
+    Lowers to LLVM `fneg`. Cannot be folded to
+    `BinOp(fsub, FloatLit(0.0), x)` because that returns `+0.0` for
+    `-0.0` input — fsub follows the IEEE rule that
+    `0.0 - (-0.0) = +0.0`. `fneg` flips the sign bit directly.
+    """
+    kind: Literal["quod.fneg"] = "quod.fneg"
+    operand: "Expr"
 
 
 class ParamRef(_Node):
@@ -40,6 +87,8 @@ class BinOp(_Node):
       cmp (u)   — ult, ule, ugt, uge               : iN in / i1 out
       bitwise   — or, and, xor                      : iN in / iN out
       shifts    — shl, ashr, lshr                   : iN in / iN out
+      f-arith   — fadd, fsub, fmul, fdiv, frem     : fN in / fN out
+      f-cmp     — feq, fne, flt, fle, fgt, fge     : fN in / i1 out
 
     Operands of arith/bitwise/cmp must have the same type; LLVM's verifier
     enforces this at lower time. The signed/unsigned distinction matches
@@ -52,6 +101,12 @@ class BinOp(_Node):
     have the same iN type as the value; shift count >= bitwidth is
     undefined behaviour (matches LLVM).
 
+    Float ops follow strict IEEE 754. `fne` lowers to LLVM `une` so
+    `NaN != NaN` returns true; the magnitude comparisons (`flt`/`fle`/
+    `fgt`/`fge`) and `feq` lower to ordered preds, which return false
+    when either operand is NaN. `frem` is `fmod`-like (LLVM `frem`).
+    No FMA contraction; no fenv access.
+
     For short-circuit boolean combinators (correct in the presence of
     side-effecting operands), use `ShortCircuitOr` / `ShortCircuitAnd` —
     those are i1-only and synthesise branches.
@@ -63,6 +118,13 @@ class BinOp(_Node):
         "ult", "ule", "ugt", "uge",
         "or", "and", "xor",
         "shl", "ashr", "lshr",
+        # Float arithmetic — both operands same float type; result is operand type.
+        "fadd", "fsub", "fmul", "fdiv", "frem",
+        # Float comparison — both operands same float type; result is i1.
+        # Lower to LLVM ordered preds (false if either is NaN) plus `une`
+        # for fne so `NaN != NaN` returns true. Rust + C agree on this
+        # mapping.
+        "feq", "fne", "flt", "fle", "fgt", "fge",
     ]
     lhs: "Expr"
     rhs: "Expr"
@@ -415,7 +477,8 @@ class CharLit(_Node):
 
 Expr = Annotated[
     Union[
-        IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
+        IntLit, FloatLit, FNeg,
+        ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
         IfExpr, Not, ReturnRef,
         Call, StringRef, FieldRead, LoadField, StructInit, PtrOffset, Cast,
         Load, NullPtr, CharLit, EnumInit, SizeOf, TryExpr, TraitCall,

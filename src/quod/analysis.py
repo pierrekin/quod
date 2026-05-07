@@ -24,6 +24,7 @@ from quod.model import (
     Claim,
     Cast,
     DerivedJustification,
+    FNeg,
     ExprStmt,
     FieldRead,
     FieldSet,
@@ -181,6 +182,9 @@ def _walk_calls_in_expr(expr) -> Iterator[Call]:
             yield from _walk_calls_in_expr(o)
         case Cast(value=v):
             yield from _walk_calls_in_expr(v)
+        case FNeg(operand=op):
+            yield from _walk_calls_in_expr(op)
         case Load(ptr=p):
             yield from _walk_calls_in_expr(p)
-        # IntLit, ParamRef, LocalRef, StringRef, NullPtr carry no nested Calls.
+        # IntLit, FloatLit, ParamRef, LocalRef, StringRef, NullPtr carry
+        # no nested Calls.
