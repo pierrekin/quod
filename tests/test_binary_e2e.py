@@ -215,6 +215,33 @@ def test_real_ghidra_chain_walker_recovers_compare_const_threshold(ingested_prog
     )
 
 
+def test_real_ghidra_type_refs_bounded_by_signatures(ingested_program):
+    """The exporter filters Ghidra's DataType universe down to types
+    that actually appear on a function signature in this dump. Without
+    the filter, every binary dumps ~150 types from
+    `generic_clib_64.gdt` regardless of whether the binary uses them.
+
+    This is a structural cap (each emitted type's name must appear on
+    some signature), not a count assertion — the real number depends
+    on which signatures Ghidra recovered."""
+    program, _, _ = ingested_program
+    unit = program.binary_units[0]
+    sig_names: set[str] = set()
+    for fn in unit.functions:
+        sig_names.add(fn.return_type_name)
+        for p in fn.params:
+            sig_names.add(p.type_name)
+    type_ref_names = {t.name for t in unit.type_refs}
+    extras = type_ref_names - sig_names
+    assert not extras, (
+        f"type_refs leaked names not on any signature: {sorted(extras)}; "
+        f"the exporter should filter to signature-referenced types only"
+    )
+    # And we should be well under "Ghidra's full archive" — ~150 was
+    # the pre-filter count for a toy .so.
+    assert len(unit.type_refs) < 50
+
+
 def test_real_ghidra_multi_ingest_in_one_process(tmp_path_factory):
     """Regression for the JVM-multi-load issue (P0 in 06-polish.md).
 

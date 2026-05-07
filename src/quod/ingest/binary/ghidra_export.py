@@ -139,7 +139,7 @@ def _build_dump(program, binary_path: str) -> dict[str, Any]:
             "functions": functions,
             "data": _data_dump(program),
             "externs": _extern_dump(program),
-            "type_refs": _type_ref_dump(program),
+            "type_refs": _type_ref_dump(program, _used_type_names(functions)),
         }
     finally:
         decompiler.dispose()
@@ -457,26 +457,61 @@ def _extern_dump(program) -> list[dict[str, Any]]:
 # ---------- Type refs ----------
 
 
-def _type_ref_dump(program) -> list[dict[str, Any]]:
-    """Dump every Ghidra DataType the program knows about. We do **not**
-    recover or interpret these — `BinTypeRef` is opaque-by-contract
-    (see `quod.model.layer_a_bin.BinTypeRef`). Useful as a hint surface
-    for future claim providers; no semantic load in v1."""
+def _used_type_names(functions: list[dict[str, Any]]) -> set[str]:
+    """Collect every type-name string that appears on a function's
+    return type or parameter list in this dump. Used by
+    `_type_ref_dump` to filter Ghidra's DataType universe down to
+    types that are actually referenced — without this, the dump emits
+    every type in `generic_clib_64.gdt` (~150 types for a toy `.so`)
+    even when nothing in the binary uses them."""
+    names: set[str] = set()
+    for fn in functions:
+        sig = fn.get("signature") or {}
+        rt = sig.get("return_type")
+        if rt:
+            names.add(rt)
+        for p in sig.get("params") or []:
+            t = p.get("type")
+            if t:
+                names.add(t)
+    return names
+
+
+def _type_ref_dump(program, used_type_names: set[str]) -> list[dict[str, Any]]:
+    """Dump only the DataTypes whose name appears on a function
+    signature in this dump (return type or param). `BinTypeRef` is
+    opaque-by-contract (see `quod.model.layer_a_bin.BinTypeRef`); the
+    point of these entries is to record size + structural hash for
+    types downstream consumers might reason about, not to enumerate
+    Ghidra's full type catalog.
+
+    A v2 could follow composite/typedef references transitively
+    (struct → field types, typedef → base) for higher recall on
+    structural-hint providers. v1 keeps it simple: name match against
+    what we already emit on signatures."""
     out: list[dict[str, Any]] = []
+    seen_keys: set[tuple[str, int]] = set()
     dtm = program.getDataTypeManager()
     it = dtm.getAllDataTypes()
     while it.hasNext():
         dt = it.next()
+        name = str(dt.getName())
+        if name not in used_type_names:
+            continue
         try:
             size = int(dt.getLength())
         except Exception:
             size = 0
+        key = (name, size)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
         out.append({
-            "name": str(dt.getName()),
+            "name": name,
             "size": size,
             # v1 hash: name + size. A future export can compute a real
             # structural hash over Ghidra's DataType representation.
-            "structural_hash": "ghidra:%s:%d" % (str(dt.getName()), size),
+            "structural_hash": "ghidra:%s:%d" % (name, size),
         })
     return out
 
