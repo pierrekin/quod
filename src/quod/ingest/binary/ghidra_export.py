@@ -33,6 +33,16 @@ from pathlib import Path
 from typing import Any
 
 
+# JSON contract version emitted by this exporter. Bump when:
+#  - A field is removed or renamed.
+#  - A field's type changes incompatibly (e.g. the hex-string → int
+#    flip we did for varnode offsets — that one happened before any
+#    external consumers existed; future changes of that flavor MUST
+#    bump).
+#  - A field's semantics change (same shape, different meaning).
+# Do NOT bump for purely additive optional fields — the parser uses
+# `.get(...)` throughout, so new fields never break old readers.
+# Update `SUPPORTED_SCHEMA_VERSION` in driver.py in lockstep.
 SCHEMA_VERSION = 1
 
 

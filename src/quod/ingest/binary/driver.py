@@ -51,9 +51,12 @@ from quod.model import (
 
 
 SUPPORTED_SCHEMA_VERSION = 1
-"""The JSON contract version this driver speaks. The exporter emits
-`schema_version: 1`; future Ghidra-side changes that break the contract
-bump this number on both sides."""
+"""The JSON contract version this driver speaks. Bump in lockstep
+with `SCHEMA_VERSION` in `ghidra_export.py` when the contract breaks
+(field removed/renamed, type changed incompatibly, semantics changed).
+Purely additive optional fields don't require a bump — the parser
+uses `.get(...)` everywhere and tolerates unknown new fields. See
+`ghidra_export.py:SCHEMA_VERSION` for the matching guidance."""
 
 
 class BinaryIngestError(Exception):
