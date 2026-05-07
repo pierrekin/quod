@@ -233,6 +233,13 @@ def merge_program(
         _by_name(existing.source_units, key="source_path")
         | _by_name(new.source_units, key="source_path")
     )
+    # Binary units (Ghidra-ingested artifacts) merge additively by path.
+    # Same shape as source_units: re-ingesting the same .so overwrites
+    # its entry; ingesting a new .so adds another entry.
+    binary_units = (
+        _by_name(existing.binary_units, key="path")
+        | _by_name(new.binary_units, key="path")
+    )
 
     seen = {imp.module for imp in existing.imports}
     imports = list(existing.imports)
@@ -287,6 +294,7 @@ def merge_program(
         enums=tuple(enums.values()),
         imports=tuple(imports),
         source_units=tuple(source_units.values()),
+        binary_units=tuple(binary_units.values()),
         edges=tuple(edges),
         equivalences=tuple(equivalences),
     )

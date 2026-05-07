@@ -335,6 +335,36 @@ def test_invalid_json_raises(tmp_path):
         ingest_binary_dump(p)
 
 
+def test_merge_preserves_binary_units(tmp_path):
+    """`merge_program` must not drop `binary_units` when folding two
+    programs together. Regression: merging a c-ingest result into a
+    program that already had a `BinUnit` from a prior `ingest binary`
+    call would erase the binary unit, because `merge_program` built
+    its result via the `Program(...)` constructor without copying
+    `binary_units` over.
+
+    Concretely: the bare `quod ingest` callback runs entries in
+    declaration order. After `[bin a, c b, bin c]`, the second c-file
+    ingest's merge must still preserve `bin a`'s unit; the third
+    binary ingest then appends `bin c` alongside it.
+    """
+    from quod.merge import merge_program
+    dump_path = _write_dump(tmp_path, _libdemo_dump())
+    a = ingest_binary_dump(dump_path)  # has 1 binary_unit
+    assert len(a.binary_units) == 1
+
+    # A fresh c-ingest-style Program (no binary_units of its own).
+    b = Program(source_units=(_greet_c_unit(),))
+    assert len(b.binary_units) == 0
+
+    merged, _ = merge_program(a, b)
+    assert len(merged.binary_units) == 1, (
+        "merge_program dropped a.binary_units when folding in b"
+    )
+    assert merged.binary_units[0].path == a.binary_units[0].path
+    assert merged.source_units == b.source_units
+
+
 def test_unknown_call_kind_raises(tmp_path):
     bad = _libdemo_dump()
     bad["functions"][0]["calls"][0]["call_kind"] = "virtual"

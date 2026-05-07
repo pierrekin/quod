@@ -167,3 +167,22 @@ def test_real_ghidra_range_hints_provider_fires_on_compare_const(ingested_progra
         assert c.regime == "lattice"
         assert c.justification.analysis == "ghidra.range_hints"
         assert c.justification.inputs  # bin.fn id pinned
+
+
+def test_real_ghidra_chain_walker_recovers_compare_const_threshold(ingested_program):
+    """Source: `if (v < 100) return v; return 100;`. clang at `-O0 -g`
+    lowers `v < 100` to `INT_SUB v, 100; INT_SLESS tmp, 0` — the
+    threshold lives on the INT_SUB. The chain walker must recover
+    K=100 from a real Ghidra dump, not just the K=0 sign-test from the
+    direct INT_SLESS."""
+    from quod.predicate.binary_hints import derive_binary_range_hints
+    program, _, _ = ingested_program
+
+    claims = derive_binary_range_hints(program).get("compare_const", ())
+    rendered = "\n".join(c.expr.model_dump_json() for c in claims)
+    # Either 100 directly (the int_range upper bound) or 99 (when the
+    # candidate is `int_range(v, [-inf, K-1])`) confirms recovery.
+    assert "100" in rendered or "99" in rendered, (
+        f"chain walker missed clang's INT_SUB→INT_SLESS lowering of "
+        f"`v < 100`; recovered constants only: {rendered}"
+    )

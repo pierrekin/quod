@@ -266,6 +266,165 @@ def test_range_hints_signed_constants_reinterpret_correctly(tmp_path):
     assert "4294967293" not in rendered
 
 
+# ---------- Compiler-lowered comparison chains ----------
+
+
+def _libsign_dump_with_sub_chain() -> dict:
+    """Same shape as `_libsign_dump`, but the INT_SLESS pattern follows
+    clang's `-O0 -g` lowering of `v < 100`:
+
+        INT_SUB v_loaded, 100  -> tmp
+        INT_SLESS tmp, 0
+
+    The constant 100 lives on the INT_SUB, not the INT_SLESS. The
+    chain walker should recover it by walking back through the
+    per-block varnode-definition map.
+    """
+    base = _libsign_dump()
+    base["functions"][0]["basic_blocks"][0]["pcode"] = [
+        # Pretend the parameter is loaded into a temp varnode (in real
+        # output this would be a stack roundtrip; the precise shape
+        # doesn't matter for the chain walker — only the producer
+        # relationship between INT_SUB and INT_SLESS does).
+        {
+            "opcode": "COPY",
+            "inputs": [{"space": "register", "offset": 0x38, "size": 4}],
+            "output": {"space": "unique", "offset": 0x100, "size": 4},
+            "instr_address": "0x401120",
+        },
+        # The lowered comparison: subtract the threshold first…
+        {
+            "opcode": "INT_SUB",
+            "inputs": [
+                {"space": "unique", "offset": 0x100, "size": 4},
+                {"space": "const", "offset": 100, "size": 4},
+            ],
+            "output": {"space": "unique", "offset": 0x200, "size": 4},
+            "instr_address": "0x401124",
+        },
+        # …then sign-test the result.
+        {
+            "opcode": "INT_SLESS",
+            "inputs": [
+                {"space": "unique", "offset": 0x200, "size": 4},
+                {"space": "const", "offset": 0, "size": 4},
+            ],
+            "output": {"space": "register", "offset": 0x207, "size": 1},
+            "instr_address": "0x401128",
+        },
+        {
+            "opcode": "RETURN",
+            "inputs": [{"space": "register", "offset": 0x20, "size": 8}],
+            "output": None,
+            "instr_address": "0x40113e",
+        },
+    ]
+    return base
+
+
+def test_chain_walker_recovers_int_sub_threshold(tmp_path):
+    """clang's `-O0 -g` lowers `v < 100` to `INT_SUB v, 100 -> tmp;
+    INT_SLESS tmp, 0`. The chain walker must recover K=100 from the
+    INT_SUB and emit candidates against it (not just K=0 from the
+    INT_SLESS sign test)."""
+    dump = tmp_path / "libsign.json"
+    dump.write_text(json.dumps(_libsign_dump_with_sub_chain()))
+    base = Program(functions=(_compare_const_function(),))
+    program = ingest_binary_dump(dump, program=base)
+    derived = derive_binary_range_hints(program)
+    assert "compare_const" in derived
+    # K=100 should appear in the rendered predicates. The K=0 sign-test
+    # also appears (we don't suppress it; the verifier filters), but
+    # the load-bearing assertion is K=100 isn't lost.
+    rendered = "\n".join(c.expr.model_dump_json() for c in derived["compare_const"])
+    assert "100" in rendered or "99" in rendered, rendered
+
+
+def test_chain_walker_recovers_int_add_negative_threshold(tmp_path):
+    """The symmetric form: `v + (-100) < 0` ≡ `v < 100`. clang
+    sometimes emits this when the immediate fits the ADD encoding
+    better than SUB."""
+    dump_data = _libsign_dump_with_sub_chain()
+    pcode = dump_data["functions"][0]["basic_blocks"][0]["pcode"]
+    # Replace the INT_SUB with an INT_ADD against the *negative* of K.
+    pcode[1] = {
+        "opcode": "INT_ADD",
+        "inputs": [
+            {"space": "unique", "offset": 0x100, "size": 4},
+            {"space": "const", "offset": (-100) & 0xFFFFFFFF, "size": 4},
+        ],
+        "output": {"space": "unique", "offset": 0x200, "size": 4},
+        "instr_address": "0x401124",
+    }
+    dump = tmp_path / "libsign.json"
+    dump.write_text(json.dumps(dump_data))
+    base = Program(functions=(_compare_const_function(),))
+    program = ingest_binary_dump(dump, program=base)
+    derived = derive_binary_range_hints(program)
+    rendered = "\n".join(c.expr.model_dump_json() for c in derived["compare_const"])
+    assert "100" in rendered or "99" in rendered, rendered
+
+
+def test_chain_walker_does_not_cross_basic_blocks(tmp_path):
+    """Per-block scope only: an INT_SUB in block A producing varnode X
+    must not be picked up by an INT_SLESS X, 0 in block B (because at
+    block B's entry, X could come from any predecessor — the chain is
+    not sound across CFG edges)."""
+    dump_data = _libsign_dump()
+    # Replace the single block with two blocks; the SUB lives in the
+    # first, the SLESS in the second.
+    dump_data["functions"][0]["basic_blocks"] = [
+        {
+            "address": "0x401120",
+            "end": "0x401128",
+            "successors": [],  # successors are stitched by addr; empty is fine for v1
+            "pcode": [
+                {
+                    "opcode": "INT_SUB",
+                    "inputs": [
+                        {"space": "register", "offset": 0x38, "size": 4},
+                        {"space": "const", "offset": 100, "size": 4},
+                    ],
+                    "output": {"space": "unique", "offset": 0x200, "size": 4},
+                    "instr_address": "0x401120",
+                },
+            ],
+        },
+        {
+            "address": "0x401128",
+            "end": "0x401130",
+            "successors": [],
+            "pcode": [
+                # The INT_SLESS in a *different* block; the per-block
+                # defs map is fresh here, so the chain walker cannot
+                # reach the INT_SUB in the previous block.
+                {
+                    "opcode": "INT_SLESS",
+                    "inputs": [
+                        {"space": "unique", "offset": 0x200, "size": 4},
+                        {"space": "const", "offset": 0, "size": 4},
+                    ],
+                    "output": {"space": "register", "offset": 0x207, "size": 1},
+                    "instr_address": "0x401128",
+                },
+            ],
+        },
+    ]
+    dump = tmp_path / "libsign.json"
+    dump.write_text(json.dumps(dump_data))
+    base = Program(functions=(_compare_const_function(),))
+    program = ingest_binary_dump(dump, program=base)
+    derived = derive_binary_range_hints(program)
+    # Only the K=0 from the cross-block INT_SLESS should surface, NOT
+    # K=100 (the cross-block chain isn't a valid recovery path).
+    if "compare_const" in derived:
+        rendered = "\n".join(c.expr.model_dump_json() for c in derived["compare_const"])
+        assert "100" not in rendered, (
+            f"chain walker reached across a basic block boundary; "
+            f"recovered K=100 from cross-block INT_SUB: {rendered}"
+        )
+
+
 # ---------- Provider registry integration ----------
 
 

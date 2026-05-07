@@ -28,13 +28,17 @@ V1 limitations (each is a polish item, see `.scratch/ghidra/06-polish.md`):
 - Only single-int-parameter source functions get hints. Multi-param
   attribution requires varnode→param ABI mapping (x86_64 SysV: RDI is
   param[0], RSI is param[1], etc.).
-- Only `INT_SLESS` / `INT_SLESSEQUAL` p-code ops are scanned. Compilers
-  often lower `v < K` to `(v - K) < 0`; a v2 should walk INT_SUB →
-  INT_SLESS chains to recover the original constant.
 - No control-flow refinement. The design memo describes the cleaner
   pattern "if (x < 0) return early; otherwise proceed" — recovering
   the implicit "x ≥ 0 in the body" requires CFG analysis the v1
   doesn't yet do.
+
+What this module *does* recover:
+- Direct `INT_SLESS X, K` constants.
+- `INT_SUB Y, K -> tmp; INT_SLESS tmp, 0` chains (clang's `-O0 -g`
+  lowering of `v < K`) — the constant lives on the INT_SUB and we
+  walk back through a per-block varnode-definition map.
+- `INT_ADD Y, -K -> tmp; INT_SLESS tmp, 0` for the symmetric add form.
 """
 
 from __future__ import annotations
@@ -42,6 +46,8 @@ from __future__ import annotations
 from quod.model import (
     BinaryProvenance,
     BinFunction,
+    BinPCodeOp,
+    BinVarnode,
     DerivedJustification,
     Function,
     I1Type,
@@ -201,26 +207,106 @@ def _pair_function_to_bin(
 
 
 def _signed_compare_constants(bin_fn: BinFunction) -> set[int]:
-    """Collect distinct constant operands seen in `INT_SLESS` /
+    """Collect distinct comparison thresholds seen in `INT_SLESS` /
     `INT_SLESSEQUAL` p-code ops across every basic block of `bin_fn`.
 
-    Constants in a varnode are stored in the `const` address space —
-    `(space="const", offset=K, size=N)` where `K` is the literal
-    value. Filters out compiler artifacts (`_ARTIFACT_CONSTANTS`).
+    Two recovery paths:
+
+    **Direct.** A constant operand on the comparison itself
+    (`INT_SLESS X, K`). The most common case; clang at higher
+    optimization levels keeps comparisons in this form.
+
+    **Chain through INT_SUB / INT_ADD.** clang at `-O0 -g` lowers
+    `v < K` to two ops:
+
+        INT_SUB v, K  -> tmp        (or INT_ADD v, -K -> tmp)
+        INT_SLESS tmp, 0
+
+    so `K` lives on the `INT_SUB` rather than the `INT_SLESS`. We
+    walk each block's pcode in order, maintain a per-block
+    `varnode → producer-op` map, and when an `INT_SLESS X, 0`
+    appears we look up `X`'s producer to recover the original `K`.
+
+    Per-block scope only: we don't track cross-block dataflow
+    because a varnode at block entry could come from any predecessor.
+    Filters out compiler artifacts (`_ARTIFACT_CONSTANTS`).
     """
     out: set[int] = set()
     for bb in bin_fn.basic_blocks:
+        # Per-block varnode-definition map. Cleared between blocks.
+        defs: dict[tuple[str, int, int], BinPCodeOp] = {}
         for op in bb.pcode_ops:
-            if op.opcode not in _SIGNED_CMP_OPCODES:
-                continue
-            for vn in op.inputs:
-                if vn.space != "const":
-                    continue
-                k = vn.offset
-                if k in _ARTIFACT_CONSTANTS:
-                    continue
-                out.add(_signed_const(k, vn.size))
+            if op.opcode in _SIGNED_CMP_OPCODES:
+                # Direct: constants on the comparison itself.
+                for vn in op.inputs:
+                    if vn.space != "const":
+                        continue
+                    if vn.offset in _ARTIFACT_CONSTANTS:
+                        continue
+                    out.add(_signed_const(vn.offset, vn.size))
+                # Chain: constants recovered from a preceding INT_SUB/ADD.
+                k = _threshold_through_sub_chain(op, defs)
+                if k is not None and k not in _ARTIFACT_CONSTANTS:
+                    out.add(k)
+            # Record this op's output for downstream chain lookups.
+            # Done after the comparison-handling so a comparison that
+            # produces an output (a flag varnode) doesn't shadow itself.
+            if op.output is not None:
+                defs[_varnode_key(op.output)] = op
     return out
+
+
+def _varnode_key(vn: BinVarnode) -> tuple[str, int, int]:
+    """Hashable identity for a varnode within a basic block. Two
+    varnodes with the same `(space, offset, size)` triple alias each
+    other in p-code semantics, so sharing the key is correct."""
+    return (vn.space, vn.offset, vn.size)
+
+
+def _threshold_through_sub_chain(
+    cmp_op: BinPCodeOp,
+    defs: dict[tuple[str, int, int], BinPCodeOp],
+) -> int | None:
+    """If `cmp_op` is `INT_S{LESS,LESSEQUAL} X, 0` and `X` was produced
+    earlier in this block by an `INT_SUB Y, K` (or `INT_ADD Y, -K`),
+    return `K` — the original comparison threshold before the lowering.
+
+    Returns None when:
+    - The comparison's RHS isn't a constant, or isn't 0.
+    - `X` wasn't defined in this block (could be a function parameter,
+      a stack-loaded value, or a cross-block-live varnode).
+    - The producer wasn't an INT_SUB/INT_ADD, or its constant operand
+      wasn't on the right.
+
+    `INT_SUB const, Y -> tmp` (constant on the left) is not handled
+    in v1 — it'd encode `K - Y < 0` ⇒ `Y > K`, a different threshold
+    flavor; clang doesn't normally produce it for `<` comparisons.
+    """
+    if len(cmp_op.inputs) != 2:
+        return None
+    lhs, rhs = cmp_op.inputs
+    if rhs.space != "const":
+        return None
+    if _signed_const(rhs.offset, rhs.size) != 0:
+        return None
+
+    producer = defs.get(_varnode_key(lhs))
+    if producer is None or len(producer.inputs) != 2:
+        return None
+
+    sub_lhs, sub_rhs = producer.inputs
+    if sub_rhs.space != "const":
+        return None
+    sub_k = _signed_const(sub_rhs.offset, sub_rhs.size)
+
+    if producer.opcode == "INT_SUB":
+        # `INT_SUB Y, K -> tmp; INT_SLESS tmp, 0` is `Y < K`.
+        return sub_k
+    if producer.opcode == "INT_ADD":
+        # `INT_ADD Y, -K -> tmp; INT_SLESS tmp, 0` is `Y < K`.
+        # The constant on INT_ADD is the *negative* of the threshold.
+        return -sub_k
+    return None
 
 
 def _signed_const(raw: int, size_bytes: int) -> int:
