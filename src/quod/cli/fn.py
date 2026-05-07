@@ -131,6 +131,13 @@ def fn_show(
              "(Ghidra-recovered `bin.fn`). Only available for binary-"
              "derived programs.",
     ),
+    raw_decompile: bool = typer.Option(
+        False, "--raw-decompile",
+        help="With --binary, render Ghidra's decompile text verbatim "
+             "(including `/* WARNING ... */` block comments and "
+             "surrounding blank lines). Default elides them for "
+             "readability; the underlying node is unchanged.",
+    ),
 ) -> None:
     """Print a single function. Accepts a name or a content-hash prefix.
 
@@ -140,6 +147,12 @@ def fn_show(
     source for C-derived programs, layer-B structured form, and the
     Ghidra-recovered binary form respectively. The three are mutually
     exclusive with each other; `--json` works with any of them."""
+    if raw_decompile and not binary:
+        typer.echo(
+            "error: --raw-decompile only applies to --binary",
+            err=True,
+        )
+        raise typer.Exit(2)
     if sum([source, structured, binary]) > 1:
         typer.echo(
             "error: --source, --structured, and --binary are mutually exclusive",
@@ -170,7 +183,7 @@ def fn_show(
         if json_output:
             _emit_json(bin_fn)
             return
-        typer.echo(format_bin_fn(bin_fn))
+        typer.echo(format_bin_fn(bin_fn, raw_decompile=raw_decompile))
         return
 
     try:

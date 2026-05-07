@@ -256,17 +256,51 @@ def _format_bin_unit(unit: "BinUnit", *, label: NodeLabel) -> str:
     return "\n".join(lines)
 
 
-def format_bin_fn(fn: "BinFunction", *, label: NodeLabel = _NO_LABEL) -> str:
+def _clean_decompile_text(text: str) -> str:
+    """Display-only filter for Ghidra decompile output.
+
+    - Strip `/* ... */` block comments (Ghidra emits these as
+      `/* WARNING: Removing unreachable block ... */`,
+      `/* Subroutine type: ... */`, etc.). They're informational
+      diagnostics, not part of the decompiled C.
+    - Trim leading and trailing blank-only lines (Ghidra prefixes the
+      function header with a blank line and pads the trailer).
+
+    Does **not** modify the underlying `BinFunction.decompile_text`
+    field; layer-A's preserve-verbatim rule still holds. Callers that
+    need the unaltered text pass `raw_decompile=True` to
+    `format_bin_fn`.
+    """
+    import re
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    lines = text.splitlines()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines)
+
+
+def format_bin_fn(
+    fn: "BinFunction",
+    *,
+    label: NodeLabel = _NO_LABEL,
+    raw_decompile: bool = False,
+) -> str:
     """Render a layer-A `BinFunction` as a structural summary plus the
     decompile text. Used by `_format_bin_unit` for the `binary_units`
     section and by the CLI's `quod fn show --binary` for single-
     function rendering.
 
-    The decompile text is emitted verbatim — `BinFunction.decompile_text`
-    is opaque by contract (see `quod.model.layer_a_bin`); this renderer
-    does not re-tokenize or re-parse it. P-code per basic block is
-    summarized as opcodes-only (`addr [n ops]`); the full p-code is
-    accessible via `--json`."""
+    `BinFunction.decompile_text` is opaque by contract — the underlying
+    string in the node is preserved verbatim. By default this renderer
+    elides Ghidra's `/* ... */` block comments (warnings about
+    unreachable blocks, type-recovery notes) and trims surrounding
+    blank lines for readability; pass `raw_decompile=True` to keep the
+    full decompile text untouched.
+
+    P-code per basic block is summarized as opcodes-only
+    (`addr [n ops]`); the full p-code is accessible via `--json`."""
     params = ", ".join(f"{p.type_name} {p.name}" for p in fn.params)
     head = (
         f"{label(fn)}bin.fn 0x{fn.address:x} "
@@ -289,9 +323,12 @@ def format_bin_fn(fn: "BinFunction", *, label: NodeLabel = _NO_LABEL) -> str:
                 f"    0x{c.instruction_address:x} -> {c.callee_id} "
                 f"({c.call_kind})"
             )
-    if fn.decompile_text:
+    decompile_text = (
+        fn.decompile_text if raw_decompile else _clean_decompile_text(fn.decompile_text)
+    )
+    if decompile_text:
         lines.append("  decompile:")
-        for raw in fn.decompile_text.splitlines() or [""]:
+        for raw in decompile_text.splitlines() or [""]:
             lines.append(f"    {raw}")
     lines.append("}")
     return "\n".join(lines)

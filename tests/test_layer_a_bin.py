@@ -242,6 +242,63 @@ def test_bin_call_edge_kind_is_constrained():
         )
 
 
+def test_format_bin_fn_clean_decompile_strips_block_comments():
+    """Display-only filter: `_clean_decompile_text` strips `/* */`
+    blocks and trims surrounding blank lines. The underlying node's
+    `decompile_text` is unaltered."""
+    from quod.model.pretty import _clean_decompile_text
+    text = (
+        "\n"
+        "/* WARNING: Removing unreachable block (ram,0x123) */\n"
+        "void f(int x)\n"
+        "{\n"
+        "  /* Subroutine type: stdcall */\n"
+        "  return x + 1;\n"
+        "}\n"
+        "\n"
+    )
+    cleaned = _clean_decompile_text(text)
+    assert "WARNING" not in cleaned
+    assert "Subroutine type" not in cleaned
+    assert "void f(int x)" in cleaned
+    assert "return x + 1;" in cleaned
+    # Trimmed top/bottom blank lines but preserved internal structure.
+    assert not cleaned.startswith("\n")
+    assert not cleaned.endswith("\n\n")
+
+
+def test_format_bin_fn_clean_decompile_handles_multiline_blocks():
+    """A `/* ... */` that spans multiple lines is stripped wholesale."""
+    from quod.model.pretty import _clean_decompile_text
+    text = (
+        "/* multi\n"
+        " * line\n"
+        " * comment */\n"
+        "int f(void) { return 0; }\n"
+    )
+    cleaned = _clean_decompile_text(text)
+    assert "multi" not in cleaned
+    assert "int f(void)" in cleaned
+
+
+def test_format_bin_fn_raw_decompile_preserves_text():
+    """`format_bin_fn(raw_decompile=True)` keeps the full text."""
+    from quod.model import format_bin_fn
+    fn = BinFunction(
+        address=0x1000,
+        mangled_name="f",
+        demangled_name="f",
+        return_type_name="void",
+        calling_convention="__cdecl",
+        decompile_text="/* WARNING ... */\nvoid f(void) {}\n",
+    )
+    rendered = format_bin_fn(fn, raw_decompile=True)
+    assert "WARNING" in rendered
+    rendered_clean = format_bin_fn(fn)
+    assert "WARNING" not in rendered_clean
+    assert "void f(void)" in rendered_clean
+
+
 def test_bin_unit_round_trips_alongside_source_units(tmp_path):
     """`source_units` (C frontend) and `binary_units` (binary frontend)
     are independent collections at program level — neither should

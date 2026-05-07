@@ -267,6 +267,109 @@ def test_fn_show_three_layer_flags_mutually_exclusive(tmp_path):
     assert "mutually exclusive" in result.output
 
 
+def test_fn_show_binary_elides_block_comments_by_default(tmp_path):
+    """Ghidra emits `/* WARNING ... */` and similar block comments in
+    its decompile output. The default renderer strips them; the raw
+    text in the node is preserved for callers that need it."""
+    dump = _libdemo_dump()
+    dump["functions"][0]["decompile"] = (
+        "/* WARNING: Removing unreachable block (ram,0x12345) */\n"
+        "\n"
+        "void greet(void)\n"
+        "{\n"
+        "  puts(\"hi\");\n"
+        "  return;\n"
+        "}\n"
+    )
+    dump_path = tmp_path / "libdemo.json"
+    dump_path.write_text(json.dumps(dump))
+    program = ingest_binary_dump(dump_path)
+    save_program(program, tmp_path / "program.json")
+    (tmp_path / "quod.toml").write_text(
+        'build_dir  = "build"\n'
+        'proofs_dir = "proofs"\n'
+        '\n'
+        '[[program]]\n'
+        'name = "demo"\n'
+        'version = "0.1.0"\n'
+        'file = "program.json"\n'
+    )
+
+    default = _quod(tmp_path, "fn", "show", "greet", "--binary")
+    assert default.exit_code == 0
+    assert "WARNING" not in default.output
+    assert "Removing unreachable block" not in default.output
+    # The actual decompiled body must still render.
+    assert "void greet(void)" in default.output
+
+
+def test_fn_show_binary_raw_decompile_keeps_block_comments(tmp_path):
+    """`--raw-decompile` opt-out — the full decompile text including
+    `/* */` blocks renders verbatim. Useful when diagnosing what
+    Ghidra actually emitted (e.g., the warnings name addresses that
+    point at unanalyzable code)."""
+    dump = _libdemo_dump()
+    dump["functions"][0]["decompile"] = (
+        "/* WARNING: Removing unreachable block (ram,0x12345) */\n"
+        "void greet(void) { puts(\"hi\"); }\n"
+    )
+    dump_path = tmp_path / "libdemo.json"
+    dump_path.write_text(json.dumps(dump))
+    program = ingest_binary_dump(dump_path)
+    save_program(program, tmp_path / "program.json")
+    (tmp_path / "quod.toml").write_text(
+        'build_dir  = "build"\n'
+        'proofs_dir = "proofs"\n'
+        '\n'
+        '[[program]]\n'
+        'name = "demo"\n'
+        'version = "0.1.0"\n'
+        'file = "program.json"\n'
+    )
+
+    raw = _quod(tmp_path, "fn", "show", "greet", "--binary", "--raw-decompile")
+    assert raw.exit_code == 0
+    assert "WARNING" in raw.output
+    assert "Removing unreachable block" in raw.output
+
+
+def test_fn_show_raw_decompile_requires_binary(tmp_path):
+    """`--raw-decompile` is meaningless without `--binary` — refuse
+    rather than silently ignoring the flag."""
+    _write_project(tmp_path)
+    result = _quod(tmp_path, "fn", "show", "greet", "--raw-decompile")
+    assert result.exit_code == 2
+    assert "only applies to --binary" in result.output
+
+
+def test_fn_show_binary_json_keeps_full_decompile_text(tmp_path):
+    """Display-only filtering: the underlying `BinFunction.decompile_text`
+    in the node is preserved verbatim — `--json` must still emit the
+    `/* */` block comments because layer-A's preserve-verbatim rule
+    holds for the data, not just the renderer."""
+    dump = _libdemo_dump()
+    dump["functions"][0]["decompile"] = (
+        "/* WARNING: text in node */\nvoid greet(void) {}\n"
+    )
+    dump_path = tmp_path / "libdemo.json"
+    dump_path.write_text(json.dumps(dump))
+    program = ingest_binary_dump(dump_path)
+    save_program(program, tmp_path / "program.json")
+    (tmp_path / "quod.toml").write_text(
+        'build_dir  = "build"\n'
+        'proofs_dir = "proofs"\n'
+        '\n'
+        '[[program]]\n'
+        'name = "demo"\n'
+        'version = "0.1.0"\n'
+        'file = "program.json"\n'
+    )
+    result = _quod(tmp_path, "fn", "show", "greet", "--binary", "--json")
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    assert "WARNING" in parsed["decompile_text"]
+
+
 # ----- quod ingest dispatch on kind -----
 
 
