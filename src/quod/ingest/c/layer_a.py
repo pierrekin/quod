@@ -19,7 +19,7 @@ from pathlib import Path
 
 import clang.cindex as cx
 
-from quod.ingest.c.c_helpers import (
+from quod.ingest.c.helpers import (
     _CHAR_POINTEE_KINDS,
     _COMPOUND_ASSIGN_TABLE,
     _binop_token,

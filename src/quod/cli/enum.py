@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import typer
 
-from quod.cli.cli_app import enum_app
-from quod.cli.cli_output import _emit_json, _JSON_HELP
-from quod.cli.cli_state import _exclusive_lock, _load, _save
+from quod.cli.app import enum_app
+from quod.cli.output import _emit_json, _JSON_HELP
+from quod.cli.state import _exclusive_lock, _load, _save
 from quod.editor import (
     add_enum_to_program,
     parse_enum_spec,

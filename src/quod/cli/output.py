@@ -10,7 +10,7 @@ from pathlib import Path
 
 import typer
 
-from quod.cli.cli_state import _state
+from quod.cli.state import _state
 from quod.render import Theme, ansi_theme, plain_theme
 
 

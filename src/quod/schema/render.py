@@ -16,10 +16,10 @@ from pydantic import BaseModel
 
 from quod import model
 
-from quod.schema._aliases import _matches_alias
-from quod.schema.catalog_core import _CORE_CATALOG
-from quod.schema.catalog_layer_a import _LAYER_A_CATALOG
-from quod.schema.catalog_layer_b import _LAYER_B_CATALOG
+from quod.schema.aliases import _matches_alias
+from quod.schema.core import _CORE_CATALOG
+from quod.schema.layer_a import _LAYER_A_CATALOG
+from quod.schema.layer_b import _LAYER_B_CATALOG
 from quod.schema.categories import _CATEGORIES, _category_of
 
 

@@ -5,8 +5,8 @@ from __future__ import annotations
 import typer
 
 from quod import completion as _comp
-from quod.cli.cli_app import stmt_app
-from quod.cli.cli_state import _exclusive_lock, _load, _save
+from quod.cli.app import stmt_app
+from quod.cli.state import _exclusive_lock, _load, _save
 from quod.editor import (
     add_statement_in_function,
     find_function_ref,

@@ -83,9 +83,9 @@ Architectural rule, in order of strictness:
 - `quod.predicate` knows nothing about IR.
 - `quod.lower` knows nothing about claim provenance (it sees regimes
   and enforcements, never `Z3Justification`).
-- `quod.analysis` and `quod.predicate.predicate_proof` are sibling
+- `quod.analysis` and `quod.predicate.proof` are sibling
   consumers of `quod.model`; neither imports the other.
-- `quod.predicate.predicate_providers` is where they meet; it's the
+- `quod.predicate.providers` is where they meet; it's the
   only place that decides "this regime + mode + goal → that callable."
 
 When you add code, ask: which module owns it? If the answer is "more
@@ -198,7 +198,7 @@ delegates.
 
 ### Claim providers
 
-`quod.predicate.predicate_providers` owns the registry. A `Provider` has:
+`quod.predicate.providers` owns the registry. A `Provider` has:
 
 - `name` — registry key.
 - `regime` — the regime it produces claims under.

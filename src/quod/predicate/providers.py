@@ -37,7 +37,7 @@ from quod.model import (
     Regime,
     Z3Justification,
 )
-from quod.predicate.predicate_proof import Z3NotInstalled, goal_smt_lib, run_z3_on_smt
+from quod.predicate.proof import Z3NotInstalled, goal_smt_lib, run_z3_on_smt
 
 
 # ---------- Request / result shapes ----------

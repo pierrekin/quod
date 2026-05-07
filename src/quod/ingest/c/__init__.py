@@ -10,7 +10,7 @@ driver. The full staged-lift overview lives in `c_driver`'s docstring.
 
 from __future__ import annotations
 
-from quod.ingest.c.c_driver import ingest_c, ingest_header
-from quod.ingest.c.c_helpers import IngestError
+from quod.ingest.c.driver import ingest_c, ingest_header
+from quod.ingest.c.helpers import IngestError
 
 __all__ = ["IngestError", "ingest_c", "ingest_header"]

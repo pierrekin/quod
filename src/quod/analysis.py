@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from quod.predicate.predicate_canonical import predicate_for_param_range
+from quod.predicate.canonical import predicate_for_param_range
 from quod.hashing import node_hash
 from quod.model import (
     Assign,

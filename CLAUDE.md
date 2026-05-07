@@ -55,7 +55,7 @@ costs once; the wrong one costs forever.
 - `quod.model` knows nothing about SMT; `quod.predicate` knows nothing
   about IR; `quod.lower` knows nothing about claim provenance. Keep
   those boundaries.
-- New claim sources plug in via `src/quod/predicate/predicate_providers.py`
+- New claim sources plug in via `src/quod/predicate/providers.py`
   (a `Provider` with `derive` and/or `prove`). The CLI routes by
   `(regime, mode)`.
 - C-ingest support lives in `src/quod/ingest/c/`; the supported subset

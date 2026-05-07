@@ -6,10 +6,10 @@ import typer
 from pydantic import ValidationError
 
 from quod import completion as _comp
-from quod.cli.cli_app import struct_app
-from quod.cli.cli_output import _emit_json, _JSON_HELP, _theme
-from quod.cli.cli_state import _exclusive_lock, _load, _save
-from quod.cli.cli_types import _TYPE_NAMES, _parse_type_name
+from quod.cli.app import struct_app
+from quod.cli.output import _emit_json, _JSON_HELP, _theme
+from quod.cli.state import _exclusive_lock, _load, _save
+from quod.cli.types import _TYPE_NAMES, _parse_type_name
 from quod.editor import (
     add_struct_to_program,
     remove_struct_from_program,

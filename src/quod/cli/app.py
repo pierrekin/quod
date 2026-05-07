@@ -20,8 +20,8 @@ import typer
 
 from quod import completion as _comp
 from quod import lower as lower_mod
-from quod.cli.cli_output import ENFORCEMENTS, _emit_json, _JSON_HELP
-from quod.cli.cli_state import _cfg, _cfg_path, _selected_program_name, _state
+from quod.cli.output import ENFORCEMENTS, _emit_json, _JSON_HELP
+from quod.cli.state import _cfg, _cfg_path, _selected_program_name, _state
 from quod.config import Config, with_overrides
 from quod.editor import parse_function_spec, read_json_arg
 from quod.model import Program, load_program, save_program

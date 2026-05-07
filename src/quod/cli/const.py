@@ -5,9 +5,9 @@ from __future__ import annotations
 import typer
 
 from quod import completion as _comp
-from quod.cli.cli_app import const_app
-from quod.cli.cli_output import _emit_json, _JSON_HELP, _theme
-from quod.cli.cli_state import _exclusive_lock, _load, _save
+from quod.cli.app import const_app
+from quod.cli.output import _emit_json, _JSON_HELP, _theme
+from quod.cli.state import _exclusive_lock, _load, _save
 from quod.editor import (
     add_constant_to_program,
     remove_constant_from_program,

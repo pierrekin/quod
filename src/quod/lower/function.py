@@ -18,7 +18,7 @@ from quod.model import (
     Function,
     StructDef,
 )
-from quod.predicate.predicate_proof import predicate_uses_return
+from quod.predicate.proof import predicate_uses_return
 
 
 def _declare_function(

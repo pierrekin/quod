@@ -50,9 +50,9 @@ from pathlib import Path
 
 import clang.cindex as cx
 
-from quod.ingest.c.c_helpers import IngestError
-from quod.ingest.c.c_layer_a import _translate_function_layer_a
-from quod.ingest.c.c_layer_b import (
+from quod.ingest.c.helpers import IngestError
+from quod.ingest.c.layer_a import _translate_function_layer_a
+from quod.ingest.c.layer_b import (
     _ProgramState,
     _build_extern_from_decl,
     _refuse,

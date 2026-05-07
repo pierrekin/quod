@@ -5,9 +5,9 @@ from __future__ import annotations
 import typer
 
 from quod import completion as _comp
-from quod.cli.cli_app import app
-from quod.cli.cli_output import _emit_json, _JSON_HELP
-from quod.cli.cli_state import _load
+from quod.cli.app import app
+from quod.cli.output import _emit_json, _JSON_HELP
+from quod.cli.state import _load
 from quod.hashing import HASH_DISPLAY_LEN, find_by_prefix, node_hash, short_hash, walk
 from quod.model import Program
 from quod.render import (
@@ -51,7 +51,7 @@ def show(
     single function-section view; both are mutually exclusive with
     each other and with `--hashes` (which dumps node hashes regardless
     of layer)."""
-    from quod.cli.cli_output import _theme
+    from quod.cli.output import _theme
     if source and structured:
         typer.echo("error: --source and --structured are mutually exclusive", err=True)
         raise typer.Exit(2)
@@ -154,7 +154,7 @@ def find(
     json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
 ) -> None:
     """Resolve a hash prefix to a node and print it."""
-    from quod.cli.cli_output import _theme
+    from quod.cli.output import _theme
     program = _load()
     try:
         node = find_by_prefix(program, prefix)

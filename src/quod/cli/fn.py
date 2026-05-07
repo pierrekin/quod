@@ -8,9 +8,9 @@ from pathlib import Path
 import typer
 
 from quod import completion as _comp
-from quod.cli.cli_app import fn_app
-from quod.cli.cli_output import _emit_json, _JSON_HELP, _echo_err, _theme
-from quod.cli.cli_state import _exclusive_lock, _load, _save
+from quod.cli.app import fn_app
+from quod.cli.output import _emit_json, _JSON_HELP, _echo_err, _theme
+from quod.cli.state import _exclusive_lock, _load, _save
 from quod.editor import (
     add_function_to_program,
     add_statement_in_function,

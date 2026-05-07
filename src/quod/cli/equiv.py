@@ -6,9 +6,9 @@ from pathlib import Path
 
 import typer
 
-from quod.cli.cli_app import equiv_app
-from quod.cli.cli_output import _sha256_of_file, _theme
-from quod.cli.cli_state import _cfg, _load
+from quod.cli.app import equiv_app
+from quod.cli.output import _sha256_of_file, _theme
+from quod.cli.state import _cfg, _load
 from quod.model import (
     DerivedJustification,
     Equivalence,
@@ -18,7 +18,7 @@ from quod.model import (
     Program,
     save_program,
 )
-from quod.predicate.predicate_proof import Z3NotInstalled, run_z3_on_file
+from quod.predicate.proof import Z3NotInstalled, run_z3_on_file
 from quod.render import Span, paint
 
 
@@ -60,7 +60,7 @@ def equiv_prove(
     "staleness" there means the rule's source changed, which is a
     different problem (drift detection — see `02-next.md`).
     """
-    from quod.cli.cli_state import _path
+    from quod.cli.state import _path
     from quod.lift_check import LiftCheckError, prove_lifts
     from quod.version import check_program_version, stamp_quod_version
 

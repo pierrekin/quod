@@ -7,18 +7,18 @@ from pathlib import Path
 import typer
 
 from quod import completion as _comp
-from quod.cli.cli_app import extern_app, extern_claim_app
-from quod.cli.cli_claim import _build_claim, _parse_justification_spec, _predicate_for_sugar
-from quod.cli.cli_output import (
+from quod.cli.app import extern_app, extern_claim_app
+from quod.cli.claim import _build_claim, _parse_justification_spec, _predicate_for_sugar
+from quod.cli.output import (
     ENFORCEMENTS,
     STORED_REGIMES,
     _emit_json,
     _JSON_HELP,
     _theme,
 )
-from quod.cli.cli_state import _exclusive_lock, _load, _save
-from quod.cli.cli_types import _LINKAGE_NAMES, _TYPE_NAMES, _parse_linkage, _parse_type_name
-from quod.predicate.predicate_canonical import RETURN_SUGAR_KINDS
+from quod.cli.state import _exclusive_lock, _load, _save
+from quod.cli.types import _LINKAGE_NAMES, _TYPE_NAMES, _parse_linkage, _parse_type_name
+from quod.predicate.canonical import RETURN_SUGAR_KINDS
 from quod.editor import (
     remove_extern_from_program,
     set_extern_linkage_in_program,

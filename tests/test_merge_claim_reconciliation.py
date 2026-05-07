@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pytest
 
-from quod.predicate.predicate_canonical import predicate_for_param_range, predicate_for_return_range
+from quod.predicate.canonical import predicate_for_param_range, predicate_for_return_range
 from quod.merge import merge_program
 from quod.model import (
     Block,

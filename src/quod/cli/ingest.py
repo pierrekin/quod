@@ -10,8 +10,8 @@ from pathlib import Path
 
 import typer
 
-from quod.cli.cli_app import ingest_app
-from quod.cli.cli_state import _cfg, _cfg_path, _exclusive_lock, _path
+from quod.cli.app import ingest_app
+from quod.cli.state import _cfg, _cfg_path, _exclusive_lock, _path
 from quod.ingest import IngestError, ingest_c
 from quod.merge import merge_program
 from quod.model import Program, load_program, save_program

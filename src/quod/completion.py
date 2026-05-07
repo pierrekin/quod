@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import typer
 
-from quod.predicate.predicate_canonical import SUGAR_KINDS
+from quod.predicate.canonical import SUGAR_KINDS
 from quod.templates import TEMPLATES
 
 
@@ -307,7 +307,7 @@ def provider_names_for(regime: str) -> Callable[[object, str], list[str]]:
     @_traced
     def _go(ctx, incomplete: str) -> list[str]:
         try:
-            from quod.predicate.predicate_providers import all_providers
+            from quod.predicate.providers import all_providers
             return [
                 p.name for p in all_providers().values()
                 if p.regime == regime and p.name.startswith(incomplete)

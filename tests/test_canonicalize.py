@@ -1,4 +1,4 @@
-"""Tests for `quod.predicate.predicate_canonical` — the predicate-expression normal form.
+"""Tests for `quod.predicate.canonical` — the predicate-expression normal form.
 
 The canonicalizer's only contract is hash stability: two semantically-
 equal predicates must produce identical bytes. Tests below verify
@@ -9,7 +9,7 @@ surface variants.
 
 from __future__ import annotations
 
-from quod.predicate.predicate_canonical import canonicalize
+from quod.predicate.canonical import canonicalize
 from quod.model import (
     BinOp,
     I1Type,

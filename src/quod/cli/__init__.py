@@ -22,28 +22,28 @@ from __future__ import annotations
 
 # Import the root app first so `app` and the sub-app instances exist
 # before any `@<sub_app>.command(...)` decorator fires.
-from quod.cli.cli_app import app
+from quod.cli.app import app
 
 # Import each command-registering module; the decorators inside attach
 # commands to their respective sub-apps. Order is irrelevant — each
 # module references already-defined sub-app instances.
-from quod.cli import cli_inspect  # noqa: F401
-from quod.cli import cli_ingest  # noqa: F401
-from quod.cli import cli_fn  # noqa: F401
-from quod.cli import cli_claim  # noqa: F401
-from quod.cli import cli_equiv  # noqa: F401
-from quod.cli import cli_stmt  # noqa: F401
-from quod.cli import cli_const  # noqa: F401
-from quod.cli import cli_extern  # noqa: F401
-from quod.cli import cli_struct  # noqa: F401
-from quod.cli import cli_enum  # noqa: F401
-from quod.cli import cli_note  # noqa: F401
-from quod.cli import cli_provider  # noqa: F401
+from quod.cli import inspect  # noqa: F401
+from quod.cli import ingest  # noqa: F401
+from quod.cli import fn  # noqa: F401
+from quod.cli import claim  # noqa: F401
+from quod.cli import equiv  # noqa: F401
+from quod.cli import stmt  # noqa: F401
+from quod.cli import const  # noqa: F401
+from quod.cli import extern  # noqa: F401
+from quod.cli import struct  # noqa: F401
+from quod.cli import enum  # noqa: F401
+from quod.cli import note  # noqa: F401
+from quod.cli import provider  # noqa: F401
 
 # Re-exports for tests that reach into private CLI internals.
-from quod.cli.cli_claim import _verify_justification  # noqa: F401
-from quod.cli.cli_equiv import _verify_equivalence_justification  # noqa: F401
-from quod.cli.cli_state import _state  # noqa: F401
+from quod.cli.claim import _verify_justification  # noqa: F401
+from quod.cli.equiv import _verify_equivalence_justification  # noqa: F401
+from quod.cli.state import _state  # noqa: F401
 
 
 if __name__ == "__main__":

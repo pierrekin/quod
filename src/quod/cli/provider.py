@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import typer
 
-from quod.cli.cli_app import provider_app
-from quod.cli.cli_output import _theme
-from quod.predicate.predicate_providers import all_providers
+from quod.cli.app import provider_app
+from quod.cli.output import _theme
+from quod.predicate.providers import all_providers
 from quod.render import Span, paint
 
 

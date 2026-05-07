@@ -12,7 +12,7 @@ from typing import cast
 
 import clang.cindex as cx
 
-from quod.ingest.c.c_helpers import (
+from quod.ingest.c.helpers import (
     _BIN_OP_TABLE,
     _COMPOUND_ASSIGN_TABLE,
     _I8PTR,

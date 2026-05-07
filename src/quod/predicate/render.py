@@ -1,6 +1,6 @@
 """Predicate-sugar recognizer for the human-readable program view.
 
-Inverse of `quod.predicate.predicate_canonical`'s sugar predicate
+Inverse of `quod.predicate.canonical`'s sugar predicate
 builders. Operates on canonicalized predicate expressions: identifies
 the structural shapes emitted by the named claim shapes (non_negative,
 int_range, return_in_range) and renders them with their friendly form.
@@ -28,7 +28,7 @@ _RETURN_MARKER = "<return>"
 def recognize_predicate(expr) -> str | None:
     """Return the friendly sugar name for a canonical predicate, or None.
 
-    Recognized shapes (after `quod.predicate.predicate_canonical.canonicalize`):
+    Recognized shapes (after `quod.predicate.canonical.canonicalize`):
         BinOp(sle, IntLit(0), ParamRef(p))         -> 'non_negative(p)'
         BinOp(sle, IntLit(lo), <Ref>)              -> 'int_range(p, [lo, +inf])'
         BinOp(sle, <Ref>, IntLit(hi))              -> 'int_range(p, [-inf, hi])'
