@@ -185,7 +185,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/main.txt",
-        "artifact_hash": "2e12d15b158d3f6710d192a1b06a427e3caa5bbc7c4f1c3ec97714fa6da53de8"
+        "artifact_hash": "266b77b48a9dc61128f8d56b08f295dc4a3389e5a718ac3b38e8d9cb326c7eb0"
       }
     }
   ],
@@ -284,6 +284,9 @@
               "id": "@creturn_c_main_1",
               "value": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 0
               }
             }

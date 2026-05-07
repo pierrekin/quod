@@ -139,7 +139,7 @@ def test_walk_lift_rejects_int_lit_value_mismatch():
     int_t = CNamedType(name="int")
     cfn = CFn(
         id="@cfn_z", name="z", return_type=int_t,
-        body=(CReturn(value=CIntLit(value=42)),),
+        body=(CReturn(value=CIntLit(type=I32Type(), value=42)),),
     )
     fn = Function(
         id="@fn_z", name="z", return_type=I32Type(),
@@ -156,7 +156,7 @@ def test_walk_lift_rejects_operator_mismatch():
         id="@cfn_q", name="q", return_type=int_t,
         params=(CParam(name="x", type=int_t),),
         body=(CReturn(value=CBinOp(
-            op="+", lhs=CVarRef(name="x"), rhs=CIntLit(value=1),
+            op="+", lhs=CVarRef(name="x"), rhs=CIntLit(type=I32Type(), value=1),
         )),),
     )
     fn = Function(
@@ -176,7 +176,7 @@ def test_walk_lift_rejects_kind_mismatch():
     int_t = CNamedType(name="int")
     cfn = CFn(
         id="@cfn_r", name="r", return_type=int_t,
-        body=(CReturn(value=CIntLit(value=0)),),
+        body=(CReturn(value=CIntLit(type=I32Type(), value=0)),),
     )
     fn = Function(
         id="@fn_r", name="r", return_type=I32Type(),
@@ -280,7 +280,7 @@ def test_walk_lift_strips_synthesized_fall_through():
     int_t = CNamedType(name="int")
     cfn = CFn(
         id="@cfn_t", name="t", return_type=int_t,
-        body=(CReturn(value=CIntLit(value=1)),),
+        body=(CReturn(value=CIntLit(type=I32Type(), value=1)),),
     )
     fn = Function(
         id="@fn_t", name="t", return_type=I32Type(),
@@ -409,7 +409,7 @@ def test_prove_lifts_skips_orphaned_pairs(tmp_path):
     separately."""
     int_t = CNamedType(name="int")
     cfn = CFn(id="@cfn_real", name="real", return_type=int_t,
-              body=(CReturn(value=CIntLit(value=0)),))
+              body=(CReturn(value=CIntLit(type=I32Type(), value=0)),))
     fn = Function(id="@fn_real", name="real", return_type=I32Type(),
                   body=Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),)))
     from quod.model import CUnit

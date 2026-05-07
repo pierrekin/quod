@@ -82,7 +82,7 @@ def _trivial_enum_const_pair(*, layer_a_value: int, layer_b_value: int):
         body=(CExprStmt(value=CCall(
             callee="setopt",
             args=(CEnumConstRef(name="MY_OPT", value=layer_a_value),),
-        )), CReturn(value=CIntLit(value=0))),
+        )), CReturn(value=CIntLit(type=I32Type(), value=0))),
     )
     fn = Function(
         id="@fn_e", name="e", return_type=I32Type(),
@@ -123,7 +123,7 @@ def test_enum_const_against_non_int_lit_fails():
         body=(CExprStmt(value=CCall(
             callee="f",
             args=(CEnumConstRef(name="OPT", value=1),),
-        )), CReturn(value=CIntLit(value=0))),
+        )), CReturn(value=CIntLit(type=I32Type(), value=0))),
     )
     fn = Function(
         id="@fn_w", name="w", return_type=I32Type(),

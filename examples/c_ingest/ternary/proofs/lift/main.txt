@@ -20,6 +20,7 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": -7
                   }
                 ],
@@ -45,6 +46,7 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 5
                   }
                 ],
@@ -70,14 +72,17 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 2
                   },
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 9
                   },
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 4
                   }
                 ],
@@ -103,14 +108,17 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 2
                   },
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 4
                   },
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 9
                   }
                 ],
@@ -136,6 +144,7 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 0
                   }
                 ],
@@ -161,6 +170,7 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": -3
                   }
                 ],
@@ -186,6 +196,7 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 42
                   }
                 ],
@@ -202,6 +213,7 @@
           "kind": "return e \u2194 return_expr",
           "value": {
             "kind": "int_lit",
+            "type": "llvm.i32",
             "value": 0
           }
         }

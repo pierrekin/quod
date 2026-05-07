@@ -20,10 +20,12 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 3
                   },
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 4
                   }
                 ],
@@ -40,6 +42,7 @@
           "kind": "return e \u2194 return_expr",
           "value": {
             "kind": "int_lit",
+            "type": "llvm.i32",
             "value": 0
           }
         }

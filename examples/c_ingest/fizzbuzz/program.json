@@ -362,7 +362,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/main.txt",
-        "artifact_hash": "ca9d793cda947c5c0027e871a0ee93085790dd49c1adafe18a7055479f686c36"
+        "artifact_hash": "9d72f496f014eaf326aec80a068e1f75255e719c3a756c25f82429e7b403a287"
       }
     }
   ],
@@ -392,6 +392,9 @@
               "name": "i",
               "init": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 1
               }
             },
@@ -408,6 +411,9 @@
                 },
                 "rhs": {
                   "kind": "c.lit_int",
+                  "type": {
+                    "kind": "llvm.i32"
+                  },
                   "value": 15
                 }
               },
@@ -429,11 +435,17 @@
                       },
                       "rhs": {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 15
                       }
                     },
                     "rhs": {
                       "kind": "c.lit_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
                       "value": 0
                     }
                   },
@@ -473,11 +485,17 @@
                           },
                           "rhs": {
                             "kind": "c.lit_int",
+                            "type": {
+                              "kind": "llvm.i32"
+                            },
                             "value": 3
                           }
                         },
                         "rhs": {
                           "kind": "c.lit_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
                           "value": 0
                         }
                       },
@@ -517,11 +535,17 @@
                               },
                               "rhs": {
                                 "kind": "c.lit_int",
+                                "type": {
+                                  "kind": "llvm.i32"
+                                },
                                 "value": 5
                               }
                             },
                             "rhs": {
                               "kind": "c.lit_int",
+                              "type": {
+                                "kind": "llvm.i32"
+                              },
                               "value": 0
                             }
                           },
@@ -584,6 +608,9 @@
                     },
                     "rhs": {
                       "kind": "c.lit_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
                       "value": 1
                     }
                   }
@@ -595,6 +622,9 @@
               "id": "@creturn_c_main_1",
               "value": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 0
               }
             }
@@ -860,6 +890,5 @@
         "ingested from fizzbuzz.c:6"
       ]
     }
-  ],
-  "quod_version": "roadmap-stub"
+  ]
 }

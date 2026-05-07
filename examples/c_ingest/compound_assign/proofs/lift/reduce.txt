@@ -21,6 +21,7 @@
           "target": "x",
           "value": {
             "kind": "int_lit",
+            "type": "llvm.i32",
             "value": 3
           }
         },
@@ -30,6 +31,7 @@
           "target": "x",
           "value": {
             "kind": "int_lit",
+            "type": "llvm.i32",
             "value": 4
           }
         },
@@ -39,6 +41,7 @@
           "target": "x",
           "value": {
             "kind": "int_lit",
+            "type": "llvm.i32",
             "value": 2
           }
         },
@@ -48,6 +51,7 @@
           "target": "x",
           "value": {
             "kind": "int_lit",
+            "type": "llvm.i32",
             "value": 100
           }
         },

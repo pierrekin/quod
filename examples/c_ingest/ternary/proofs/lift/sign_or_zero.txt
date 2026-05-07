@@ -20,6 +20,7 @@
             },
             "else": {
               "kind": "int_lit",
+              "type": "llvm.i32",
               "value": 0
             },
             "kind": "ternary \u2194 if_expr",
@@ -33,16 +34,19 @@
                 },
                 "rhs": {
                   "kind": "int_lit",
+                  "type": "llvm.i32",
                   "value": 0
                 }
               },
               "else": {
                 "kind": "int_lit",
+                "type": "llvm.i32",
                 "value": -1
               },
               "kind": "ternary \u2194 if_expr",
               "then": {
                 "kind": "int_lit",
+                "type": "llvm.i32",
                 "value": 1
               }
             }

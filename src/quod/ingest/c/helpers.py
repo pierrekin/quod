@@ -15,21 +15,63 @@ from quod.model import (
     F32Type,
     F64Type,
     I8PtrType,
+    I8Type,
+    I16Type,
     I32Type,
     I64Type,
+    IntType,
     ShortCircuitAnd,
     ShortCircuitOr,
     Type,
+    U8Type,
+    U16Type,
+    U32Type,
+    U64Type,
     VoidType,
+    int_type_signed,
 )
 
 
+_I8 = I8Type()
+_I16 = I16Type()
 _I32 = I32Type()
 _I64 = I64Type()
+_U8 = U8Type()
+_U16 = U16Type()
+_U32 = U32Type()
+_U64 = U64Type()
 _F32 = F32Type()
 _F64 = F64Type()
 _I8PTR = I8PtrType()
 _VOID = VoidType()
+
+
+# Map clang's canonical integer TypeKind to quod's IntType instance.
+# Linux LP64: long is 64-bit. char defaults to signed (CHAR_S maps to
+# I8Type); platforms that default char to unsigned use CHAR_U.
+# Typedefs like `size_t`, `int64_t`, `uint8_t`, `intptr_t` resolve to
+# one of these canonical kinds via clang's `get_canonical()`, so the
+# table covers them transparently.
+_CLANG_INT_KIND_TO_QUOD: dict[cx.TypeKind, IntType] = {
+    cx.TypeKind.SCHAR:     _I8,
+    cx.TypeKind.CHAR_S:    _I8,
+    cx.TypeKind.UCHAR:     _U8,
+    cx.TypeKind.CHAR_U:    _U8,
+    cx.TypeKind.SHORT:     _I16,
+    cx.TypeKind.USHORT:    _U16,
+    cx.TypeKind.INT:       _I32,
+    cx.TypeKind.UINT:      _U32,
+    cx.TypeKind.LONG:      _I64,
+    cx.TypeKind.ULONG:     _U64,
+    cx.TypeKind.LONGLONG:  _I64,
+    cx.TypeKind.ULONGLONG: _U64,
+}
+
+
+def _int_type_for(t: cx.Type) -> IntType | None:
+    """Return the quod IntType for `t` if it's a supported integer kind,
+    None otherwise. Resolves typedefs via canonical-type lookup."""
+    return _CLANG_INT_KIND_TO_QUOD.get(t.get_canonical().kind)
 
 
 # Float type kinds clang exposes. Used to route BinOp dispatch and
@@ -91,7 +133,11 @@ def _is_i1_typed(expr: Expr) -> bool:
 
 # Mapping from C compound-assignment operators to the underlying quod
 # BinOp.op (used to desugar `x op= y` to `x = x op y` at lift time).
-_COMPOUND_ASSIGN_TABLE: dict[str, str] = {
+# The first column is the signed variant (used when the target's quod
+# type is signed); the second column is the unsigned variant. Operators
+# that don't have a signed/unsigned distinction (`+=`, `-=`, `*=`, `&=`,
+# `|=`, `^=`, `<<=`) collapse to the same entry in both columns.
+_COMPOUND_ASSIGN_TABLE_SIGNED: dict[str, str] = {
     "+=":  "add",
     "-=":  "sub",
     "*=":  "mul",
@@ -104,14 +150,25 @@ _COMPOUND_ASSIGN_TABLE: dict[str, str] = {
     ">>=": "ashr",
 }
 
+_COMPOUND_ASSIGN_TABLE_UNSIGNED: dict[str, str] = {
+    **_COMPOUND_ASSIGN_TABLE_SIGNED,
+    "/=":  "udiv",
+    "%=":  "urem",
+    ">>=": "lshr",
+}
+
+# Backward-compat alias — defaults to signed; callers wanting unsigned
+# semantics should consult `_lookup_compound_assign(op, signed=False)`.
+_COMPOUND_ASSIGN_TABLE = _COMPOUND_ASSIGN_TABLE_SIGNED
+
 
 # Mapping from C operator spellings (read from tokens) to quod BinOp.op.
-# Signedness defaults to signed because the supported C subset is int-only.
-# Right-shift defaults to `ashr` (arithmetic) for the same reason — C's `>>`
-# on a signed operand is implementation-defined; mainstream targets (LLVM
-# included) sign-extend, which `ashr` matches. The `lshr` op is reachable
-# only once `unsigned int` operands are supported.
-_INT_BIN_OP_TABLE: dict[str, str] = {
+# Two tables: signed (default for `int`, `long`, `int64_t`, etc.) and
+# unsigned (`unsigned int`, `size_t`, `uint64_t`, etc.). The pair
+# diverges on division, modulo, the magnitude comparisons, and right
+# shift; addition/subtraction/multiplication/bitwise/equality and the
+# left-shift collapse to the same op regardless of signedness.
+_INT_BIN_OP_TABLE_SIGNED: dict[str, str] = {
     "+": "add",
     "-": "sub",
     "*": "mul",
@@ -129,6 +186,35 @@ _INT_BIN_OP_TABLE: dict[str, str] = {
     "<<": "shl",
     ">>": "ashr",
 }
+
+_INT_BIN_OP_TABLE_UNSIGNED: dict[str, str] = {
+    **_INT_BIN_OP_TABLE_SIGNED,
+    "/":  "udiv",
+    "%":  "urem",
+    "<":  "ult",
+    "<=": "ule",
+    ">":  "ugt",
+    ">=": "uge",
+    ">>": "lshr",
+}
+
+# Backward-compat alias — defaults to signed; callers wanting unsigned
+# semantics should consult `_lookup_int_binop(op, signed=False)`.
+_INT_BIN_OP_TABLE = _INT_BIN_OP_TABLE_SIGNED
+
+
+def _lookup_int_binop(token: str, *, signed: bool) -> str | None:
+    """Map a C binary-operator spelling to the corresponding quod
+    BinOp.op, picking signed or unsigned semantics by `signed`."""
+    table = _INT_BIN_OP_TABLE_SIGNED if signed else _INT_BIN_OP_TABLE_UNSIGNED
+    return table.get(token)
+
+
+def _lookup_compound_assign(token: str, *, signed: bool) -> str | None:
+    """Map a C compound-assignment spelling (`+=`, `>>=`, …) to the
+    underlying quod BinOp.op, picking signed or unsigned semantics."""
+    table = _COMPOUND_ASSIGN_TABLE_SIGNED if signed else _COMPOUND_ASSIGN_TABLE_UNSIGNED
+    return table.get(token)
 
 # Float BinOps. No bitwise / shift ops — IEEE 754 floats don't support
 # them and C forbids them on float operands. `fne` lowers to LLVM `une`
@@ -164,16 +250,6 @@ def _refuse(cursor: cx.Cursor, why: str) -> "IngestError":
     return IngestError(f"{_loc(cursor)}: {why}")
 
 
-def _is_int_type(t: cx.Type) -> bool:
-    return t.get_canonical().kind == cx.TypeKind.INT
-
-
-def _quod_type(cursor: cx.Cursor, t: cx.Type) -> I32Type:
-    if not _is_int_type(t):
-        raise _refuse(cursor, f"only `int` types are supported, got {t.spelling!r}")
-    return _I32
-
-
 _LONG_DOUBLE_REFUSAL = (
     "long double not supported (extended-precision is implementation-"
     "defined and x87-only on the Linux target)"
@@ -181,11 +257,20 @@ _LONG_DOUBLE_REFUSAL = (
 
 
 def _local_type(cursor: cx.Cursor, t: cx.Type) -> Type:
-    """Map a clang local-var type to a quod Type. Wider than `_quod_type`:
-    accepts `int`, `enum`, any pointer (modeled as i8_ptr), and `float` /
-    `double`. `long double` refused."""
+    """Map a clang scalar type to a quod Type. Accepts every signed and
+    unsigned integer width (char/short/int/long/long_long, plus their
+    typedef'd standards `size_t`, `int8_t`–`int64_t`, etc., resolved via
+    clang's canonical-type lookup), `enum` (always `int`-typed), any
+    pointer (modeled as i8_ptr), and `float` / `double`. `long double`,
+    `__int128`, and bit-fields refused.
+
+    Used for params, locals, return types, and Cast targets.
+    """
     canon = t.get_canonical()
-    if canon.kind in (cx.TypeKind.INT, cx.TypeKind.ENUM):
+    qty = _int_type_for(t)
+    if qty is not None:
+        return qty
+    if canon.kind == cx.TypeKind.ENUM:
         return _I32
     if canon.kind == cx.TypeKind.POINTER:
         return _I8PTR
@@ -195,7 +280,7 @@ def _local_type(cursor: cx.Cursor, t: cx.Type) -> Type:
         return _F64
     if canon.kind == cx.TypeKind.LONGDOUBLE:
         raise _refuse(cursor, _LONG_DOUBLE_REFUSAL)
-    raise _refuse(cursor, f"unsupported local-var type {t.spelling!r} (only `int`, `enum`, pointers, `float`, and `double` are supported)")
+    raise _refuse(cursor, f"unsupported local-var type {t.spelling!r}")
 
 
 def _unwrap(cursor: cx.Cursor) -> cx.Cursor:
@@ -206,6 +291,26 @@ def _unwrap(cursor: cx.Cursor) -> cx.Cursor:
             return cursor
         cursor = children[0]
     return cursor
+
+
+def _parse_c_int_literal_text(text: str, cursor: cx.Cursor) -> int:
+    """Parse a C integer-literal token, stripping the C suffix
+    (`u`/`U`, `l`/`L`, `ll`/`LL`, and combinations) before delegating
+    to Python's `int(_, 0)`. The suffix only carries type information
+    (already encoded by clang's `cursor.type`); the parsed numeric
+    value is unaffected.
+    """
+    # Suffix is at most three letters (`ull` / `llu` and case variants).
+    end = len(text)
+    while end > 0 and text[end - 1] in "uUlL":
+        end -= 1
+    body = text[:end]
+    if not body:
+        raise _refuse(cursor, f"integer literal token {text!r} has no digits")
+    try:
+        return int(body, 0)
+    except ValueError as e:
+        raise _refuse(cursor, f"could not parse integer literal {text!r}: {e}")
 
 
 def _parse_c_float_literal_text(text: str, cursor: cx.Cursor) -> tuple[float, "F32Type | F64Type"]:

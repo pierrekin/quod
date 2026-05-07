@@ -21,6 +21,7 @@
                 "kind": "binop(<<) \u2194 binop(shl)",
                 "lhs": {
                   "kind": "int_lit",
+                  "type": "llvm.i32",
                   "value": 1
                 },
                 "rhs": {
@@ -30,6 +31,7 @@
               },
               "rhs": {
                 "kind": "int_lit",
+                "type": "llvm.i32",
                 "value": 1
               }
             }

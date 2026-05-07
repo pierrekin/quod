@@ -172,7 +172,7 @@ def test_i1_widened_return_correspondence():
         id="@cfn_neg", name="neg", return_type=int_t,
         params=(CParam(name="x", type=int_t),),
         body=(CReturn(value=CBinOp(
-            op="<", lhs=CVarRef(name="x"), rhs=CIntLit(value=0),
+            op="<", lhs=CVarRef(name="x"), rhs=CIntLit(type=I32Type(), value=0),
         )),),
     )
     fn = Function(

@@ -13,6 +13,7 @@
               "a_id": "@cvardecl_c_sum_no_init_1",
               "init": {
                 "kind": "int_lit",
+                "type": "llvm.i32",
                 "value": 0
               },
               "kind": "var_decl \u2194 let",
@@ -22,6 +23,7 @@
               "a_id": "@cvardecl_c_sum_no_init_2",
               "init": {
                 "kind": "int_lit",
+                "type": "llvm.i32",
                 "value": 0
               },
               "kind": "var_decl \u2194 let",
@@ -78,6 +80,7 @@
               },
               "rhs": {
                 "kind": "int_lit",
+                "type": "llvm.i32",
                 "value": 1
               }
             }

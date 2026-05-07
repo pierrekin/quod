@@ -291,7 +291,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/main.txt",
-        "artifact_hash": "2006559109fd8dd2b4ff04eaeae8ece9f1eb33da7bea1542a8b36e6c226eada2"
+        "artifact_hash": "af4b024c8414a3cabd974d69fcfe652d31299fef8f73a84616a3d1f90bc9bd8f"
       }
     }
   ],
@@ -429,10 +429,16 @@
                     "args": [
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 3
                       },
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 4
                       }
                     ]
@@ -445,6 +451,9 @@
               "id": "@creturn_c_main_1",
               "value": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 0
               }
             }
@@ -610,6 +619,5 @@
         "ingested from arithmetic.c:14"
       ]
     }
-  ],
-  "quod_version": "roadmap-stub"
+  ]
 }

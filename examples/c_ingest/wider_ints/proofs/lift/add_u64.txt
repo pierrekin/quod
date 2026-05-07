@@ -1,0 +1,47 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_add_u64",
+    "b_id": "@fn_c_add_u64",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_2",
+      "stmts": [
+        {
+          "a_id": "@creturn_c_add_u64_1",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "binop(+) \u2194 binop(add)",
+            "lhs": {
+              "kind": "var_ref \u2194 param_ref",
+              "name": "a"
+            },
+            "rhs": {
+              "kind": "var_ref \u2194 param_ref",
+              "name": "b"
+            }
+          }
+        }
+      ]
+    },
+    "name": "add_u64",
+    "params": [
+      {
+        "a_type": "uint64_t",
+        "b_type": "llvm.u64",
+        "name": "a"
+      },
+      {
+        "a_type": "uint64_t",
+        "b_type": "llvm.u64",
+        "name": "b"
+      }
+    ],
+    "return_type": {
+      "a": "uint64_t",
+      "b": "llvm.u64"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

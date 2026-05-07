@@ -57,16 +57,16 @@ def _sum_c_unit() -> CUnit:
                 return_type=int_t,
                 params=(CParam(name="n", type=int_t),),
                 body=(
-                    CVarDecl(type=int_t, name="s", init=CIntLit(value=0)),
+                    CVarDecl(type=int_t, name="s", init=CIntLit(type=I32Type(), value=0)),
                     CFor(
-                        init=CVarDecl(type=int_t, name="i", init=CIntLit(value=0)),
+                        init=CVarDecl(type=int_t, name="i", init=CIntLit(type=I32Type(), value=0)),
                         cond=CBinOp(op="<",
                                     lhs=CVarRef(name="i"),
                                     rhs=CVarRef(name="n")),
                         inc=CAssign(target="i",
                                     value=CBinOp(op="+",
                                                  lhs=CVarRef(name="i"),
-                                                 rhs=CIntLit(value=1))),
+                                                 rhs=CIntLit(type=I32Type(), value=1))),
                         body=(
                             CAssign(target="s",
                                     value=CBinOp(op="+",

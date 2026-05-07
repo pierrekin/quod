@@ -584,6 +584,140 @@ def test_increment_to_parameter_refuses(tmp_path):
         ingest_c(src)
 
 
+WIDER_INTS_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/wider_ints/wider_ints.c"
+
+
+def test_wider_ints_layer_a_preserves_source_spellings():
+    """Layer A preserves the source-form integer-type spelling for
+    every supported width — `int64_t`, `uint64_t`, `size_t`,
+    `unsigned int`, `unsigned char`, `int` — distinguishing typedefs
+    from canonical names."""
+    from quod.model import CNamedType
+    p = ingest_c(WIDER_INTS_C)
+
+    expected = {
+        "add_i64":       "int64_t",
+        "add_u64":       "uint64_t",
+        "udiv_test":     "unsigned int",
+        "lshr_test":     "uint32_t",
+        "sum_sz":        "size_t",
+        "sum_u8":        "int",
+        "widen_to_i64":  "int64_t",
+    }
+    a_fns = {cf.name: cf for cf in p.source_units[0].functions}
+    for name, expected_ret_name in expected.items():
+        cf = a_fns[name]
+        assert isinstance(cf.return_type, CNamedType)
+        assert cf.return_type.name == expected_ret_name, f"{name}: {cf.return_type.name}"
+
+
+def test_wider_ints_layer_b_picks_correct_quod_types():
+    """Layer B picks the right quod IntType: i64 for int64_t/long,
+    u64 for size_t/uint64_t, u32 for unsigned int, etc."""
+    from quod.model import I32Type, I64Type, U32Type, U64Type
+    p = ingest_c(WIDER_INTS_C)
+
+    expected_ret_classes = {
+        "add_i64":       I64Type,
+        "add_u64":       U64Type,
+        "udiv_test":     U32Type,
+        "lshr_test":     U32Type,
+        "sum_sz":        U64Type,
+        "sum_u8":        I32Type,  # promotion result
+        "widen_to_i64":  I64Type,
+    }
+    b_fns = {fn.name: fn for fn in p.structured_functions}
+    for name, cls in expected_ret_classes.items():
+        assert isinstance(b_fns[name].return_type, cls), f"{name}: {type(b_fns[name].return_type).__name__}"
+
+
+def test_wider_ints_unsigned_binop_dispatch():
+    """Unsigned operands route to udiv/lshr/ult/etc. instead of the
+    signed variants. This is a correctness test, not just a shape
+    check — udiv vs sdiv produces different results when the high
+    bit is set."""
+    from quod.model import BinOp, Assign
+    p = ingest_c(WIDER_INTS_C)
+
+    udiv_fn = next(fn for fn in p.structured_functions if fn.name == "udiv_test")
+    ret = udiv_fn.body.stmts[0]  # ReturnExpr(BinOp(udiv, ...))
+    assert isinstance(ret.value, BinOp) and ret.value.op == "udiv"
+
+    lshr_fn = next(fn for fn in p.structured_functions if fn.name == "lshr_test")
+    ret = lshr_fn.body.stmts[0]
+    # lshr_test does `x >> n` where n is `int` — the operand types
+    # disagree, so clang inserts an ImplicitCastExpr around `n` to
+    # widen it to uint32. The shift's LHS is uint32, so we emit lshr.
+    assert isinstance(ret.value, BinOp) and ret.value.op == "lshr"
+
+
+def test_wider_ints_explicit_cast_lifts_ccast():
+    """`(int64_t)x` lifts to a layer-A CCast and a layer-B Cast. The
+    lift-check pairs them via `_C_TYPE_NAME_TO_QUOD_KIND`."""
+    from quod.model import CCast, Cast
+    p = ingest_c(WIDER_INTS_C)
+
+    widen_a = next(cf for cf in p.source_units[0].functions if cf.name == "widen_to_i64")
+    ret_a = widen_a.body[0]
+    assert isinstance(ret_a.value, CCast)
+    assert ret_a.value.target_type.name == "int64_t"
+
+    widen_b = next(fn for fn in p.structured_functions if fn.name == "widen_to_i64")
+    ret_b = widen_b.body.stmts[0]
+    assert isinstance(ret_b.value, Cast)
+
+
+def test_wider_ints_implicit_promotion_lifts_to_layer_b_cast():
+    """`unsigned char + unsigned char` produces `int` (C99 §6.3.1.8
+    integer promotions). Layer B materializes the promotions as
+    `Cast` nodes; layer A has no counterpart (clang-inserted, not
+    source). The lift-check accepts the asymmetry."""
+    from quod.model import BinOp, Cast
+    p = ingest_c(WIDER_INTS_C)
+    # Lift-check passing for sum_u8 already proves the pairing works;
+    # this test asserts the layer-B shape directly so a regression in
+    # the promotion-emit path is caught even if lift-check loosens.
+    sum_u8_b = next(fn for fn in p.structured_functions if fn.name == "sum_u8")
+    ret = sum_u8_b.body.stmts[0]
+    assert isinstance(ret.value, BinOp) and ret.value.op == "add"
+    assert isinstance(ret.value.lhs, Cast)
+    assert isinstance(ret.value.rhs, Cast)
+
+
+def test_wider_ints_example_compiles_and_runs(tmp_path):
+    import subprocess
+    from quod.lower import compile_program
+    p = ingest_c(WIDER_INTS_C)
+    res = compile_program(
+        p, build_dir=tmp_path, bins=(("wi", "main"),),
+        profile=2, link=True,
+    )
+    out = subprocess.run([str(res.bins[0].binary)], capture_output=True, text=True, timeout=10)
+    assert out.returncode == 0
+    # Each line proves a different correctness property.
+    assert "add_i64(big, big)      = 4000000000" in out.stdout            # > i32 max
+    assert "add_u64(huge, huge)    = 9223372036854775809" in out.stdout   # u64 wrap
+    assert "udiv_test(0x80000000U, 2U) = 1073741824" in out.stdout        # unsigned div, not negative
+    assert "lshr_test(0x80000000U, 1) = 1073741824" in out.stdout         # logical, not arithmetic
+    assert "sum_sz(100, 200)       = 300" in out.stdout
+    assert "sum_u8(200, 100)       = 300" in out.stdout                   # promotion to int (not wrap to 44)
+    assert "widen_to_i64(-7)       = -7" in out.stdout                    # sext
+
+
+def test_wider_ints_long_double_refused(tmp_path):
+    src = tmp_path / "ld.c"
+    src.write_text("long double f(long double x) { return x; }\n")
+    with pytest.raises(IngestError, match="long double not supported"):
+        ingest_c(src)
+
+
+def test_wider_ints_int128_refused(tmp_path):
+    src = tmp_path / "i128.c"
+    src.write_text("__int128 f(__int128 x) { return x; }\n")
+    with pytest.raises(IngestError, match="unsupported"):
+        ingest_c(src)
+
+
 TERNARY_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/ternary/ternary.c"
 
 

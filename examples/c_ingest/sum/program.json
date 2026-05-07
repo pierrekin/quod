@@ -165,7 +165,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/sum.txt",
-        "artifact_hash": "fbfc614cecc3afc46720f7709d714f7c1647240dec2fed3aec6458c9eb21a6f0"
+        "artifact_hash": "c1d22ec5fe78035fd3239d618e47a071c2df9f9177ba3b2bac1268ea58a1001e"
       }
     }
   ],
@@ -204,6 +204,9 @@
               "name": "s",
               "init": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 0
               }
             },
@@ -220,6 +223,9 @@
                 "name": "i",
                 "init": {
                   "kind": "c.lit_int",
+                  "type": {
+                    "kind": "llvm.i32"
+                  },
                   "value": 0
                 }
               },
@@ -250,6 +256,9 @@
                   },
                   "rhs": {
                     "kind": "c.lit_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
                     "value": 1
                   }
                 }
@@ -404,6 +413,5 @@
         "ingested from sum.c:10"
       ]
     }
-  ],
-  "quod_version": "roadmap-stub"
+  ]
 }

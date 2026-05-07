@@ -336,7 +336,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/greet.txt",
-        "artifact_hash": "5b217a25673e13f05f3833a0f993ad14cb10dc4f53edcf133b804e5c8e15f910"
+        "artifact_hash": "55633c53bec318cd52592020e00ba3ed519dad60779578bd825eed10e5a42891"
       }
     },
     {
@@ -358,7 +358,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/main.txt",
-        "artifact_hash": "98b31558429628aaa37e67de94831e54c70cb7c01398836436aa3a0468d4c1ad"
+        "artifact_hash": "c176dc6d1c0e0624f28e9aead1b7ff8f5ef1547a310f9f292e1cd101712dfbb9"
       }
     }
   ],
@@ -400,6 +400,9 @@
                 },
                 "rhs": {
                   "kind": "c.lit_int",
+                  "type": {
+                    "kind": "llvm.i32"
+                  },
                   "value": 0
                 }
               },
@@ -495,6 +498,9 @@
                 "args": [
                   {
                     "kind": "c.lit_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
                     "value": 0
                   }
                 ]
@@ -510,6 +516,9 @@
                 "args": [
                   {
                     "kind": "c.lit_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
                     "value": 1
                   }
                 ]
@@ -525,6 +534,9 @@
                 "args": [
                   {
                     "kind": "c.lit_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
                     "value": 2
                   }
                 ]
@@ -540,6 +552,9 @@
                 "args": [
                   {
                     "kind": "c.lit_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
                     "value": 42
                   }
                 ]
@@ -550,6 +565,9 @@
               "id": "@creturn_c_main_1",
               "value": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 0
               }
             }

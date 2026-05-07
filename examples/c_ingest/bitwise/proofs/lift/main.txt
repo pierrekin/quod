@@ -20,10 +20,12 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 255
                   },
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 4
                   }
                 ],
@@ -49,6 +51,7 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 18
                   }
                 ],
@@ -74,10 +77,12 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 7
                   },
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 13
                   }
                 ],
@@ -103,6 +108,7 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 5
                   }
                 ],
@@ -128,6 +134,7 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 0
                   }
                 ],
@@ -153,6 +160,7 @@
                 "args": [
                   {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 42
                   }
                 ],
@@ -169,6 +177,7 @@
           "kind": "return e \u2194 return_expr",
           "value": {
             "kind": "int_lit",
+            "type": "llvm.i32",
             "value": 0
           }
         }

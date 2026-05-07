@@ -10,6 +10,7 @@
           "a_id": "@cvardecl_c_loop_post_1",
           "init": {
             "kind": "int_lit",
+            "type": "llvm.i32",
             "value": 0
           },
           "kind": "var_decl \u2194 let",
@@ -60,6 +61,7 @@
             "a_id": "@cvardecl_c_loop_post_2",
             "init": {
               "kind": "int_lit",
+              "type": "llvm.i32",
               "value": 0
             },
             "kind": "var_decl \u2194 let",

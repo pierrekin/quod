@@ -14,7 +14,7 @@ from typing import Annotated, Literal, Union
 from pydantic import Field, field_validator
 
 from quod.model.base import _Node, _mint_node_id
-from quod.model.types import FloatType
+from quod.model.types import FloatType, IntType
 
 
 class CNamedType(_Node):
@@ -57,7 +57,18 @@ CType = Annotated[
 
 
 class CIntLit(_Node):
+    """C integer literal — verbatim source value plus its
+    suffix-determined quod type. Like `CFloatLit`, the type is
+    required: `42` lifts with type=I32Type, `42L` with I64Type, `42U`
+    with U32Type, `42UL` with U64Type, etc. clang's INTEGER_LITERAL
+    cursor exposes the resolved type via `cursor.type`, which the
+    ingester maps through `_int_type_for` in helpers.
+
+    The lift-check pairs `CIntLit(type, value)` against
+    `IntLit(type, value)` — both fields must agree.
+    """
     kind: Literal["c.lit_int"] = "c.lit_int"
+    type: "IntType"
     value: int
 
 

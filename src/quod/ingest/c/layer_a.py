@@ -20,11 +20,12 @@ from pathlib import Path
 import clang.cindex as cx
 
 from quod.ingest.c.helpers import (
-    _CHAR_POINTEE_KINDS,
     _COMPOUND_ASSIGN_TABLE,
     _LONG_DOUBLE_REFUSAL,
     _binop_token,
+    _int_type_for,
     _parse_c_float_literal_text,
+    _parse_c_int_literal_text,
     _parse_switch_groups,
     _refuse,
     _split_for_children,
@@ -100,7 +101,10 @@ class _LayerATranslator:
             tokens = [t.spelling for t in c.get_tokens()]
             if not tokens:
                 raise _refuse(c, "integer literal with no tokens")
-            return CIntLit(value=int(tokens[0], 0))
+            qty = _int_type_for(c.type)
+            if qty is None:
+                raise _refuse(c, f"integer literal of unsupported type {c.type.spelling!r}")
+            return CIntLit(type=qty, value=_parse_c_int_literal_text(tokens[0], c))
         if k == cx.CursorKind.FLOATING_LITERAL:
             tokens = [t.spelling for t in c.get_tokens()]
             if not tokens:
@@ -213,7 +217,7 @@ class _LayerATranslator:
             # values, not tree shapes, for IntLits).
             if op == "-":
                 if isinstance(inner, CIntLit):
-                    return CIntLit(value=-inner.value)
+                    return CIntLit(type=inner.type, value=-inner.value)
                 if isinstance(inner, CFloatLit):
                     # Same constant-fold for floats — layer-B does the
                     # same fold (FNeg(FloatLit(v)) → FloatLit(-v) for
@@ -478,12 +482,12 @@ def _c_source_type(cursor: cx.Cursor, t: cx.Type) -> CType:
         pointee_t = t.get_pointee()
         return CPointerType(pointee=_c_source_type(cursor, pointee_t))
     canon = t.get_canonical()
-    if canon.kind == cx.TypeKind.INT:
-        return CNamedType(name="int")
-    if canon.kind in _CHAR_POINTEE_KINDS:
-        # SCHAR / UCHAR distinction is a signedness convention — preserve
-        # the source spelling so `signed char` and `unsigned char` show
-        # up distinctly in layer A.
+    # Integer types (every supported width and signedness, plus typedef'd
+    # standards like `size_t`, `int64_t`, `uint8_t`). Layer A preserves
+    # the source spelling — `t.spelling` keeps typedefs and explicit
+    # multi-word names (`"unsigned long long"`, `"size_t"`) intact. The
+    # lift-check canonicalizes spellings against quod's IntType classes.
+    if _int_type_for(t) is not None:
         return CNamedType(name=t.spelling)
     if canon.kind == cx.TypeKind.FLOAT:
         return CNamedType(name="float")

@@ -498,7 +498,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/count_down.txt",
-        "artifact_hash": "cda0080b44c686b452536d9f601a280e91a1570ffc8b54af69448e91e505fdbb"
+        "artifact_hash": "5545d488227f453bafdb96cd8055ed790c8e725223a11dc25c7d49960227e6f1"
       }
     },
     {
@@ -509,7 +509,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/sum_until.txt",
-        "artifact_hash": "343b204b5d1991becd245c88851121c1e3a3073f6a1187da0fe836880d666a24"
+        "artifact_hash": "8540639c4ea0edfbdf8471364355abe5513fbb8aa2c5e2a9aef2b1095a230256"
       }
     },
     {
@@ -520,7 +520,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/main.txt",
-        "artifact_hash": "07b6fbda2e803ea34620206f9e9dd51b8753a032a26e2f617124322c918cb699"
+        "artifact_hash": "e97778ecf0dcfc650326ca5145178d84f18e7c8366a931219a3c57d31a5bd7f8"
       }
     }
   ],
@@ -572,6 +572,9 @@
               "name": "iters",
               "init": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 0
               }
             },
@@ -593,6 +596,9 @@
                     },
                     "rhs": {
                       "kind": "c.lit_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
                       "value": 1
                     }
                   }
@@ -611,6 +617,9 @@
                     },
                     "rhs": {
                       "kind": "c.lit_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
                       "value": 1
                     }
                   }
@@ -626,6 +635,9 @@
                 },
                 "rhs": {
                   "kind": "c.lit_int",
+                  "type": {
+                    "kind": "llvm.i32"
+                  },
                   "value": 0
                 }
               }
@@ -669,6 +681,9 @@
               "name": "i",
               "init": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 0
               }
             },
@@ -682,6 +697,9 @@
               "name": "total",
               "init": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 0
               }
             },
@@ -703,6 +721,9 @@
                     },
                     "rhs": {
                       "kind": "c.lit_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
                       "value": 1
                     }
                   }
@@ -724,11 +745,17 @@
                       },
                       "rhs": {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 3
                       }
                     },
                     "rhs": {
                       "kind": "c.lit_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
                       "value": 0
                     }
                   },
@@ -813,6 +840,9 @@
                     "args": [
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 5
                       }
                     ]
@@ -840,6 +870,9 @@
                     "args": [
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": -3
                       }
                     ]
@@ -867,6 +900,9 @@
                     "args": [
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 10
                       }
                     ]
@@ -879,6 +915,9 @@
               "id": "@creturn_c_main_1",
               "value": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 0
               }
             }

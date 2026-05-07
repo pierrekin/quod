@@ -1,0 +1,270 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_main",
+    "b_id": "@fn_c_main",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_8",
+      "stmts": [
+        {
+          "a_id": "@cexprstmt_c_main_1",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.wider_ints.0",
+                "value": "add_i64(big, big)      = %lld\n"
+              },
+              {
+                "kind": "cast(explicit)",
+                "target": "llvm.i64",
+                "value": {
+                  "args": [
+                    {
+                      "kind": "int_lit",
+                      "type": "llvm.i64",
+                      "value": 2000000000
+                    },
+                    {
+                      "kind": "int_lit",
+                      "type": "llvm.i64",
+                      "value": 2000000000
+                    }
+                  ],
+                  "callee": "add_i64",
+                  "kind": "call \u2194 call"
+                }
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_2",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.wider_ints.1",
+                "value": "add_u64(huge, huge)    = %llu\n"
+              },
+              {
+                "kind": "cast(explicit)",
+                "target": "llvm.u64",
+                "value": {
+                  "args": [
+                    {
+                      "kind": "int_lit",
+                      "type": "llvm.u64",
+                      "value": 9223372036854775808
+                    },
+                    {
+                      "kind": "int_lit",
+                      "type": "llvm.u64",
+                      "value": 1
+                    }
+                  ],
+                  "callee": "add_u64",
+                  "kind": "call \u2194 call"
+                }
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_3",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.wider_ints.2",
+                "value": "udiv_test(0x80000000U, 2U) = %u\n"
+              },
+              {
+                "args": [
+                  {
+                    "kind": "int_lit",
+                    "type": "llvm.u32",
+                    "value": 2147483648
+                  },
+                  {
+                    "kind": "int_lit",
+                    "type": "llvm.u32",
+                    "value": 2
+                  }
+                ],
+                "callee": "udiv_test",
+                "kind": "call \u2194 call"
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_4",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.wider_ints.3",
+                "value": "lshr_test(0x80000000U, 1) = %u\n"
+              },
+              {
+                "args": [
+                  {
+                    "kind": "int_lit",
+                    "type": "llvm.u32",
+                    "value": 2147483648
+                  },
+                  {
+                    "kind": "int_lit",
+                    "type": "llvm.i32",
+                    "value": 1
+                  }
+                ],
+                "callee": "lshr_test",
+                "kind": "call \u2194 call"
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_5",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.wider_ints.4",
+                "value": "sum_sz(100, 200)       = %zu\n"
+              },
+              {
+                "args": [
+                  {
+                    "kind": "cast(explicit)",
+                    "target": "llvm.u64",
+                    "value": {
+                      "kind": "int_lit",
+                      "type": "llvm.i32",
+                      "value": 100
+                    }
+                  },
+                  {
+                    "kind": "cast(explicit)",
+                    "target": "llvm.u64",
+                    "value": {
+                      "kind": "int_lit",
+                      "type": "llvm.i32",
+                      "value": 200
+                    }
+                  }
+                ],
+                "callee": "sum_sz",
+                "kind": "call \u2194 call"
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_6",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.wider_ints.5",
+                "value": "sum_u8(200, 100)       = %d\n"
+              },
+              {
+                "args": [
+                  {
+                    "kind": "cast(implicit)",
+                    "target": "llvm.u8",
+                    "value": {
+                      "kind": "int_lit",
+                      "type": "llvm.i32",
+                      "value": 200
+                    }
+                  },
+                  {
+                    "kind": "cast(implicit)",
+                    "target": "llvm.u8",
+                    "value": {
+                      "kind": "int_lit",
+                      "type": "llvm.i32",
+                      "value": 100
+                    }
+                  }
+                ],
+                "callee": "sum_u8",
+                "kind": "call \u2194 call"
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@cexprstmt_c_main_7",
+          "kind": "c.expr_stmt \u2194 expr_stmt",
+          "value": {
+            "args": [
+              {
+                "kind": "string_lit \u2194 string_ref",
+                "string_ref": ".str.wider_ints.6",
+                "value": "widen_to_i64(-7)       = %lld\n"
+              },
+              {
+                "kind": "cast(explicit)",
+                "target": "llvm.i64",
+                "value": {
+                  "args": [
+                    {
+                      "kind": "int_lit",
+                      "type": "llvm.i32",
+                      "value": -7
+                    }
+                  ],
+                  "callee": "widen_to_i64",
+                  "kind": "call \u2194 call"
+                }
+              }
+            ],
+            "callee": "printf",
+            "kind": "call \u2194 call"
+          }
+        },
+        {
+          "a_id": "@creturn_c_main_1",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "int_lit",
+            "type": "llvm.i32",
+            "value": 0
+          }
+        }
+      ]
+    },
+    "name": "main",
+    "params": [],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

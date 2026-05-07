@@ -10,6 +10,7 @@
           "a_id": "@cvardecl_c_classify_1",
           "init": {
             "kind": "int_lit",
+            "type": "llvm.i32",
             "value": 0
           },
           "kind": "var_decl \u2194 let",
@@ -29,6 +30,7 @@
                     "target": "label",
                     "value": {
                       "kind": "int_lit",
+                      "type": "llvm.i32",
                       "value": 100
                     }
                   }
@@ -48,6 +50,7 @@
                     "target": "label",
                     "value": {
                       "kind": "int_lit",
+                      "type": "llvm.i32",
                       "value": 200
                     }
                   }
@@ -67,6 +70,7 @@
                 "target": "label",
                 "value": {
                   "kind": "int_lit",
+                  "type": "llvm.i32",
                   "value": 999
                 }
               }

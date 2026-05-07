@@ -18,6 +18,7 @@
               },
               "rhs": {
                 "kind": "int_lit",
+                "type": "llvm.i32",
                 "value": 0
               }
             },
@@ -29,6 +30,7 @@
               },
               "rhs": {
                 "kind": "int_lit",
+                "type": "llvm.i32",
                 "value": 100
               }
             }

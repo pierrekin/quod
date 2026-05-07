@@ -16,6 +16,7 @@
             },
             "rhs": {
               "kind": "int_lit",
+              "type": "llvm.i32",
               "value": 0
             }
           },
@@ -33,6 +34,7 @@
                   },
                   "rhs": {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 0
                   }
                 },
@@ -45,6 +47,7 @@
                       "kind": "return e \u2194 return_expr",
                       "value": {
                         "kind": "int_lit",
+                        "type": "llvm.i32",
                         "value": 1
                       }
                     }
@@ -60,6 +63,7 @@
                       "kind": "return e \u2194 return_expr",
                       "value": {
                         "kind": "int_lit",
+                        "type": "llvm.i32",
                         "value": 0
                       }
                     }
@@ -78,6 +82,7 @@
                 "kind": "return e \u2194 return_expr",
                 "value": {
                   "kind": "int_lit",
+                  "type": "llvm.i32",
                   "value": -1
                 }
               }

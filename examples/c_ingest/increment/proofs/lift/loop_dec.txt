@@ -10,6 +10,7 @@
           "a_id": "@cvardecl_c_loop_dec_1",
           "init": {
             "kind": "int_lit",
+            "type": "llvm.i32",
             "value": 0
           },
           "kind": "var_decl \u2194 let",
@@ -34,6 +35,7 @@
                   },
                   "rhs": {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 1
                   }
                 }
@@ -48,6 +50,7 @@
             },
             "rhs": {
               "kind": "int_lit",
+              "type": "llvm.i32",
               "value": 0
             }
           },

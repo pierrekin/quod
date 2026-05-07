@@ -30,7 +30,7 @@ node correspondence per a per-construct table:
   | CIf(c, t, e)         | If(c', t', e')                         |
   | CWhile(c, b)         | While(c', b')                          |
   | CExprStmt(CCall(…))  | ExprStmt(Call(…))                      |
-  | CIntLit(v)           | IntLit(I32Type, v)                     |
+  | CIntLit(t, v)        | IntLit(t', v)  (t.kind == t'.kind)     |
   | CStringLit(v)        | StringRef(name=...)                    |
   | CVarRef(n)           | ParamRef(n) | LocalRef(n)              |
   | CBinOp(op, l, r)     | BinOp(op_translate(op), l', r')        |
@@ -165,6 +165,27 @@ _BINOP_LAYER_A_TO_B = {
     ">>": "ashr",
 }
 
+# Unsigned counterpart — used when the layer-B operand type is
+# unsigned. Operators without a signed/unsigned distinction
+# (`+`, `-`, `*`, `&`, `|`, `^`, `<<`, `==`, `!=`) collapse to the
+# same op as in the signed table.
+_BINOP_LAYER_A_TO_B_UNSIGNED = {
+    **_BINOP_LAYER_A_TO_B,
+    "/":  "udiv",
+    "%":  "urem",
+    "<":  "ult",
+    "<=": "ule",
+    ">":  "ugt",
+    ">=": "uge",
+    ">>": "lshr",
+}
+
+# Set of layer-B int ops that are unsigned-only — used to recognize
+# which CBinOp pairing table to consult.
+_UNSIGNED_INT_BINOP_LAYER_B_OPS = frozenset({
+    "udiv", "urem", "ult", "ule", "ugt", "uge", "lshr",
+})
+
 # Float-op counterpart. The layer-A operator string is identical (`+`,
 # `<`, …); the layer-B op disambiguates int vs float. The CBinOp arm
 # of `_check_expr` accepts either map depending on the layer-B op
@@ -189,14 +210,63 @@ _FLOAT_BINOP_LAYER_B_OPS = frozenset(_BINOP_LAYER_A_TO_B_FLOAT.values())
 
 
 # C-type name (as written in source) → expected layer-B quod-type kind.
-# Used by the CCast pairing to verify the explicit-cast target type
-# matches what the layer-B Cast carries. `int` / `enum` collapse to i32
-# at layer B; pointers to i8_ptr; floats to f32/f64.
+# Used by `_check_value_type` (param/return/local/cast pairings) to
+# verify a layer-A `CNamedType` corresponds to the expected layer-B
+# type.
+#
+# Linux LP64 conventions: `long` is 64-bit; `int` is 32-bit;
+# `long long` is 64-bit. Typedef'd standards (`size_t`, `int64_t`,
+# `uint8_t`, …) appear as separate entries because clang preserves
+# the source spelling at layer A — they're distinct names, not
+# distinct types. Each name maps to the same llvm.* kind as its
+# canonical underlying type.
 _C_TYPE_NAME_TO_QUOD_KIND = {
-    "int": "llvm.i32",
-    "float": "llvm.f32",
-    "double": "llvm.f64",
-    "void": "llvm.void",
+    # Plain ints.
+    "char":               "llvm.i8",
+    "signed char":        "llvm.i8",
+    "unsigned char":      "llvm.u8",
+    "short":              "llvm.i16",
+    "short int":          "llvm.i16",
+    "signed short":       "llvm.i16",
+    "signed short int":   "llvm.i16",
+    "unsigned short":     "llvm.u16",
+    "unsigned short int": "llvm.u16",
+    "int":                "llvm.i32",
+    "signed":             "llvm.i32",
+    "signed int":         "llvm.i32",
+    "unsigned":           "llvm.u32",
+    "unsigned int":       "llvm.u32",
+    "long":               "llvm.i64",
+    "long int":           "llvm.i64",
+    "signed long":        "llvm.i64",
+    "signed long int":    "llvm.i64",
+    "unsigned long":      "llvm.u64",
+    "unsigned long int":  "llvm.u64",
+    "long long":          "llvm.i64",
+    "long long int":      "llvm.i64",
+    "signed long long":   "llvm.i64",
+    "signed long long int": "llvm.i64",
+    "unsigned long long": "llvm.u64",
+    "unsigned long long int": "llvm.u64",
+    # Standard fixed-width typedefs (stdint.h).
+    "int8_t":             "llvm.i8",
+    "int16_t":            "llvm.i16",
+    "int32_t":            "llvm.i32",
+    "int64_t":            "llvm.i64",
+    "uint8_t":            "llvm.u8",
+    "uint16_t":           "llvm.u16",
+    "uint32_t":           "llvm.u32",
+    "uint64_t":           "llvm.u64",
+    # Pointer-sized typedefs (Linux LP64).
+    "size_t":             "llvm.u64",
+    "ssize_t":            "llvm.i64",
+    "ptrdiff_t":          "llvm.i64",
+    "intptr_t":           "llvm.i64",
+    "uintptr_t":          "llvm.u64",
+    # Floats and void (carried over).
+    "float":              "llvm.f32",
+    "double":             "llvm.f64",
+    "void":               "llvm.void",
 }
 
 
@@ -324,7 +394,9 @@ def _check_value_type(a, b, *, path: str) -> None:
     """Map layer-A types to their layer-B counterparts. Pointers
     collapse to `I8PtrType` regardless of pointee — LLVM has opaque
     pointers, so all `T*` denote i8* at IR level. `void` only appears
-    in return position and pairs with `VoidType`."""
+    in return position and pairs with `VoidType`. Integer types,
+    floats, and their typedef'd standards consult
+    `_C_TYPE_NAME_TO_QUOD_KIND`."""
     if isinstance(a, CPointerType):
         if not isinstance(b, I8PtrType):
             raise LiftCheckError(
@@ -333,34 +405,14 @@ def _check_value_type(a, b, *, path: str) -> None:
             )
         return
     if isinstance(a, CNamedType):
-        if a.name == "int":
-            if not isinstance(b, I32Type):
+        expected_kind = _C_TYPE_NAME_TO_QUOD_KIND.get(a.name)
+        if expected_kind is not None:
+            if b.kind != expected_kind:
                 raise LiftCheckError(
-                    f"{path}: layer-A int but layer-B is {type(b).__name__}"
+                    f"{path}: layer-A {a.name!r} expects layer-B {expected_kind!r}, "
+                    f"got {type(b).__name__} ({b.kind!r})"
                 )
             return
-        if a.name == "void":
-            if not isinstance(b, VoidType):
-                raise LiftCheckError(
-                    f"{path}: layer-A void but layer-B is {type(b).__name__}"
-                )
-            return
-        if a.name == "float":
-            if not isinstance(b, F32Type):
-                raise LiftCheckError(
-                    f"{path}: layer-A float but layer-B is {type(b).__name__}"
-                )
-            return
-        if a.name == "double":
-            if not isinstance(b, F64Type):
-                raise LiftCheckError(
-                    f"{path}: layer-A double but layer-B is {type(b).__name__}"
-                )
-            return
-        # `char`, `signed char`, `unsigned char` are only valid as
-        # pointee names in the supported subset — they appear inside
-        # CPointerType, not as a standalone `CParam.type`. The lifter
-        # doesn't emit `char` locals at the top level today.
         raise LiftCheckError(
             f"{path}: layer-A type {a.name!r} is not in the supported subset"
         )
@@ -884,9 +936,11 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
             raise LiftCheckError(f"{path}: layer-A CIntLit vs layer-B {type(b).__name__}")
         if a.value != b.value:
             raise LiftCheckError(f"{path}: int_lit value {a.value} vs {b.value}")
-        if not isinstance(b.type, I32Type):
-            raise LiftCheckError(f"{path}: layer-B int_lit is not i32")
-        return {"kind": "int_lit", "value": a.value}
+        if a.type.kind != b.type.kind:
+            raise LiftCheckError(
+                f"{path}: int_lit type {a.type.kind!r} vs {b.type.kind!r}"
+            )
+        return {"kind": "int_lit", "type": b.type.kind, "value": a.value}
 
     if isinstance(a, CFloatLit):
         if not isinstance(b, FloatLit):
@@ -983,9 +1037,14 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
             raise LiftCheckError(f"{path}: CBinOp vs layer-B {type(b).__name__}")
         # Consult the int- or float-op table based on which one the
         # layer-B op belongs to. Operator spellings are shared between
-        # int and float (`+`, `<`, …); the layer-B op string disambiguates.
+        # int and float (`+`, `<`, …); the layer-B op string
+        # disambiguates. Within ints, the signed and unsigned tables
+        # differ on /, %, the magnitude comparisons, and >>; we pick
+        # by the layer-B op's family.
         if b.op in _FLOAT_BINOP_LAYER_B_OPS:
             expected_b_op = _BINOP_LAYER_A_TO_B_FLOAT.get(a.op)
+        elif b.op in _UNSIGNED_INT_BINOP_LAYER_B_OPS:
+            expected_b_op = _BINOP_LAYER_A_TO_B_UNSIGNED.get(a.op)
         else:
             expected_b_op = _BINOP_LAYER_A_TO_B.get(a.op)
         if expected_b_op is None:

@@ -131,7 +131,7 @@ def test_lift_check_pointer_arith_via_binop():
     cfn = CFn(
         id="@cfn_p", name="p", return_type=CNamedType(name="int"),
         params=(CParam(name="p", type=char_p),),
-        body=(CReturn(value=CIntLit(value=0)),),  # body irrelevant; we hand-build the expr below
+        body=(CReturn(value=CIntLit(type=I32Type(), value=0)),),  # body irrelevant; we hand-build the expr below
     )
     fn = Function(
         id="@fn_p", name="p", return_type=I32Type(),
@@ -143,7 +143,7 @@ def test_lift_check_pointer_arith_via_binop():
     # Now exercise the pointer-arith correspondence directly via _check_expr.
     from quod.lift_check import _check_expr, _Ctx
     from quod.model import I64Type
-    a = CBinOp(op="+", lhs=CVarRef(name="p"), rhs=CIntLit(value=7))
+    a = CBinOp(op="+", lhs=CVarRef(name="p"), rhs=CIntLit(type=I32Type(), value=7))
     b = PtrOffset(
         base=LocalRef(name="p"),
         offset=IntLit(type=I64Type(), value=7),
@@ -161,7 +161,7 @@ def test_lift_check_address_of_array_subscript_via_helper():
     a = CAddressOf(
         target=CArraySubscript(
             base=CVarRef(name="p"),
-            index=CIntLit(value=3),
+            index=CIntLit(type=I32Type(), value=3),
         ),
     )
     b = PtrOffset(
@@ -179,7 +179,7 @@ def test_lift_check_pointer_type_against_non_pointer_layer_b_fails():
     cfn = CFn(
         id="@cfn_b", name="b", return_type=int_t,
         params=(CParam(name="x", type=char_p),),
-        body=(CReturn(value=CIntLit(value=0)),),
+        body=(CReturn(value=CIntLit(type=I32Type(), value=0)),),
     )
     fn = Function(
         id="@fn_b", name="b", return_type=I32Type(),
@@ -204,7 +204,7 @@ def test_string_value_check_catches_constant_table_drift():
         body=(CExprStmt(value=CCall(
             callee="puts",
             args=(CStringLit(value="hello"),),
-        )), CReturn(value=CIntLit(value=0))),
+        )), CReturn(value=CIntLit(type=I32Type(), value=0))),
     )
     fn = Function(
         id="@fn_s", name="s", return_type=I32Type(),
@@ -238,7 +238,7 @@ def test_walk_lift_refuses_string_lit_without_program():
         body=(CExprStmt(value=CCall(
             callee="puts",
             args=(CStringLit(value="hello"),),
-        )), CReturn(value=CIntLit(value=0))),
+        )), CReturn(value=CIntLit(type=I32Type(), value=0))),
     )
     fn = Function(
         id="@fn_s", name="s", return_type=I32Type(),

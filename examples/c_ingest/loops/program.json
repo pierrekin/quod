@@ -434,7 +434,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/sum_to.txt",
-        "artifact_hash": "d73975c51b9ac5a7c888de7d549f4528258d9474487cfd45ba68259c68168d16"
+        "artifact_hash": "8b80964053a868cb4ef57a9251ff0367036e772b68f8112227ff70851e91fa51"
       }
     },
     {
@@ -445,7 +445,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/factorial.txt",
-        "artifact_hash": "3b7c166e57302e9420de273f52408de5b82ed32c06e3083c80d94ecabc7e76bb"
+        "artifact_hash": "6e884deb4f24b651e55c28b1edd0dbb5d31caa3a6161a0ecc7a09930ff38b81a"
       }
     },
     {
@@ -456,7 +456,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/main.txt",
-        "artifact_hash": "a45c745cee23b463e407de06586af4e7e52b8fcbb79fb6d408eca4c41c948153"
+        "artifact_hash": "e118be6b43a36d1d9b8839d9fc6150abdc53cf2da80f73d2f77a18106143a314"
       }
     }
   ],
@@ -495,6 +495,9 @@
               "name": "total",
               "init": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 0
               }
             },
@@ -508,6 +511,9 @@
               "name": "i",
               "init": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 1
               }
             },
@@ -560,6 +566,9 @@
                     },
                     "rhs": {
                       "kind": "c.lit_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
                       "value": 1
                     }
                   }
@@ -605,6 +614,9 @@
               "name": "result",
               "init": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 1
               }
             },
@@ -618,6 +630,9 @@
               "name": "i",
               "init": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 2
               }
             },
@@ -670,6 +685,9 @@
                     },
                     "rhs": {
                       "kind": "c.lit_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
                       "value": 1
                     }
                   }
@@ -716,6 +734,9 @@
                     "args": [
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 10
                       }
                     ]
@@ -743,6 +764,9 @@
                     "args": [
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 6
                       }
                     ]
@@ -755,6 +779,9 @@
               "id": "@creturn_c_main_1",
               "value": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 0
               }
             }
@@ -1071,6 +1098,5 @@
         "ingested from loops.c:26"
       ]
     }
-  ],
-  "quod_version": "roadmap-stub"
+  ]
 }

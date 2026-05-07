@@ -738,7 +738,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/low_bits.txt",
-        "artifact_hash": "ee7373e925e083c41dd1704467653a2544bbf34192ea9359a96dd4e7b07cd2c5"
+        "artifact_hash": "b8337ca4eb9a1ea6669ae5bf3e5243980ba68b91291e8d63225a26bc61f02a15"
       }
     },
     {
@@ -749,7 +749,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/swap_nibbles.txt",
-        "artifact_hash": "cf9dfe8c67d49fc2a7b62fc31b81235b0e428709739bfe5a8a519baa1ed835fe"
+        "artifact_hash": "c360d9888c4d6346d02ac0d85ccce1ba5b856f66a146dba66eb468cefc0f153e"
       }
     },
     {
@@ -793,7 +793,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/main.txt",
-        "artifact_hash": "723bdcc078ab47713a2810569e56473dec9df7af8760944facce41835a849a2d"
+        "artifact_hash": "6ffd3cbbb9bd7f8669e6eb3f0935030637123408c3f9f6da713e6961e1ba4fd5"
       }
     }
   ],
@@ -851,6 +851,9 @@
                     "op": "<<",
                     "lhs": {
                       "kind": "c.lit_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
                       "value": 1
                     },
                     "rhs": {
@@ -860,6 +863,9 @@
                   },
                   "rhs": {
                     "kind": "c.lit_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
                     "value": 1
                   }
                 }
@@ -907,11 +913,17 @@
                     },
                     "rhs": {
                       "kind": "c.lit_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
                       "value": 15
                     }
                   },
                   "rhs": {
                     "kind": "c.lit_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
                     "value": 4
                   }
                 },
@@ -929,11 +941,17 @@
                     },
                     "rhs": {
                       "kind": "c.lit_int",
+                      "type": {
+                        "kind": "llvm.i32"
+                      },
                       "value": 4
                     }
                   },
                   "rhs": {
                     "kind": "c.lit_int",
+                    "type": {
+                      "kind": "llvm.i32"
+                    },
                     "value": 15
                   }
                 }
@@ -1094,10 +1112,16 @@
                     "args": [
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 255
                       },
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 4
                       }
                     ]
@@ -1125,6 +1149,9 @@
                     "args": [
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 18
                       }
                     ]
@@ -1152,10 +1179,16 @@
                     "args": [
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 7
                       },
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 13
                       }
                     ]
@@ -1183,6 +1216,9 @@
                     "args": [
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 5
                       }
                     ]
@@ -1210,6 +1246,9 @@
                     "args": [
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 0
                       }
                     ]
@@ -1237,6 +1276,9 @@
                     "args": [
                       {
                         "kind": "c.lit_int",
+                        "type": {
+                          "kind": "llvm.i32"
+                        },
                         "value": 42
                       }
                     ]
@@ -1249,6 +1291,9 @@
               "id": "@creturn_c_main_1",
               "value": {
                 "kind": "c.lit_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
                 "value": 0
               }
             }

@@ -10,6 +10,7 @@
           "a_id": "@cvardecl_c_find_first_negative_1",
           "init": {
             "kind": "int_lit",
+            "type": "llvm.i32",
             "value": 0
           },
           "kind": "var_decl \u2194 let",
@@ -33,11 +34,13 @@
                     },
                     "rhs": {
                       "kind": "int_lit",
+                      "type": "llvm.i32",
                       "value": 5
                     }
                   },
                   "rhs": {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 0
                   }
                 },
@@ -62,6 +65,7 @@
                         },
                         "rhs": {
                           "kind": "int_lit",
+                          "type": "llvm.i32",
                           "value": 5
                         }
                       }
@@ -79,6 +83,7 @@
                   },
                   "rhs": {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 100
                   }
                 },
@@ -111,6 +116,7 @@
                   },
                   "rhs": {
                     "kind": "int_lit",
+                    "type": "llvm.i32",
                     "value": 1
                   }
                 }
@@ -135,6 +141,7 @@
           "kind": "return e \u2194 return_expr",
           "value": {
             "kind": "int_lit",
+            "type": "llvm.i32",
             "value": -999
           }
         }
