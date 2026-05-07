@@ -18,7 +18,7 @@ from quod.model import (
     Program,
     save_program,
 )
-from quod.proof import Z3NotInstalled, run_z3_on_file
+from quod.predicate.predicate_proof import Z3NotInstalled, run_z3_on_file
 from quod.render import Span, paint
 
 

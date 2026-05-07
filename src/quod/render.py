@@ -622,10 +622,10 @@ def claim_full_spans(claim) -> tuple[Span, ...]:
     return (*head, Span(suffix, "meta_value"))
 
 
-# Predicate sugar recognizer lives in quod.predicate_render — see comment
+# Predicate sugar recognizer lives in quod.predicate.predicate_render — see comment
 # at top of render.py for the rationale. Imported here (after Span and
 # _expr_spans are defined) so claim_spans above can resolve the call.
-from quod.predicate_render import predicate_spans, recognize_predicate  # noqa: E402, F401
+from quod.predicate.predicate_render import predicate_spans, recognize_predicate  # noqa: E402, F401
 
 
 # ---------- Row builders (reusable across listing commands) ----------

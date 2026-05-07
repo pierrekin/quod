@@ -28,7 +28,7 @@ import json
 import pytest
 
 from quod import version as quod_version
-from quod.canonicalize import predicate_for_param_range
+from quod.predicate.predicate_canonical import predicate_for_param_range
 from quod.model import (
     Block,
     Equivalence,

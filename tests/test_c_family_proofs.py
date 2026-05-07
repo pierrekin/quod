@@ -37,7 +37,7 @@ from quod.model import (
     ManualJustification,
     Program,
 )
-from quod.proof import run_z3_on_file
+from quod.predicate.predicate_proof import run_z3_on_file
 
 
 SUM_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/sum/sum.c"

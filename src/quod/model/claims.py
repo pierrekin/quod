@@ -63,7 +63,7 @@ class PredicateClaim(_Claim):
 
     `expr` must satisfy `assert_is_predicate`: i1-typed, side-effect-free,
     references resolve against the enclosing function. Stored in
-    canonical form (see `quod.canonicalize`) so identical predicates
+    canonical form (see `quod.predicate.predicate_canonical`) so identical predicates
     produce identical hashes for proof pinning, dedup, and equivalence
     edges.
 

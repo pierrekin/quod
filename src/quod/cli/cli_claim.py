@@ -18,7 +18,7 @@ from pydantic import TypeAdapter, ValidationError
 from quod import completion as _comp
 from quod import lower as lower_mod
 from quod.analysis import derive_lattice_claims
-from quod.canonicalize import (
+from quod.predicate.predicate_canonical import (
     PARAM_SUGAR_KINDS,
     RETURN_SUGAR_KINDS,
     SUGAR_KINDS,
@@ -60,8 +60,8 @@ from quod.model import (
     add_claim,
     claim_param,
 )
-from quod.proof import Z3NotInstalled, goal_smt_lib, run_z3_on_file
-from quod.providers import (
+from quod.predicate.predicate_proof import Z3NotInstalled, goal_smt_lib, run_z3_on_file
+from quod.predicate.predicate_providers import (
     ClaimRequest,
     default_for,
     get_provider,
@@ -211,9 +211,9 @@ def _parse_predicate_arg(target_fn: Function | ExternFunction, src: str):
     has return-type context for them — predicates against externs that
     need param shape are filtered out earlier in the claim-add path.
     """
-    from quod.canonicalize import canonicalize
+    from quod.predicate.predicate_canonical import canonicalize
     from quod.script import ScriptError, parse_predicate
-    from quod.predicate_validate import PredicateError, assert_is_predicate
+    from quod.predicate.predicate_validate import PredicateError, assert_is_predicate
 
     if isinstance(target_fn, Function):
         param_types = {p.name: p.type for p in target_fn.params}

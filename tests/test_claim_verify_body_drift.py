@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from quod.canonicalize import predicate_for_return_range
+from quod.predicate.predicate_canonical import predicate_for_return_range
 from quod.cli import _verify_justification
 from quod.model import (
     I32Type,
@@ -31,7 +31,7 @@ from quod.model import (
 
     Block,
 )
-from quod.providers import ClaimRequest, _z3_qf_lia_prove
+from quod.predicate.predicate_providers import ClaimRequest, _z3_qf_lia_prove
 
 
 _I32 = I32Type()

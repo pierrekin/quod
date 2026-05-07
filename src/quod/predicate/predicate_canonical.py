@@ -41,7 +41,7 @@ canonicalize(e)` (idempotence is verified by tests).
 
 from __future__ import annotations
 
-from .model import (
+from quod.model import (
     BinOp,
     Expr,
     I1Type,

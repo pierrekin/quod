@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from quod.canonicalize import canonicalize, predicate_for_param_range, predicate_for_return_range
+from quod.predicate.predicate_canonical import canonicalize, predicate_for_param_range, predicate_for_return_range
 from quod.model import (
     BinOp,
     I32Type,
@@ -26,9 +26,9 @@ from quod.model import (
     ShortCircuitAnd,
     ShortCircuitOr,
 )
-from quod.predicate_render import recognize_predicate
+from quod.predicate.predicate_render import recognize_predicate
 from quod.script import ScriptError, parse_predicate
-from quod.predicate_validate import PredicateError, assert_is_predicate
+from quod.predicate.predicate_validate import PredicateError, assert_is_predicate
 
 
 # ---------- Parses sugar shapes that round-trip via the recognizer ----------

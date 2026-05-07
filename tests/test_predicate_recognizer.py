@@ -13,7 +13,7 @@ each sugar form would produce and verify the recognizer names it back.
 
 from __future__ import annotations
 
-from quod.canonicalize import canonicalize
+from quod.predicate.predicate_canonical import canonicalize
 from quod.model import (
     BinOp,
     I32Type,
@@ -22,7 +22,7 @@ from quod.model import (
     ParamRef,
     ReturnRef,
 )
-from quod.predicate_render import predicate_spans, recognize_predicate
+from quod.predicate.predicate_render import predicate_spans, recognize_predicate
 
 
 def _x():

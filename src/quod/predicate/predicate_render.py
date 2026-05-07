@@ -1,15 +1,15 @@
 """Predicate-sugar recognizer for the human-readable program view.
 
-Inverse of `quod.canonicalize`'s sugar predicate builders. Operates on
-canonicalized predicate expressions: identifies the structural shapes
-emitted by the named claim shapes (non_negative, int_range,
-return_in_range) and renders them with their friendly form. Predicates
-outside the sugar table fall back to raw expression rendering via
-`quod.render._expr_spans`.
+Inverse of `quod.predicate.predicate_canonical`'s sugar predicate
+builders. Operates on canonicalized predicate expressions: identifies
+the structural shapes emitted by the named claim shapes (non_negative,
+int_range, return_in_range) and renders them with their friendly form.
+Predicates outside the sugar table fall back to raw expression rendering
+via `quod.render._expr_spans`.
 
 Lives next to the predicate domain rather than inside `render.py` so
 that the recognizer pairs visibly with the builder side in
-`canonicalize.py`. Render-pipeline machinery (Span/Line/themes,
+`predicate_canonical.py`. Render-pipeline machinery (Span/Line/themes,
 expression spans, statement lines, row builders) stays in `render.py`.
 """
 
@@ -28,7 +28,7 @@ _RETURN_MARKER = "<return>"
 def recognize_predicate(expr) -> str | None:
     """Return the friendly sugar name for a canonical predicate, or None.
 
-    Recognized shapes (after `quod.canonicalize.canonicalize`):
+    Recognized shapes (after `quod.predicate.predicate_canonical.canonicalize`):
         BinOp(sle, IntLit(0), ParamRef(p))         -> 'non_negative(p)'
         BinOp(sle, IntLit(lo), <Ref>)              -> 'int_range(p, [lo, +inf])'
         BinOp(sle, <Ref>, IntLit(hi))              -> 'int_range(p, [-inf, hi])'

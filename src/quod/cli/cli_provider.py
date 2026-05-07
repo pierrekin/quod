@@ -6,7 +6,7 @@ import typer
 
 from quod.cli.cli_app import provider_app
 from quod.cli.cli_output import _theme
-from quod.providers import all_providers
+from quod.predicate.predicate_providers import all_providers
 from quod.render import Span, paint
 
 

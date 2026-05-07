@@ -1,7 +1,7 @@
 """Claim/predicate lowering.
 
 Predicates are restricted to the side-effect-free expression vocabulary
-admitted by `quod.predicate_validate.assert_is_predicate`: int literals, param/
+admitted by `quod.predicate.predicate_validate.assert_is_predicate`: int literals, param/
 return references, comparisons, integer arithmetic on terms, boolean
 combinators, negation. The walker here is intentionally separate from
 `_lower_expr` — it doesn't need constants, locals, externs, or aggregate
@@ -25,7 +25,7 @@ from quod.model import (
     ParamRef,
     ReturnRef,
 )
-from quod.proof import predicate_uses_return
+from quod.predicate.predicate_proof import predicate_uses_return
 
 
 def _lower_predicate(
@@ -37,7 +37,7 @@ def _lower_predicate(
     references the return value).
 
     Predicates are restricted to the side-effect-free expression
-    vocabulary admitted by `quod.predicate_validate.assert_is_predicate`: int
+    vocabulary admitted by `quod.predicate.predicate_validate.assert_is_predicate`: int
     literals, param/return references, comparisons, integer
     arithmetic on terms, boolean combinators, negation. This walker
     is intentionally separate from `_lower_expr` — it doesn't need
