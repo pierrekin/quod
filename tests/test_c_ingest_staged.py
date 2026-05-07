@@ -458,6 +458,132 @@ def test_compound_assign_to_parameter_refuses(tmp_path):
         ingest_c(src)
 
 
+INCREMENT_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/increment/increment.c"
+
+
+def test_increment_layer_a_preserves_op_and_position():
+    """`i++`, `++i`, `i--`, `--i` lift to layer-A CIncrementStmt with
+    `op` and `position` recorded; layer-B desugars to
+    Assign(name, BinOp("add"|"sub", LocalRef(name), IntLit(1)))."""
+    from quod.model import CIncrementStmt, Assign, BinOp, IntLit, LocalRef
+    p = ingest_c(INCREMENT_C)
+
+    # Layer A: while-body in sum_to has `i++;` as the second stmt.
+    sum_to_a = next(cf for cf in p.source_units[0].functions if cf.name == "sum_to")
+    while_a = sum_to_a.body[2]
+    inc_a = while_a.body[1]
+    assert isinstance(inc_a, CIncrementStmt)
+    assert (inc_a.target, inc_a.op, inc_a.position) == ("i", "++", "post")
+
+    # Layer A: countdown's while-body starts with `--i;`.
+    countdown_a = next(cf for cf in p.source_units[0].functions if cf.name == "countdown")
+    while_dec_a = countdown_a.body[2]
+    inc_dec_a = while_dec_a.body[0]
+    assert isinstance(inc_dec_a, CIncrementStmt)
+    assert (inc_dec_a.target, inc_dec_a.op, inc_dec_a.position) == ("i", "--", "pre")
+
+    # For-loop inc-position: `++i` and `i++` both lift identically at
+    # layer B (Assign+BinOp("add")), but layer A preserves the position.
+    pre_a = next(cf for cf in p.source_units[0].functions if cf.name == "loop_pre")
+    for_pre_a = pre_a.body[1]
+    assert isinstance(for_pre_a.inc, CIncrementStmt)
+    assert for_pre_a.inc.position == "pre" and for_pre_a.inc.op == "++"
+
+    post_a = next(cf for cf in p.source_units[0].functions if cf.name == "loop_post")
+    for_post_a = post_a.body[1]
+    assert isinstance(for_post_a.inc, CIncrementStmt)
+    assert for_post_a.inc.position == "post" and for_post_a.inc.op == "++"
+
+    # Layer B: same statement-positions are Assign(name, BinOp("add"|"sub",
+    # LocalRef(name), IntLit(1))) regardless of pre/post.
+    sum_to_b = next(fn for fn in p.structured_functions if fn.name == "sum_to")
+    while_b = sum_to_b.body.stmts[2]
+    inc_b = while_b.body.stmts[1]
+    assert isinstance(inc_b, Assign) and inc_b.name == "i"
+    assert isinstance(inc_b.value, BinOp) and inc_b.value.op == "add"
+    assert isinstance(inc_b.value.lhs, LocalRef) and inc_b.value.lhs.name == "i"
+    assert isinstance(inc_b.value.rhs, IntLit) and inc_b.value.rhs.value == 1
+
+
+def test_increment_lift_check_pairs_to_assign():
+    """walk_lift records the increment correspondence for both pre and
+    post forms; the layer-B side is the same Assign(BinOp) shape."""
+    from quod.lift_check import walk_lift
+    p = ingest_c(INCREMENT_C)
+
+    def collect_increments(rec):
+        kinds = []
+        def walk(node):
+            if isinstance(node, dict):
+                if "increment" in str(node.get("kind", "")):
+                    kinds.append(node["kind"])
+                for v in node.values():
+                    walk(v)
+            elif isinstance(node, list):
+                for v in node:
+                    walk(v)
+        walk(rec)
+        return kinds
+
+    cfn_sum = next(cf for cf in p.source_units[0].functions if cf.name == "sum_to")
+    fn_sum = next(f for f in p.structured_functions if f.name == "sum_to")
+    assert collect_increments(walk_lift(cfn_sum, fn_sum, program=p)) == [
+        "increment(post++) ↔ assign(_, binop(add, _, 1))",
+    ]
+
+    cfn_dec = next(cf for cf in p.source_units[0].functions if cf.name == "countdown")
+    fn_dec = next(f for f in p.structured_functions if f.name == "countdown")
+    assert collect_increments(walk_lift(cfn_dec, fn_dec, program=p)) == [
+        "increment(pre--) ↔ assign(_, binop(sub, _, 1))",
+    ]
+
+    cfn_pre = next(cf for cf in p.source_units[0].functions if cf.name == "loop_pre")
+    fn_pre = next(f for f in p.structured_functions if f.name == "loop_pre")
+    assert collect_increments(walk_lift(cfn_pre, fn_pre, program=p)) == [
+        "increment(pre++) ↔ assign(_, binop(add, _, 1))",
+    ]
+
+
+def test_increment_example_compiles_and_runs(tmp_path):
+    import subprocess
+    from quod.lower import compile_program
+    p = ingest_c(INCREMENT_C)
+    res = compile_program(
+        p, build_dir=tmp_path, bins=(("inc", "main"),),
+        profile=2, link=True,
+    )
+    out = subprocess.run([str(res.bins[0].binary)], capture_output=True, text=True, timeout=10)
+    assert out.returncode == 0
+    # sum_to(10)    = 0+1+...+9 = 45
+    # countdown(10) = 10
+    # loop_post(10) = 0+1+...+9 = 45
+    # loop_pre(10)  = 0+1+...+9 = 45
+    # loop_dec(10)  = 10
+    assert "sum_to(10)    = 45" in out.stdout
+    assert "countdown(10) = 10" in out.stdout
+    assert "loop_post(10) = 45" in out.stdout
+    assert "loop_pre(10)  = 45" in out.stdout
+    assert "loop_dec(10)  = 10" in out.stdout
+
+
+def test_increment_in_expression_position_refuses(tmp_path):
+    """Expression-position `++/--` (e.g. `int y = i++;`) is refused as
+    a known gap. The lift sequencing semantics aren't yet designed."""
+    src = tmp_path / "bad_expr.c"
+    src.write_text("int f(int n) { int i = n; int y = i++; return y; }\n")
+    with pytest.raises(IngestError, match="expression position is not yet supported"):
+        ingest_c(src)
+
+
+def test_increment_to_parameter_refuses(tmp_path):
+    """Increment of a parameter is refused, matching the existing rule
+    for plain Assign and CCompoundAssign."""
+    src = tmp_path / "bad_param.c"
+    src.write_text("int f(int x) { x++; return x; }\n")
+    with pytest.raises(IngestError, match="cannot assign to 'x'"):
+        ingest_c(src)
+
+
 TERNARY_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/ternary/ternary.c"
 
 

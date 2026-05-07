@@ -323,7 +323,7 @@ class CExprStmt(_Node):
 # because for-init permits a declaration even outside a block scope; the
 # lifter folds the loop's scope into the layer-B `CStyleFor` envelope.
 CForInit = Annotated[
-    Union[CVarDecl, CAssign],
+    Union[CVarDecl, CAssign, "CIncrementStmt"],
     Field(discriminator="kind"),
 ]
 
@@ -345,6 +345,29 @@ class CCompoundAssign(_Node):
     value: "CExpr"
 
 
+class CIncrementStmt(_Node):
+    """`i++;`, `++i;`, `i--;`, `--i;` — statement-position increment or
+    decrement of a local. Layer A preserves both the operator and the
+    pre/post position for source fidelity; for statement-position the
+    expression value is discarded, so pre and post lift identically to
+    `Assign(target, BinOp("add"|"sub", LocalRef(target), IntLit(1)))`
+    on the layer-B side.
+
+    Expression-position `++/--` (e.g. `int y = i++;`, `arr[i++]`) is
+    refused at ingest — the sequencing semantics need a separate
+    design pass and aren't yet supported.
+
+    Only locals declared with `Let` can be the target — increment of
+    a parameter is refused at ingest, matching plain `Assign` and
+    `CCompoundAssign`.
+    """
+    kind: Literal["c.increment_stmt"] = "c.increment_stmt"
+    id: str = Field(default_factory=lambda: _mint_node_id("cincstmt"))
+    target: str
+    op: Literal["++", "--"]
+    position: Literal["pre", "post"]
+
+
 class CMultiVarDecl(_Node):
     """`int a, b, c;` or `int a = 1, b = 2;` — a single declaration
     statement that introduces multiple locals.
@@ -362,8 +385,8 @@ class CMultiVarDecl(_Node):
 
 
 CStmt = Annotated[
-    Union[CVarDecl, CMultiVarDecl, CAssign, CCompoundAssign, CReturn,
-          CFor, CIf, CWhile, CDoWhile, CExprStmt, CBreak, CContinue,
+    Union[CVarDecl, CMultiVarDecl, CAssign, CCompoundAssign, CIncrementStmt,
+          CReturn, CFor, CIf, CWhile, CDoWhile, CExprStmt, CBreak, CContinue,
           CSwitch],
     Field(discriminator="kind"),
 ]

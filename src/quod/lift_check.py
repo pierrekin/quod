@@ -80,6 +80,7 @@ from quod.model import (
     CFn,
     CFor,
     CIf,
+    CIncrementStmt,
     CIntLit,
     CMultiVarDecl,
     CNamedType,
@@ -622,6 +623,48 @@ def _check_stmt(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
             "kind": f"compound_assign({a.op}) ↔ assign(_, binop({expected_op}))",
             "a_id": a.id, "target": a.target,
             "value": _check_expr(a.value, b.value.rhs, path=f"{path}.value", ctx=ctx),
+        }
+
+    if isinstance(a, CIncrementStmt):
+        # `i++;` / `++i;` / `i--;` / `--i;` ↔
+        #   `Assign(i, BinOp("add"|"sub", LocalRef(i), IntLit(1)))`.
+        # Pre and post lift identically — the expression value is
+        # discarded in statement position, so the only observable
+        # effect is the side effect itself. Position is preserved at
+        # layer A for source fidelity (and for future expression-
+        # position support to dispatch on).
+        if not isinstance(b, Assign):
+            raise LiftCheckError(
+                f"{path}: layer-A CIncrementStmt vs layer-B {type(b).__name__}"
+            )
+        if a.target != b.name:
+            raise LiftCheckError(
+                f"{path}: increment target {a.target!r} vs {b.name!r}"
+            )
+        expected_op = "add" if a.op == "++" else "sub"
+        if not isinstance(b.value, BinOp):
+            raise LiftCheckError(
+                f"{path}: increment expects layer-B Assign(BinOp), "
+                f"got Assign({type(b.value).__name__})"
+            )
+        if b.value.op != expected_op:
+            raise LiftCheckError(
+                f"{path}: increment {a.op!r} expects layer-B "
+                f"BinOp({expected_op!r}), got {b.value.op!r}"
+            )
+        if not isinstance(b.value.lhs, LocalRef) or b.value.lhs.name != a.target:
+            raise LiftCheckError(
+                f"{path}: increment expects layer-B BinOp's LHS to be "
+                f"LocalRef({a.target!r}), got {type(b.value.lhs).__name__}"
+            )
+        if not isinstance(b.value.rhs, IntLit) or b.value.rhs.value != 1:
+            raise LiftCheckError(
+                f"{path}: increment expects layer-B BinOp's RHS to be "
+                f"IntLit(1), got {b.value.rhs!r}"
+            )
+        return {
+            "kind": f"increment({a.position}{a.op}) ↔ assign(_, binop({expected_op}, _, 1))",
+            "a_id": a.id, "target": a.target,
         }
 
     if isinstance(a, CReturn):

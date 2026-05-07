@@ -145,6 +145,7 @@ from quod.model.layer_a import (
     CFor,
     CForInit,
     CIf,
+    CIncrementStmt,
     CIntLit,
     CMultiVarDecl,
     CNamedType,

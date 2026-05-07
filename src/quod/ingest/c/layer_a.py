@@ -45,6 +45,7 @@ from quod.model import (
     CFor,
     CForInit,
     CIf,
+    CIncrementStmt,
     CIntLit,
     CMultiVarDecl,
     CNamedType,
@@ -153,7 +154,13 @@ class _LayerATranslator:
             tokens = [t.spelling for t in c.get_tokens()]
             if not tokens:
                 raise _refuse(c, "unary operator with no tokens")
-            op = tokens[0]
+            # Postfix `i++` / `i--` lay the operator in the last token;
+            # prefix forms put it first. Sniff both ends so the
+            # expression-position refusal below has the right operator.
+            if tokens[-1] in ("++", "--") and tokens[0] not in ("++", "--"):
+                op = tokens[-1]
+            else:
+                op = tokens[0]
             # `&buf[k]` — array-subscript address-of. Layer A preserves
             # both operators (CAddressOf wrapping CArraySubscript); the
             # lift-checker pairs the composed shape with the layer-B
@@ -193,6 +200,12 @@ class _LayerATranslator:
                 # is a known minor infraction; preserving it would need
                 # CUnary("+") which has no observable effect).
                 return inner
+            if op in ("++", "--"):
+                raise _refuse(
+                    c,
+                    f"layer A: {op!r} in expression position is not yet supported "
+                    f"(only bare-statement and for-loop inc positions are supported)"
+                )
             raise _refuse(c, f"layer A: unsupported unary operator {op!r}")
         if k == cx.CursorKind.CONDITIONAL_OPERATOR:
             children = list(c.get_children())
@@ -276,6 +289,33 @@ class _LayerATranslator:
                 target=lhs.spelling,
                 op=op,
                 value=self.expr(children[1]),
+            )
+
+        if k == cx.CursorKind.UNARY_OPERATOR:
+            # Statement-position `i++;`, `++i;`, `i--;`, `--i;`. libclang
+            # exposes both pre- and post-forms as a single UNARY_OPERATOR
+            # cursor; we recover position from token order — operator
+            # token first ⇒ pre, last ⇒ post. Other unary operators in
+            # statement position aren't supported (a bare `-x;` etc. is
+            # already refused upstream).
+            children = list(c.get_children())
+            if len(children) != 1:
+                raise _refuse(c, "layer A: unary statement with non-1 children")
+            tokens = [t.spelling for t in c.get_tokens()]
+            if not tokens:
+                raise _refuse(c, "layer A: unary statement with no tokens")
+            op = tokens[0] if tokens[0] in ("++", "--") else tokens[-1]
+            if op not in ("++", "--"):
+                raise _refuse(c, f"layer A: unsupported unary statement operator {op!r}")
+            position = "pre" if tokens[0] == op else "post"
+            target = _unwrap(children[0])
+            if target.kind != cx.CursorKind.DECL_REF_EXPR:
+                raise _refuse(target, f"layer A: only simple `name{op}` / `{op}name` increment supported")
+            return CIncrementStmt(
+                id=self._mint("cincstmt"),
+                target=target.spelling,
+                op=op,
+                position=position,
             )
 
         if k == cx.CursorKind.FOR_STMT:
@@ -372,12 +412,13 @@ class _LayerATranslator:
 
     def _for_init(self, cursor: cx.Cursor) -> CForInit:
         """Translate a for-loop init or inc slot into a CForInit
-        (CVarDecl or CAssign). Mirrors the layer-B path; the validation
-        is shared because the C grammar is the same."""
+        (CVarDecl, CAssign, or CIncrementStmt). Mirrors the layer-B
+        path; the validation is shared because the C grammar is the
+        same."""
         s = self.stmt(cursor)
-        if isinstance(s, (CVarDecl, CAssign)):
+        if isinstance(s, (CVarDecl, CAssign, CIncrementStmt)):
             return s
-        raise _refuse(cursor, f"layer A: for init/inc must be a decl or assignment, got {type(s).__name__}")
+        raise _refuse(cursor, f"layer A: for init/inc must be a decl, assignment, or increment, got {type(s).__name__}")
 
     def _compound_children(self, cursor: cx.Cursor) -> list[cx.Cursor]:
         """A for-loop body may be a `{ ... }` block or a single statement;

@@ -378,7 +378,13 @@ class _FunctionTranslator:
             tokens = [t.spelling for t in c.get_tokens()]
             if not tokens:
                 raise _refuse(c, "unary operator with no tokens")
-            op = tokens[0]
+            # Postfix `i++` / `i--` lay the operator in the last token;
+            # prefix forms put it first. Sniff both ends so the
+            # expression-position refusal below has the right operator.
+            if tokens[-1] in ("++", "--") and tokens[0] not in ("++", "--"):
+                op = tokens[-1]
+            else:
+                op = tokens[0]
             # `&buf[k]` and `&buf[k+m]` are pointer arithmetic — handle before
             # we recurse into the array-subscript child (which we'd otherwise
             # have to lower as a load).
@@ -404,6 +410,12 @@ class _FunctionTranslator:
                 # One's complement is `x ^ -1` over two's-complement
                 # ints. Lift-checker pairs CUnary("~") with this shape.
                 return BinOp(op="xor", lhs=inner_expr, rhs=IntLit(type=_I32, value=-1))
+            if op in ("++", "--"):
+                raise _refuse(
+                    c,
+                    f"{op!r} in expression position is not yet supported "
+                    f"(only bare-statement and for-loop inc positions are supported)"
+                )
             raise _refuse(c, f"unsupported unary operator {op!r}")
 
         if k == cx.CursorKind.BINARY_OPERATOR:
@@ -639,6 +651,47 @@ class _FunctionTranslator:
                     op=cast(any, translated),
                     lhs=LocalRef(name=lhs.spelling),
                     rhs=value,
+                ),
+            ),)
+
+        if k == cx.CursorKind.UNARY_OPERATOR:
+            # Statement-position `i++;`, `++i;`, `i--;`, `--i;` — desugar
+            # to `i = i + 1;` / `i = i - 1;`. Pre and post lift identically
+            # because the expression value is discarded (statement
+            # position); the source-form distinction is preserved at
+            # layer A only. The lift-checker pairs CIncrementStmt against
+            # this Assign+BinOp shape.
+            #
+            # Other unary operators don't reach this dispatcher because
+            # their statement form is refused upstream (a bare `-x;` etc.
+            # falls into the BINARY_OPERATOR branch's "expression-as-
+            # statement" refusal); only `++`/`--` are statement-shaped.
+            children = list(c.get_children())
+            if len(children) != 1:
+                raise _refuse(c, "unary statement with non-1 children")
+            tokens = [t.spelling for t in c.get_tokens()]
+            if not tokens:
+                raise _refuse(c, "unary statement with no tokens")
+            op = tokens[0] if tokens[0] in ("++", "--") else tokens[-1]
+            if op not in ("++", "--"):
+                raise _refuse(c, f"unsupported unary statement operator {op!r}")
+            target = _unwrap(children[0])
+            if target.kind != cx.CursorKind.DECL_REF_EXPR:
+                raise _refuse(target, f"only simple `name{op}` / `{op}name` increment supported")
+            if target.spelling not in self._locals:
+                raise _refuse(
+                    target,
+                    f"cannot assign to {target.spelling!r} (increment requires "
+                    f"a local declared with `int`; assignment to parameters "
+                    f"is not supported)"
+                )
+            translated = "add" if op == "++" else "sub"
+            return (Assign(
+                name=target.spelling,
+                value=BinOp(
+                    op=cast(any, translated),
+                    lhs=LocalRef(name=target.spelling),
+                    rhs=IntLit(type=_I32, value=1),
                 ),
             ),)
 

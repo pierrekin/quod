@@ -1,0 +1,95 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_countdown",
+    "b_id": "@fn_c_countdown",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_4",
+      "stmts": [
+        {
+          "a_id": "@cvardecl_c_countdown_1",
+          "init": {
+            "kind": "int_lit",
+            "value": 0
+          },
+          "kind": "var_decl \u2194 let",
+          "name": "steps"
+        },
+        {
+          "a_id": "@cvardecl_c_countdown_2",
+          "init": {
+            "kind": "var_ref \u2194 param_ref",
+            "name": "n"
+          },
+          "kind": "var_decl \u2194 let",
+          "name": "i"
+        },
+        {
+          "a_id": "@cwhile_c_countdown_1",
+          "body": {
+            "a_block": "<inline>",
+            "b_block_id": "@blk_c_3",
+            "stmts": [
+              {
+                "a_id": "@cincstmt_c_countdown_1",
+                "kind": "increment(pre--) \u2194 assign(_, binop(sub, _, 1))",
+                "target": "i"
+              },
+              {
+                "a_id": "@cassign_c_countdown_1",
+                "kind": "assign \u2194 assign",
+                "target": "steps",
+                "value": {
+                  "kind": "binop(+) \u2194 binop(add)",
+                  "lhs": {
+                    "kind": "var_ref \u2194 local_ref",
+                    "name": "steps"
+                  },
+                  "rhs": {
+                    "kind": "int_lit",
+                    "value": 1
+                  }
+                }
+              }
+            ]
+          },
+          "cond": {
+            "kind": "binop(>) \u2194 binop(sgt)",
+            "lhs": {
+              "kind": "var_ref \u2194 local_ref",
+              "name": "i"
+            },
+            "rhs": {
+              "kind": "int_lit",
+              "value": 0
+            }
+          },
+          "kind": "c.while \u2194 while"
+        },
+        {
+          "a_id": "@creturn_c_countdown_1",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "var_ref \u2194 local_ref",
+            "name": "steps"
+          }
+        }
+      ]
+    },
+    "name": "countdown",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "n"
+      }
+    ],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

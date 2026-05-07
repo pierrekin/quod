@@ -1,0 +1,96 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_loop_post",
+    "b_id": "@fn_c_loop_post",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_6",
+      "stmts": [
+        {
+          "a_id": "@cvardecl_c_loop_post_1",
+          "init": {
+            "kind": "int_lit",
+            "value": 0
+          },
+          "kind": "var_decl \u2194 let",
+          "name": "total"
+        },
+        {
+          "a_id": "@cfor_c_loop_post_1",
+          "b_id": "@cfor_general_c_1",
+          "body": {
+            "a_block": "<inline>",
+            "b_block_id": "@blk_c_5",
+            "stmts": [
+              {
+                "a_id": "@cassign_c_loop_post_1",
+                "kind": "assign \u2194 assign",
+                "target": "total",
+                "value": {
+                  "kind": "binop(+) \u2194 binop(add)",
+                  "lhs": {
+                    "kind": "var_ref \u2194 local_ref",
+                    "name": "total"
+                  },
+                  "rhs": {
+                    "kind": "var_ref \u2194 local_ref",
+                    "name": "i"
+                  }
+                }
+              }
+            ]
+          },
+          "cond": {
+            "kind": "binop(<) \u2194 binop(slt)",
+            "lhs": {
+              "kind": "var_ref \u2194 local_ref",
+              "name": "i"
+            },
+            "rhs": {
+              "kind": "var_ref \u2194 param_ref",
+              "name": "n"
+            }
+          },
+          "inc": {
+            "a_id": "@cincstmt_c_loop_post_1",
+            "kind": "increment(post++) \u2194 assign(_, binop(add, _, 1))",
+            "target": "i"
+          },
+          "init": {
+            "a_id": "@cvardecl_c_loop_post_2",
+            "init": {
+              "kind": "int_lit",
+              "value": 0
+            },
+            "kind": "var_decl \u2194 let",
+            "name": "i"
+          },
+          "kind": "c.for \u2194 c.for_general"
+        },
+        {
+          "a_id": "@creturn_c_loop_post_1",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "var_ref \u2194 local_ref",
+            "name": "total"
+          }
+        }
+      ]
+    },
+    "name": "loop_post",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "n"
+      }
+    ],
+    "return_type": {
+      "a": "int",
+      "b": "llvm.i32"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}
