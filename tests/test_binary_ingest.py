@@ -400,6 +400,41 @@ def test_seeder_refuses_when_dwarf_points_at_unknown_file(tmp_path):
     assert len(program.equivalences) == 0
 
 
+def test_extern_ref_links_to_existing_authored_extern(tmp_path):
+    """When the program already has an authored `ExternFunction` whose
+    `name` matches a `BinExternRef.symbol`, the ingester sets
+    `linked_extern_name` so cross-layer claim providers can pair
+    them. The fixture's `puts` extern_ref gets linked to the authored
+    `extern fn puts(...)` we attach to the base program."""
+    from quod.model import ExternFunction, I32Type, LibcLinkage
+    base = Program(externs=(
+        ExternFunction(
+            name="puts",
+            param_types=(I32Type(),),
+            return_type=I32Type(),
+            linkage=LibcLinkage(),
+        ),
+    ))
+    dump_path = _write_dump(tmp_path, _libdemo_dump())
+    program = ingest_binary_dump(dump_path, program=base)
+
+    extern_refs = program.binary_units[0].extern_refs
+    puts_ref = next(r for r in extern_refs if r.symbol == "puts")
+    assert puts_ref.linked_extern_name == "puts"
+
+
+def test_extern_ref_link_unchanged_when_no_matching_extern(tmp_path):
+    """Without an authored extern matching the symbol, the link stays
+    None — pinned so future changes don't introduce symbol-only
+    heuristics that fabricate links the user didn't author."""
+    dump_path = _write_dump(tmp_path, _libdemo_dump())
+    program = ingest_binary_dump(dump_path)
+    puts_ref = next(
+        r for r in program.binary_units[0].extern_refs if r.symbol == "puts"
+    )
+    assert puts_ref.linked_extern_name is None
+
+
 def test_seeder_falls_back_to_symtab_when_no_dwarf(tmp_path):
     """Stripped binaries have no `decl_file` on their bin.fns. The
     seeder must continue to work via symtab name match in that case."""

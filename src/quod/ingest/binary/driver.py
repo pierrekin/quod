@@ -154,9 +154,13 @@ def _ingest_parsed(
         )
 
     binary = raw.get("binary") or {}
-    unit = _build_unit(binary, raw, source_label)
-
     base = program if program is not None else Program()
+    existing_extern_names = frozenset(e.name for e in base.externs)
+    unit = _build_unit(
+        binary, raw, source_label,
+        existing_extern_names=existing_extern_names,
+    )
+
     new_units = base.binary_units + (unit,)
     extended = base.model_copy(update={"binary_units": new_units})
 
@@ -354,10 +358,24 @@ def _build_data(raw: dict[str, Any]) -> BinDataItem:
     )
 
 
-def _build_extern(raw: dict[str, Any]) -> BinExternRef:
+def _build_extern(
+    raw: dict[str, Any],
+    *,
+    existing_extern_names: frozenset[str],
+) -> BinExternRef:
+    """Build a `BinExternRef` from the JSON dump, cross-linking to an
+    existing `ExternFunction` in the program when the symbol name
+    matches. The cross-link is the binary-side analogue of the
+    function-pairing seeder: it tells future cross-layer claim
+    providers "this binary's `puts` and the program's authored
+    `extern fn puts(...)` are the same symbol", so claims attached
+    to the authored extern can flow to call-sites that reach it
+    through the binary."""
+    symbol = str(raw.get("name") or "")
     return BinExternRef(
-        symbol=str(raw.get("name") or ""),
+        symbol=symbol,
         abi_hint=raw.get("abi_hint"),
+        linked_extern_name=symbol if symbol in existing_extern_names else None,
     )
 
 
@@ -373,6 +391,8 @@ def _build_unit(
     binary: dict[str, Any],
     raw: dict[str, Any],
     source_label: str,
+    *,
+    existing_extern_names: frozenset[str] = frozenset(),
 ) -> BinUnit:
     file_format = binary.get("format", "raw")
     if file_format not in ("elf", "pe", "mach-o", "raw"):
@@ -380,7 +400,10 @@ def _build_unit(
             f"{source_label}: unsupported file_format {file_format!r}"
         )
 
-    extern_refs = tuple(_build_extern(e) for e in raw.get("externs") or ())
+    extern_refs = tuple(
+        _build_extern(e, existing_extern_names=existing_extern_names)
+        for e in raw.get("externs") or ()
+    )
     extern_id_by_name = {e.symbol: e.id for e in extern_refs}
     extern_id_by_address: dict[int, str] = {}
     for raw_extern, ref in zip(raw.get("externs") or (), extern_refs):
