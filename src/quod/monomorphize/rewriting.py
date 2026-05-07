@@ -12,6 +12,7 @@ from ..model import (
     Break,
     Call,
     CharLit,
+    Cast,
     Continue,
     DoWhile,
     EnumInit,
@@ -48,7 +49,6 @@ from ..model import (
     TryExpr,
     Unreachable,
     While,
-    Widen,
     WithArena,
 )
 
@@ -77,10 +77,12 @@ def _walk_types_in_expr(expr, fn):
         })
     if isinstance(expr, SizeOf):
         return expr.model_copy(update={"type": fn(expr.type)})
-    if isinstance(expr, Widen):
-        # target is IntType — no struct/enum/typeparam.
+    if isinstance(expr, Cast):
+        # target_type is the full Type union — may carry TypeParamRef
+        # pre-monomorphization.
         return expr.model_copy(update={
             "value": _walk_types_in_expr(expr.value, fn),
+            "target_type": fn(expr.target_type),
         })
     if isinstance(expr, StructInit):
         new_fields = tuple(

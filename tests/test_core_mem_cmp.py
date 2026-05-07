@@ -48,7 +48,7 @@ from quod.model import (
     StringConstant,
     StringRef,
     Function,
-    Widen,
+    Cast,
     WithArena,
 
     Block,
@@ -173,10 +173,11 @@ def _byte_offset(base_name: str, offset: int):
 
 
 def _load_byte_print(base_name: str, offset: int):
-    """Load byte at base+offset, widen to i64, printf as %lld."""
-    return _print_int_call(Widen(
+    """Load byte at base+offset, cast to i64, printf as %lld. Source
+    is i8 (signed) — Cast naturally sign-extends."""
+    return _print_int_call(Cast(
         value=Load(ptr=_byte_offset(base_name, offset), type=I8Type()),
-        target=I64Type(),
+        target_type=I64Type(),
     ))
 
 

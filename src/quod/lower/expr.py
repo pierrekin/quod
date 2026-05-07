@@ -13,7 +13,13 @@ from __future__ import annotations
 from llvmlite import ir
 
 from quod.lower.claims import _emit_extern_call_postconditions
+from quod.lower.runtime_decls import (
+    _get_or_declare_fptosi_sat,
+    _get_or_declare_fptoui_sat,
+)
 from quod.lower.types import (
+    F32,
+    F64,
     I1,
     I8,
     I32,
@@ -28,11 +34,15 @@ from quod.lower.types import (
 from quod.model import (
     BinOp,
     Call,
+    Cast,
     CharLit,
     EnumDef,
     EnumInit,
     ExternFunction,
+    F32Type,
+    F64Type,
     FieldRead,
+    Function,
     IfExpr,
     IntLit,
     Load,
@@ -50,7 +60,8 @@ from quod.model import (
     StructDef,
     StructInit,
     TryExpr,
-    Widen,
+    int_type_signed,
+    int_type_width,
 )
 
 
@@ -62,6 +73,9 @@ def _lower_expr(
     struct_tys: dict[str, "ir.IdentifiedStructType"],
     enum_defs: dict[str, EnumDef],
     enum_tys: dict[str, "ir.IdentifiedStructType"],
+    fn: Function | None = None,
+    local_qtypes: dict[str, object] | None = None,
+    fn_returns: dict[str, object] | None = None,
 ) -> ir.Value:
     def go(e):
         return _lower_expr(
@@ -69,6 +83,7 @@ def _lower_expr(
             constants=constants, extern_sigs=extern_sigs, locals_=locals_,
             struct_defs=struct_defs, struct_tys=struct_tys,
             enum_defs=enum_defs, enum_tys=enum_tys,
+            fn=fn, local_qtypes=local_qtypes, fn_returns=fn_returns,
         )
 
     match expr:
@@ -220,19 +235,14 @@ def _lower_expr(
                     f"ptr_offset offset must be i64, got {off_val.type}"
                 )
             return builder.gep(base_val, [off_val], inbounds=True)
-        case Widen(value=v, target=t, signed=signed):
+        case Cast(value=v, target_type=tgt):
             val = go(v)
-            target_ty = _type_to_llvm(t)
-            if not isinstance(val.type, ir.IntType):
-                raise ValueError(f"widen source must be an integer, got {val.type}")
-            if not isinstance(target_ty, ir.IntType):
-                raise ValueError(f"widen target must be an int type, got {t!r}")
-            src_w, dst_w = val.type.width, target_ty.width
-            if src_w == dst_w:
-                return val
-            if src_w < dst_w:
-                return builder.sext(val, target_ty) if signed else builder.zext(val, target_ty)
-            return builder.trunc(val, target_ty)
+            src_qty = _quod_type_of(
+                v, fn=fn, local_qtypes=local_qtypes,
+                extern_sigs=extern_sigs, fn_returns=fn_returns,
+                struct_defs=struct_defs, enum_defs=enum_defs,
+            )
+            return _lower_cast(builder, module, val, src_qty, tgt)
         case Load(ptr=p, type=t):
             base = go(p)
             if not (isinstance(base.type, ir.PointerType) and base.type.pointee == I8):
@@ -381,6 +391,173 @@ def _lower_if_expr(builder: ir.IRBuilder, cond, then_value, else_value, *, lower
     phi.add_incoming(then_val, then_block)
     phi.add_incoming(else_val, else_block)
     return phi
+
+
+def _is_quod_float(t) -> bool:
+    return isinstance(t, (F32Type, F64Type))
+
+
+def _is_quod_int(t) -> bool:
+    try:
+        int_type_signed(t)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def _lower_cast(
+    builder: ir.IRBuilder, module: ir.Module,
+    val: ir.Value, src_qty, tgt_qty,
+) -> ir.Value:
+    """Dispatch the nine numeric-conversion arms of `Cast`. `val` is the
+    already-lowered LLVM value; `src_qty` and `tgt_qty` are the quod-side
+    source and target types (signedness lives there, not on the LLVM type).
+    """
+    target_ty = _type_to_llvm(tgt_qty)
+    src_is_int = _is_quod_int(src_qty)
+    tgt_is_int = _is_quod_int(tgt_qty)
+    src_is_float = _is_quod_float(src_qty)
+    tgt_is_float = _is_quod_float(tgt_qty)
+
+    if src_is_int and tgt_is_int:
+        src_w = int_type_width(src_qty)
+        dst_w = int_type_width(tgt_qty)
+        if src_w == dst_w:
+            return val
+        if src_w < dst_w:
+            return (builder.sext(val, target_ty)
+                    if int_type_signed(src_qty)
+                    else builder.zext(val, target_ty))
+        return builder.trunc(val, target_ty)
+
+    if src_is_int and tgt_is_float:
+        return (builder.sitofp(val, target_ty)
+                if int_type_signed(src_qty)
+                else builder.uitofp(val, target_ty))
+
+    if src_is_float and tgt_is_int:
+        if int_type_signed(tgt_qty):
+            intrinsic = _get_or_declare_fptosi_sat(module, target_ty, val.type)
+        else:
+            intrinsic = _get_or_declare_fptoui_sat(module, target_ty, val.type)
+        return builder.call(intrinsic, [val])
+
+    if src_is_float and tgt_is_float:
+        src_w = 32 if isinstance(src_qty, F32Type) else 64
+        dst_w = 32 if isinstance(tgt_qty, F32Type) else 64
+        if src_w == dst_w:
+            return val
+        if src_w < dst_w:
+            return builder.fpext(val, target_ty)
+        return builder.fptrunc(val, target_ty)
+
+    raise ValueError(
+        f"cast source/target must both be numeric (int or float); "
+        f"got source={src_qty!r}, target={tgt_qty!r}"
+    )
+
+
+def _quod_type_of(
+    expr,
+    *,
+    fn,
+    local_qtypes,
+    extern_sigs,
+    fn_returns,
+    struct_defs,
+    enum_defs,
+):
+    """Best-effort source quod-type inference used by Cast lowering.
+
+    The lowerer normally strips quod types — `_type_to_llvm` collapses
+    IXType / UXType to LLVM iN with no signedness. Cast lowering needs
+    to recover the source signedness to choose sext vs zext, sitofp vs
+    uitofp. This helper walks the value expression and returns its quod
+    Type. Assumes the program already passed `validate_or_raise` —
+    cases that can't be inferred raise (a Cast wrapping such an
+    expression is a Cast-extension request, not an existing-program
+    issue).
+    """
+    match expr:
+        case IntLit(type=t):
+            return t
+        case CharLit():
+            from quod.model import I8Type
+            return I8Type()
+        case SizeOf():
+            from quod.model import I64Type
+            return I64Type()
+        case ParamRef(name=n):
+            if fn is None:
+                raise ValueError(f"cannot infer ParamRef {n!r} type — no Function in lower context")
+            for p in fn.params:
+                if p.name == n:
+                    return p.type
+            raise ValueError(f"ParamRef {n!r} not found in {fn.name!r}")
+        case LocalRef(name=n):
+            if local_qtypes is None or n not in local_qtypes:
+                raise ValueError(f"cannot infer LocalRef {n!r} type — not in local_qtypes")
+            return local_qtypes[n]
+        case Cast(target_type=t):
+            return t
+        case Load(type=t):
+            return t
+        case BinOp(op=op, lhs=l):
+            if op in ("eq", "ne", "slt", "sle", "sgt", "sge",
+                      "ult", "ule", "ugt", "uge"):
+                from quod.model import I1Type
+                return I1Type()
+            return _quod_type_of(
+                l, fn=fn, local_qtypes=local_qtypes,
+                extern_sigs=extern_sigs, fn_returns=fn_returns,
+                struct_defs=struct_defs, enum_defs=enum_defs,
+            )
+        case ShortCircuitAnd() | ShortCircuitOr() | Not():
+            from quod.model import I1Type
+            return I1Type()
+        case IfExpr(then_value=t):
+            return _quod_type_of(
+                t, fn=fn, local_qtypes=local_qtypes,
+                extern_sigs=extern_sigs, fn_returns=fn_returns,
+                struct_defs=struct_defs, enum_defs=enum_defs,
+            )
+        case Call(function=fname):
+            if fn_returns is not None and fname in fn_returns:
+                return fn_returns[fname]
+            ext = extern_sigs.get(fname) if extern_sigs is not None else None
+            if ext is not None:
+                return ext.return_type
+            raise ValueError(f"cannot infer return type of call to {fname!r}")
+        case ReturnRef():
+            if fn is None:
+                raise ValueError("cannot infer ReturnRef type — no Function in lower context")
+            return fn.return_type
+        case LoadField(struct_type=tname, name=fname):
+            if struct_defs is None or tname not in struct_defs:
+                raise ValueError(f"cannot infer LoadField on {tname!r} — struct not in lower context")
+            f = struct_defs[tname].field(fname)
+            if f is None:
+                raise ValueError(f"struct {tname!r} has no field {fname!r}")
+            return f.type
+        case FieldRead(value=v, name=fname):
+            inner_ty = _quod_type_of(
+                v, fn=fn, local_qtypes=local_qtypes,
+                extern_sigs=extern_sigs, fn_returns=fn_returns,
+                struct_defs=struct_defs, enum_defs=enum_defs,
+            )
+            from quod.model import StructType
+            if not isinstance(inner_ty, StructType):
+                raise ValueError(f"FieldRead on non-struct type {inner_ty!r}")
+            if struct_defs is None or inner_ty.name not in struct_defs:
+                raise ValueError(f"FieldRead on unknown struct {inner_ty.name!r}")
+            f = struct_defs[inner_ty.name].field(fname)
+            if f is None:
+                raise ValueError(f"struct {inner_ty.name!r} has no field {fname!r}")
+            return f.type
+    raise NotImplementedError(
+        f"_quod_type_of: cannot infer source type for {type(expr).__name__} "
+        f"— extend the helper if a new Cast value-shape is needed"
+    )
 
 
 def _lower_short_circuit(builder: ir.IRBuilder, lhs, rhs, *, kind: str, lower) -> ir.Value:

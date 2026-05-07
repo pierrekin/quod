@@ -22,6 +22,7 @@ from quod.model.expressions import (
     Load,
     LoadField,
     LocalRef,
+    Cast,
     NullPtr,
     ParamRef,
     PtrOffset,
@@ -31,7 +32,6 @@ from quod.model.expressions import (
     StringRef,
     StructInit,
     TryExpr,
-    Widen,
 )
 from quod.model.justifications import (
     DerivedJustification,
@@ -89,6 +89,8 @@ from quod.model.types import (
     I8PtrType,
     I8Type,
     I16Type,
+    F32Type,
+    F64Type,
     I32Type,
     I64Type,
     IsizeType,
@@ -374,6 +376,10 @@ def _format_type(t) -> str:
             return "isize"
         case UsizeType():
             return "usize"
+        case F32Type():
+            return "f32"
+        case F64Type():
+            return "f64"
         case I8PtrType():
             return "i8*"
         case StructType(name=n, type_args=ta) if ta:
@@ -531,9 +537,8 @@ def _format_expr(expr) -> str:
             return f"{tname} {{ {inner} }}"
         case PtrOffset(base=b, offset=o):
             return f"({_format_expr(b)} + {_format_expr(o)})"
-        case Widen(value=v, target=t, signed=signed):
-            kind = "" if signed else "u"
-            return f"{kind}widen({_format_expr(v)} to {_format_type(t)})"
+        case Cast(value=v, target_type=t):
+            return f"cast({_format_expr(v)} to {_format_type(t)})"
         case Load(ptr=p, type=t):
             return f"load[{_format_type(t)}]({_format_expr(p)})"
         case NullPtr():

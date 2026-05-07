@@ -54,6 +54,8 @@ from quod.model import (
     U64Type,
     IsizeType,
     UsizeType,
+    F32Type,
+    F64Type,
     I8PtrType,
     If,
     IfExpr,
@@ -82,6 +84,7 @@ from quod.model import (
     EnumType,
     Match,
     SizeOf,
+    Cast,
     TryExpr,
     StructDef,
     StructInit,
@@ -91,7 +94,6 @@ from quod.model import (
     TypeParamRef,
     Unreachable,
     While,
-    Widen,
     WithArena,
     _Node,
     format_claim_metadata,
@@ -212,6 +214,7 @@ _TYPE_NAMES: dict[type, str] = {
     I32Type: "i32", I64Type: "i64",
     U8Type: "u8", U16Type: "u16", U32Type: "u32", U64Type: "u64",
     IsizeType: "isize", UsizeType: "usize",
+    F32Type: "f32", F64Type: "f64",
     I8PtrType: "i8*",
     VoidType: "void",
 }
@@ -346,10 +349,9 @@ def _expr_spans(expr) -> tuple[Span, ...]:
                 *_expr_spans(o),
                 Span(")", "punct"),
             )
-        case Widen(value=v, target=t, signed=signed):
-            kind = "widen" if signed else "uwiden"
+        case Cast(value=v, target_type=t):
             return (
-                Span(kind, "fn_name"), Span("(", "punct"),
+                Span("cast", "fn_name"), Span("(", "punct"),
                 *_expr_spans(v),
                 Span(" to ", "keyword"),
                 type_span(t),

@@ -49,6 +49,7 @@ from ..model import (
     Store,
     StoreField,
     StringRef,
+    Cast,
     StructInit,
     StructType,
     TraitCall,
@@ -56,7 +57,6 @@ from ..model import (
     TypeParamRef,
     Unreachable,
     While,
-    Widen,
     WithArena,
 )
 
@@ -263,7 +263,7 @@ def _resolve_trait_calls_in_expr(expr, impl_index):
         return expr.model_copy(update={"ptr": _resolve_trait_calls_in_expr(expr.ptr, impl_index)})
     if isinstance(expr, SizeOf):
         return expr
-    if isinstance(expr, Widen):
+    if isinstance(expr, Cast):
         return expr.model_copy(update={"value": _resolve_trait_calls_in_expr(expr.value, impl_index)})
     if isinstance(expr, StructInit):
         return expr.model_copy(update={

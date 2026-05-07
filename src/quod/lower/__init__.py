@@ -136,6 +136,7 @@ def lower(
         _declare_extern(module, ext, struct_tys, enum_tys)
 
     extern_sigs: dict[str, ExternFunction] = {ext.name: ext for ext in program.externs}
+    fn_returns: dict[str, object] = {fn.name: fn.return_type for fn in program.functions}
 
     # Pass 2: lower bodies of user functions only (externs have no body here).
     for fn in program.functions:
@@ -144,6 +145,7 @@ def lower(
             extern_sigs=extern_sigs,
             struct_defs=struct_defs, struct_tys=struct_tys,
             enum_defs=enum_defs, enum_tys=enum_tys,
+            fn_returns=fn_returns,
         )
 
     if entry is not None:

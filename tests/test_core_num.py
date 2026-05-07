@@ -40,7 +40,7 @@ from quod.model import (
     U16Type,
     U32Type,
     U64Type,
-    Widen,
+    Cast,
 
     Block,
 )
@@ -99,7 +99,10 @@ def _print_llu(value):
 
 
 def _zext(u_value):
-    return Widen(value=u_value, target=I64Type(), signed=False)
+    # Cast derives zext/sext from the source's signedness — u_value's
+    # quod type must be unsigned (UXType / UsizeType) for this to be
+    # a zero-extend.
+    return Cast(value=u_value, target_type=I64Type())
 
 
 def _print_u(call_expr):
@@ -244,19 +247,19 @@ def test_narrow_i64_to_i32_in_range():
         name="main",
         return_type=I32Type(),
         body=Block(stmts=(
-            _print_lld(Widen(
+            _print_lld(Cast(
                 value=Call(
                     function="core.num.narrow_i64_to_i32",
                     args=(IntLit(type=I64Type(), value=42),),
                 ),
-                target=I64Type(), signed=True,
+                target_type=I64Type(),
             )),
-            _print_lld(Widen(
+            _print_lld(Cast(
                 value=Call(
                     function="core.num.narrow_i64_to_i32",
                     args=(IntLit(type=I64Type(), value=-1),),
                 ),
-                target=I64Type(), signed=True,
+                target_type=I64Type(),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
         )),

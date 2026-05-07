@@ -56,7 +56,7 @@ from quod.model import (
     StructType,
     TraitCall,
     UsizeType,
-    Widen,
+    Cast,
     WithArena,
 
     Block,
@@ -96,7 +96,8 @@ def _print_lld(value):
 
 
 def _zext64(uvalue):
-    return Widen(value=uvalue, target=I64Type(), signed=False)
+    # uvalue must be U-typed; Cast derives zext from source signedness.
+    return Cast(value=uvalue, target_type=I64Type())
 
 
 def _print_byte_at(buf_name: str, offset: int):

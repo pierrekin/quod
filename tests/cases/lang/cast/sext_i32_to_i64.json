@@ -3,7 +3,7 @@
     "constants": [
       {
         "name": ".fmt",
-        "value": "%c%c%c\n"
+        "value": "got %lld\n"
       }
     ],
     "externs": [
@@ -28,8 +28,39 @@
           "kind": "llvm.i32"
         },
         "body": {
-          "id": "@blk_print_chars_1",
+          "id": "@blk_sext_i32_to_i64_1",
           "stmts": [
+            {
+              "kind": "quod.let",
+              "name": "x",
+              "type": {
+                "kind": "llvm.i32"
+              },
+              "init": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": -7
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "wide",
+              "type": {
+                "kind": "llvm.i64"
+              },
+              "init": {
+                "kind": "quod.cast",
+                "value": {
+                  "kind": "quod.local_ref",
+                  "name": "x"
+                },
+                "target_type": {
+                  "kind": "llvm.i64"
+                }
+              }
+            },
             {
               "kind": "quod.expr_stmt",
               "value": {
@@ -41,34 +72,8 @@
                     "name": ".fmt"
                   },
                   {
-                    "kind": "quod.cast",
-                    "value": {
-                      "kind": "quod.char_lit",
-                      "value": "h"
-                    },
-                    "target_type": {
-                      "kind": "llvm.i32"
-                    }
-                  },
-                  {
-                    "kind": "quod.cast",
-                    "value": {
-                      "kind": "quod.char_lit",
-                      "value": "i"
-                    },
-                    "target_type": {
-                      "kind": "llvm.i32"
-                    }
-                  },
-                  {
-                    "kind": "quod.cast",
-                    "value": {
-                      "kind": "quod.char_lit",
-                      "value": "!"
-                    },
-                    "target_type": {
-                      "kind": "llvm.i32"
-                    }
+                    "kind": "quod.local_ref",
+                    "name": "wide"
                   }
                 ]
               }
@@ -90,7 +95,7 @@
     ]
   },
   "expect": {
-    "stdout": "hi!\n",
+    "stdout": "got -7\n",
     "exit": 0
   }
 }

@@ -20,6 +20,7 @@ from quod.model import (
     Block,
     Break,
     Call,
+    Cast,
     CharLit,
     Continue,
     DerivedJustification,
@@ -32,6 +33,8 @@ from quod.model import (
     Equivalence,
     ExprStmt,
     ExternFunction,
+    F32Type,
+    F64Type,
     FamilyLowering,
     FieldInit,
     FieldRead,
@@ -91,7 +94,6 @@ from quod.model import (
     UsizeType,
     VoidType,
     While,
-    Widen,
     WithArena,
     Z3Justification,
 )
@@ -279,19 +281,30 @@ _CORE_CATALOG: dict[str, dict[str, Any]] = {
         },
         "see_also": ["quod.string_ref", "llvm.i8_ptr"],
     },
-    "quod.widen": {
-        "class": Widen,
+    "quod.cast": {
+        "class": Cast,
         "summary": (
-            "Cast an integer between widths. Narrower→wider sign-extends "
-            "(or zero-extends when signed=false); wider→narrower truncates. "
-            "Lowered to LLVM `sext` / `zext` / `trunc`."
+            "Cast a numeric value to a different numeric type. The "
+            "(source-type, target-type) pair determines the LLVM op — "
+            "sext/zext/trunc for int↔int, sitofp/uitofp for int→float, "
+            "llvm.fptosi.sat / llvm.fptoui.sat for float→int (saturating, "
+            "NaN→0), fpext/fptrunc for float↔float. Same-width "
+            "signedness reinterpret and same-type casts lower to identity."
         ),
-        "example": {
-            "kind": "quod.widen",
-            "value": {"kind": "llvm.param_ref", "name": "k"},
-            "target": {"kind": "llvm.i64"},
+        "field_descriptions": {
+            "target_type": (
+                "The destination numeric type. Must be one of: i1, i8, "
+                "i16, i32, i64, isize (signed ints); u8, u16, u32, u64, "
+                "usize (unsigned ints); f32, f64. Source must also be "
+                "numeric — non-numeric source/target rejected at validation."
+            ),
         },
-        "see_also": ["quod.ptr_offset"],
+        "example": {
+            "kind": "quod.cast",
+            "value": {"kind": "llvm.param_ref", "name": "k"},
+            "target_type": {"kind": "llvm.i64"},
+        },
+        "see_also": ["quod.ptr_offset", "llvm.f32", "llvm.f64"],
     },
     "quod.load": {
         "class": Load,
@@ -305,7 +318,7 @@ _CORE_CATALOG: dict[str, dict[str, Any]] = {
             "ptr": {"kind": "quod.string_ref", "name": ".str.greeting"},
             "type": {"kind": "llvm.i8"},
         },
-        "see_also": ["quod.ptr_offset", "quod.widen"],
+        "see_also": ["quod.ptr_offset", "quod.cast"],
     },
     "quod.load_field": {
         "class": LoadField,
@@ -639,6 +652,25 @@ _CORE_CATALOG: dict[str, dict[str, Any]] = {
         "class": UsizeType,
         "summary": "Pointer-sized unsigned integer. Lowers to i64 width on 64-bit targets; the conventional type for sizes, lengths, and indices.",
         "example": {"kind": "llvm.usize"},
+    },
+    "llvm.f32": {
+        "class": F32Type,
+        "summary": (
+            "IEEE 754 binary32 float. Strict-IEEE: NaN-payload-undefined, "
+            "subnormals preserved, no FMA contraction, round-to-nearest-even, "
+            "no fenv access. No constructor for f32 values exists in this "
+            "commit (Cast preview only); FloatLit lands next."
+        ),
+        "example": {"kind": "llvm.f32"},
+    },
+    "llvm.f64": {
+        "class": F64Type,
+        "summary": (
+            "IEEE 754 binary64 float. Same strict-IEEE semantics as f32. "
+            "No constructor for f64 values exists in this commit (Cast "
+            "preview only); FloatLit lands next."
+        ),
+        "example": {"kind": "llvm.f64"},
     },
     "llvm.i8_ptr": {
         "class": I8PtrType,

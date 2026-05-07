@@ -22,6 +22,7 @@ from quod.model import (
     BinOp,
     Call,
     Claim,
+    Cast,
     DerivedJustification,
     ExprStmt,
     FieldRead,
@@ -38,7 +39,6 @@ from quod.model import (
     Program,
     PtrOffset,
     Store,
-    Widen,
     ReturnExpr,
     ShortCircuitAnd,
     ShortCircuitOr,
@@ -179,7 +179,7 @@ def _walk_calls_in_expr(expr) -> Iterator[Call]:
         case PtrOffset(base=b, offset=o):
             yield from _walk_calls_in_expr(b)
             yield from _walk_calls_in_expr(o)
-        case Widen(value=v):
+        case Cast(value=v):
             yield from _walk_calls_in_expr(v)
         case Load(ptr=p):
             yield from _walk_calls_in_expr(p)

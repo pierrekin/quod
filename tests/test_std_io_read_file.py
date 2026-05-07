@@ -80,10 +80,9 @@ def _jsonvalue_arms() -> list[dict]:
                 {
                     "kind": "quod.return_expr",
                     "value": {
-                        "kind": "quod.widen",
+                        "kind": "quod.cast",
                         "value": {"kind": "quod.local_ref", "name": "n"},
-                        "target": {"kind": "llvm.i32"},
-                        "signed": True,
+                        "target_type": {"kind": "llvm.i32"},
                     },
                 },
             ]},

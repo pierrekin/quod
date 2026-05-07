@@ -15,12 +15,13 @@ class Token:
 
 _KEYWORDS = frozenset({
     "fn", "let", "if", "else", "while", "for", "in", "return",
-    "store", "with_arena", "capacity", "load", "widen", "uwiden",
+    "store", "with_arena", "capacity", "load", "cast",
     "ptr_offset", "sizeof", "to", "null", "true", "false", "match",
     # type keywords
     "i1", "i8", "i16", "i32", "i64",
     "u8", "u16", "u32", "u64",
     "isize", "usize",
+    "f32", "f64",
     "void",
 })
 

@@ -14,7 +14,7 @@ _CATEGORIES: dict[str, list[str]] = {
         "quod.sc_or", "quod.sc_and", "quod.if_expr", "quod.not", "quod.return_ref",
         "llvm.call", "quod.string_ref",
         "quod.struct_init", "quod.field", "quod.load_field",
-        "quod.ptr_offset", "quod.widen", "quod.load", "quod.null_ptr",
+        "quod.ptr_offset", "quod.cast", "quod.load", "quod.null_ptr",
         "quod.char_lit", "quod.enum_init", "quod.sizeof", "quod.try",
         "quod.trait_call",
     ],
@@ -28,6 +28,7 @@ _CATEGORIES: dict[str, list[str]] = {
     ],
     "type": [
         "llvm.i1", "llvm.i8", "llvm.i16", "llvm.i32", "llvm.i64",
+        "llvm.f32", "llvm.f64",
         "llvm.i8_ptr", "llvm.struct", "llvm.enum", "llvm.void",
         "quod.type_param", "quod.self_type",
     ],

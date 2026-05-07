@@ -37,6 +37,7 @@ from quod.model import (
     Block,
     Break,
     Call,
+    Cast,
     Continue,
     DoWhile,
     Expr,
@@ -62,7 +63,6 @@ from quod.model import (
     Type,
     Unreachable,
     While,
-    Widen,
     body_always_terminates,
 )
 from quod.model import CStyleFor
@@ -764,8 +764,11 @@ class _FunctionTranslator:
             ):
                 lit_tokens = [t.spelling for t in _unwrap(inner[0]).get_tokens()]
                 return IntLit(type=_I64, value=-int(lit_tokens[0], 0))
-        # Variable offset: translate as an int expression and widen to i64.
-        return Widen(value=self.expr(cursor), target=_I64, signed=True)
+        # Variable offset: translate as an int expression and cast to i64.
+        # Source signedness is implicit in the value's quod type (typical
+        # C ints lift to i32 / i64 — signed — and the resolver propagates
+        # types through arithmetic).
+        return Cast(value=self.expr(cursor), target_type=_I64)
 
 
 def _translate_function(

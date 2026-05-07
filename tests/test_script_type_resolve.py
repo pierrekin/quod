@@ -142,14 +142,14 @@ def test_explicit_suffix_wins_over_let_type():
 
 # ---------- The force-suffix rule: bare literal with no context ----------
 
-def test_bare_literal_no_context_inside_widen_raises():
+def test_bare_literal_no_context_inside_cast_raises():
     """A bare integer literal can be made unresolvable by stuffing it
-    inside a `widen(... to ...)` whose result type is dictated by the
+    inside a `cast(... to ...)` whose result type is dictated by the
     target, not the source. Without further context, the source-side
     bare literal has nothing to anchor against and the resolver raises."""
     with pytest.raises(ScriptError, match="bare integer literal"):
         parse_function(
-            "fn f() -> i32 { let x: i32 = widen(5 to i32) return 0 }"
+            "fn f() -> i32 { let x: i32 = cast(5 to i32) return 0 }"
         )
 
 

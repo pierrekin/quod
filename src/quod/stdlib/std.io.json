@@ -249,15 +249,14 @@
                   "kind": "llvm.i64"
                 },
                 "init": {
-                  "kind": "quod.widen",
+                  "kind": "quod.cast",
                   "value": {
                     "kind": "llvm.param_ref",
                     "name": "n"
                   },
-                  "target": {
+                  "target_type": {
                     "kind": "llvm.i64"
-                  },
-                  "signed": false
+                  }
                 }
               },
               {
@@ -364,15 +363,14 @@
                     {
                       "name": "value",
                       "value": {
-                        "kind": "quod.widen",
+                        "kind": "quod.cast",
                         "value": {
                           "kind": "quod.local_ref",
                           "name": "rc"
                         },
-                        "target": {
+                        "target_type": {
                           "kind": "llvm.usize"
-                        },
-                        "signed": false
+                        }
                       }
                     }
                   ]
@@ -451,15 +449,14 @@
                   "kind": "llvm.i64"
                 },
                 "init": {
-                  "kind": "quod.widen",
+                  "kind": "quod.cast",
                   "value": {
                     "kind": "llvm.param_ref",
                     "name": "n"
                   },
-                  "target": {
+                  "target_type": {
                     "kind": "llvm.i64"
-                  },
-                  "signed": false
+                  }
                 }
               },
               {
@@ -566,15 +563,14 @@
                     {
                       "name": "value",
                       "value": {
-                        "kind": "quod.widen",
+                        "kind": "quod.cast",
                         "value": {
                           "kind": "quod.local_ref",
                           "name": "rc"
                         },
-                        "target": {
+                        "target_type": {
                           "kind": "llvm.usize"
-                        },
-                        "signed": false
+                        }
                       }
                     }
                   ]

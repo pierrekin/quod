@@ -37,6 +37,7 @@ from ..model import (
     ReturnRef,
     ShortCircuitAnd,
     ShortCircuitOr,
+    Cast,
     SizeOf,
     Store,
     StoreField,
@@ -47,7 +48,6 @@ from ..model import (
     TryExpr,
     Unreachable,
     While,
-    Widen,
     WithArena,
 )
 
@@ -130,7 +130,8 @@ def _collect_in_expr(expr, sink: set):
         _collect_in_expr(expr.offset, sink)
     elif isinstance(expr, TryExpr):
         _collect_in_expr(expr.value, sink)
-    elif isinstance(expr, Widen):
+    elif isinstance(expr, Cast):
+        _collect_instantiations(expr.target_type, sink)
         _collect_in_expr(expr.value, sink)
     elif isinstance(expr, TraitCall):
         _collect_instantiations(expr.dispatch_type, sink)

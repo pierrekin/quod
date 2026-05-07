@@ -47,6 +47,9 @@ from quod.model import (
     Not,
     ParamRef,
     PtrOffset,
+    Cast,
+    F32Type,
+    F64Type,
     ReturnExpr,
     ReturnRef,
     ShortCircuitAnd,
@@ -55,7 +58,6 @@ from quod.model import (
     StructInit,
     TryExpr,
     While,
-    Widen,
     WithArena,
 )
 
@@ -67,6 +69,8 @@ _INT_TYPE_CLASSES = (
     U8Type, U16Type, U32Type, U64Type,
     IsizeType, UsizeType,
 )
+
+_NUMERIC_TYPE_CLASSES = _INT_TYPE_CLASSES + (F32Type, F64Type)
 
 _BINOP_CMP = frozenset({"slt", "sle", "sgt", "sge", "eq", "ne",
                         "ult", "ule", "ugt", "uge"})
@@ -184,14 +188,14 @@ class _Resolver:
                 if new_b is not b or new_o is not o:
                     return e.model_copy(update={"base": new_b, "offset": new_o}), None
                 return e, None
-            case Widen(value=v, target=target):
-                # The widen's source type is the operand's natural type;
-                # let inner resolution figure it out (no expected
-                # propagation across a width change). Result is `target`.
+            case Cast(value=v, target_type=target):
+                # Source type natural to operand; result is target_type.
+                # _NUMERIC_TYPE_CLASSES is the int + float union.
                 new_v, _ = self.expr(v, None, scope)
+                result_ty = target if isinstance(target, _NUMERIC_TYPE_CLASSES) else None
                 if new_v is not v:
-                    return e.model_copy(update={"value": new_v}), target if isinstance(target, _INT_TYPE_CLASSES) else None
-                return e, target if isinstance(target, _INT_TYPE_CLASSES) else None
+                    return e.model_copy(update={"value": new_v}), result_ty
+                return e, result_ty
             case Load(ptr=p):
                 new_p, _ = self.expr(p, None, scope)
                 if new_p is not p:

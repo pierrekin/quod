@@ -9,7 +9,11 @@ from __future__ import annotations
 from llvmlite import ir
 
 from quod.lower.claims import _lower_claim
-from quod.lower.stmt import _collect_local_bindings, _lower_stmt
+from quod.lower.stmt import (
+    _collect_local_bindings,
+    _collect_local_qtypes,
+    _lower_stmt,
+)
 from quod.lower.types import _type_to_llvm
 from quod.model import (
     Block,
@@ -51,6 +55,7 @@ def _lower_function_body(
     struct_tys: dict[str, "ir.IdentifiedStructType"],
     enum_defs: dict[str, EnumDef],
     enum_tys: dict[str, "ir.IdentifiedStructType"],
+    fn_returns: dict[str, object] | None = None,
 ) -> None:
     # `quod.lower` operates on layer C only. Family wrappers and
     # family-extension statements must be stripped/lowered by the
@@ -86,6 +91,10 @@ def _lower_function_body(
         )
         locals_[name] = builder.alloca(ty, name=name)
 
+    # Parallel quod-side type lookup for Cast lowering (the LLVM-side
+    # locals_ has no signedness info).
+    local_qtypes = _collect_local_qtypes(fn.body)
+
     for claim in entry_claims:
         _lower_claim(builder, claim, params, llvm_fn, module, overrides=overrides)
 
@@ -98,6 +107,7 @@ def _lower_function_body(
             extern_sigs=extern_sigs,
             struct_defs=struct_defs, struct_tys=struct_tys,
             enum_defs=enum_defs, enum_tys=enum_tys,
+            fn=fn, local_qtypes=local_qtypes, fn_returns=fn_returns,
         )
 
     # Void functions get an implicit `ret void` if the body falls through;

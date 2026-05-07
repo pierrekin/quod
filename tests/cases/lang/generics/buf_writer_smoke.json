@@ -4,7 +4,13 @@
       {
         "module": "alloc.io",
         "wire": [
-          {"name": "A", "type": {"kind": "llvm.struct", "name": "mem.arena.Arena"}}
+          {
+            "name": "A",
+            "type": {
+              "kind": "llvm.struct",
+              "name": "mem.arena.Arena"
+            }
+          }
         ]
       },
       "core.io",
@@ -13,177 +19,361 @@
       "mem.arena"
     ],
     "constants": [
-      {"name": ".str.src", "value": "*"}
+      {
+        "name": ".str.src",
+        "value": "*"
+      }
     ],
     "functions": [
       {
         "name": "main",
         "params": [],
-        "return_type": {"kind": "llvm.i32"},
-        "body": {"id": "@blk_buf_writer_smoke_5", "stmts": [
-          {
-            "kind": "quod.let",
-            "name": "a",
-            "type": {"kind": "llvm.i8_ptr"},
-            "init": {
-              "kind": "llvm.call",
-              "function": "mem.arena.new",
-              "args": [{"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 8192}]
-            }
-          },
-          {
-            "kind": "quod.let",
-            "name": "target",
-            "type": {"kind": "llvm.i8_ptr"},
-            "init": {
-              "kind": "llvm.call",
-              "function": "mem.arena.alloc",
-              "args": [
-                {"kind": "quod.local_ref", "name": "a"},
-                {"kind": "llvm.const_int", "type": {"kind": "llvm.i64"}, "value": 16}
-              ]
-            }
-          },
-          {
-            "kind": "quod.let",
-            "name": "bw_inner_ptr",
-            "type": {"kind": "llvm.i8_ptr"},
-            "init": {
-              "kind": "llvm.call",
-              "function": "mem.arena.alloc",
-              "args": [
-                {"kind": "quod.local_ref", "name": "a"},
-                {"kind": "quod.sizeof", "type": {"kind": "llvm.struct", "name": "core.io.BytesWriter"}}
-              ]
-            }
-          },
-          {
-            "kind": "quod.store",
-            "ptr": {"kind": "quod.local_ref", "name": "bw_inner_ptr"},
-            "value": {
-              "kind": "quod.struct_init",
-              "type": "core.io.BytesWriter",
-              "fields": [
-                {"name": "ptr", "value": {"kind": "quod.local_ref", "name": "target"}},
-                {"name": "cap", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 16}},
-                {"name": "pos", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 0}}
-              ]
-            }
-          },
-          {
-            "kind": "quod.let",
-            "name": "bufw_ptr",
-            "type": {"kind": "llvm.i8_ptr"},
-            "init": {
-              "kind": "llvm.call",
-              "function": "alloc.io.buf_writer_with_capacity",
-              "type_args": [{"kind": "llvm.struct", "name": "core.io.BytesWriter"}],
-              "args": [
-                {"kind": "quod.local_ref", "name": "a"},
-                {"kind": "quod.local_ref", "name": "bw_inner_ptr"},
-                {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 4}
-              ]
-            }
-          },
-          {
-            "kind": "quod.let",
-            "name": "rc",
-            "type": {
-              "kind": "llvm.enum",
-              "name": "core.result.Result",
-              "type_args": [
-                {"kind": "llvm.usize"},
-                {"kind": "llvm.enum", "name": "core.io.IoError"}
+        "return_type": {
+          "kind": "llvm.i32"
+        },
+        "body": {
+          "id": "@blk_buf_writer_smoke_5",
+          "stmts": [
+            {
+              "kind": "quod.let",
+              "name": "a",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              },
+              "init": {
+                "kind": "llvm.call",
+                "function": "mem.arena.new",
+                "args": [
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i64"
+                    },
+                    "value": 8192
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "target",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              },
+              "init": {
+                "kind": "llvm.call",
+                "function": "mem.arena.alloc",
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "a"
+                  },
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.i64"
+                    },
+                    "value": 16
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "bw_inner_ptr",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              },
+              "init": {
+                "kind": "llvm.call",
+                "function": "mem.arena.alloc",
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "a"
+                  },
+                  {
+                    "kind": "quod.sizeof",
+                    "type": {
+                      "kind": "llvm.struct",
+                      "name": "core.io.BytesWriter"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.store",
+              "ptr": {
+                "kind": "quod.local_ref",
+                "name": "bw_inner_ptr"
+              },
+              "value": {
+                "kind": "quod.struct_init",
+                "type": "core.io.BytesWriter",
+                "fields": [
+                  {
+                    "name": "ptr",
+                    "value": {
+                      "kind": "quod.local_ref",
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "name": "cap",
+                    "value": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.usize"
+                      },
+                      "value": 16
+                    }
+                  },
+                  {
+                    "name": "pos",
+                    "value": {
+                      "kind": "llvm.const_int",
+                      "type": {
+                        "kind": "llvm.usize"
+                      },
+                      "value": 0
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "bufw_ptr",
+              "type": {
+                "kind": "llvm.i8_ptr"
+              },
+              "init": {
+                "kind": "llvm.call",
+                "function": "alloc.io.buf_writer_with_capacity",
+                "type_args": [
+                  {
+                    "kind": "llvm.struct",
+                    "name": "core.io.BytesWriter"
+                  }
+                ],
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "a"
+                  },
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "bw_inner_ptr"
+                  },
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.usize"
+                    },
+                    "value": 4
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.let",
+              "name": "rc",
+              "type": {
+                "kind": "llvm.enum",
+                "name": "core.result.Result",
+                "type_args": [
+                  {
+                    "kind": "llvm.usize"
+                  },
+                  {
+                    "kind": "llvm.enum",
+                    "name": "core.io.IoError"
+                  }
+                ]
+              },
+              "init": {
+                "kind": "quod.trait_call",
+                "trait": "core.io.Writer",
+                "method": "write",
+                "dispatch_type": {
+                  "kind": "llvm.struct",
+                  "name": "alloc.io.BufWriter",
+                  "type_args": [
+                    {
+                      "kind": "llvm.struct",
+                      "name": "core.io.BytesWriter"
+                    }
+                  ]
+                },
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "bufw_ptr"
+                  },
+                  {
+                    "kind": "quod.string_ref",
+                    "name": ".str.src"
+                  },
+                  {
+                    "kind": "llvm.const_int",
+                    "type": {
+                      "kind": "llvm.usize"
+                    },
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "quod.match",
+              "scrutinee": {
+                "kind": "quod.local_ref",
+                "name": "rc"
+              },
+              "arms": [
+                {
+                  "variant": "Ok",
+                  "bindings": [
+                    "_n"
+                  ],
+                  "body": {
+                    "id": "@blk_buf_writer_smoke_1",
+                    "stmts": []
+                  }
+                },
+                {
+                  "variant": "Err",
+                  "bindings": [
+                    "_e"
+                  ],
+                  "body": {
+                    "id": "@blk_buf_writer_smoke_2",
+                    "stmts": [
+                      {
+                        "kind": "quod.return_expr",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 1
+                        }
+                      }
+                    ]
+                  }
+                }
               ]
             },
-            "init": {
-              "kind": "quod.trait_call",
-              "trait": "core.io.Writer",
-              "method": "write",
-              "dispatch_type": {
-                "kind": "llvm.struct",
-                "name": "alloc.io.BufWriter",
-                "type_args": [{"kind": "llvm.struct", "name": "core.io.BytesWriter"}]
+            {
+              "kind": "quod.let",
+              "name": "flush_rc",
+              "type": {
+                "kind": "llvm.enum",
+                "name": "core.option.Option",
+                "type_args": [
+                  {
+                    "kind": "llvm.enum",
+                    "name": "core.io.IoError"
+                  }
+                ]
               },
-              "args": [
-                {"kind": "quod.local_ref", "name": "bufw_ptr"},
-                {"kind": "quod.string_ref", "name": ".str.src"},
-                {"kind": "llvm.const_int", "type": {"kind": "llvm.usize"}, "value": 1}
-              ]
-            }
-          },
-          {
-            "kind": "quod.match",
-            "scrutinee": {"kind": "quod.local_ref", "name": "rc"},
-            "arms": [
-              {"variant": "Ok", "bindings": ["_n"], "body": {"id": "@blk_buf_writer_smoke_1", "stmts": []}},
-              {
-                "variant": "Err",
-                "bindings": ["_e"],
-                "body": {"id": "@blk_buf_writer_smoke_2", "stmts": [
-                  {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 1}}
-                ]}
+              "init": {
+                "kind": "quod.trait_call",
+                "trait": "core.io.Writer",
+                "method": "flush",
+                "dispatch_type": {
+                  "kind": "llvm.struct",
+                  "name": "alloc.io.BufWriter",
+                  "type_args": [
+                    {
+                      "kind": "llvm.struct",
+                      "name": "core.io.BytesWriter"
+                    }
+                  ]
+                },
+                "args": [
+                  {
+                    "kind": "quod.local_ref",
+                    "name": "bufw_ptr"
+                  }
+                ]
               }
-            ]
-          },
-          {
-            "kind": "quod.let",
-            "name": "flush_rc",
-            "type": {
-              "kind": "llvm.enum",
-              "name": "core.option.Option",
-              "type_args": [{"kind": "llvm.enum", "name": "core.io.IoError"}]
             },
-            "init": {
-              "kind": "quod.trait_call",
-              "trait": "core.io.Writer",
-              "method": "flush",
-              "dispatch_type": {
-                "kind": "llvm.struct",
-                "name": "alloc.io.BufWriter",
-                "type_args": [{"kind": "llvm.struct", "name": "core.io.BytesWriter"}]
+            {
+              "kind": "quod.match",
+              "scrutinee": {
+                "kind": "quod.local_ref",
+                "name": "flush_rc"
               },
-              "args": [
-                {"kind": "quod.local_ref", "name": "bufw_ptr"}
+              "arms": [
+                {
+                  "variant": "None",
+                  "bindings": [],
+                  "body": {
+                    "id": "@blk_buf_writer_smoke_3",
+                    "stmts": []
+                  }
+                },
+                {
+                  "variant": "Some",
+                  "bindings": [
+                    "_e"
+                  ],
+                  "body": {
+                    "id": "@blk_buf_writer_smoke_4",
+                    "stmts": [
+                      {
+                        "kind": "quod.return_expr",
+                        "value": {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i32"
+                          },
+                          "value": 2
+                        }
+                      }
+                    ]
+                  }
+                }
               ]
-            }
-          },
-          {
-            "kind": "quod.match",
-            "scrutinee": {"kind": "quod.local_ref", "name": "flush_rc"},
-            "arms": [
-              {"variant": "None", "bindings": [], "body": {"id": "@blk_buf_writer_smoke_3", "stmts": []}},
-              {
-                "variant": "Some",
-                "bindings": ["_e"],
-                "body": {"id": "@blk_buf_writer_smoke_4", "stmts": [
-                  {"kind": "quod.return_expr", "value": {"kind": "llvm.const_int", "type": {"kind": "llvm.i32"}, "value": 2}}
-                ]}
+            },
+            {
+              "kind": "quod.let",
+              "name": "byte",
+              "type": {
+                "kind": "llvm.i8"
+              },
+              "init": {
+                "kind": "quod.load",
+                "ptr": {
+                  "kind": "quod.local_ref",
+                  "name": "target"
+                },
+                "type": {
+                  "kind": "llvm.i8"
+                }
               }
-            ]
-          },
-          {
-            "kind": "quod.let",
-            "name": "byte",
-            "type": {"kind": "llvm.i8"},
-            "init": {
-              "kind": "quod.load",
-              "ptr": {"kind": "quod.local_ref", "name": "target"},
-              "type": {"kind": "llvm.i8"}
+            },
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "quod.cast",
+                "value": {
+                  "kind": "quod.local_ref",
+                  "name": "byte"
+                },
+                "target_type": {
+                  "kind": "llvm.i32"
+                }
+              }
             }
-          },
-          {
-            "kind": "quod.return_expr",
-            "value": {
-              "kind": "quod.widen",
-              "value": {"kind": "quod.local_ref", "name": "byte"},
-              "target": {"kind": "llvm.i32"},
-              "signed": false
-            }
-          }
-        ]}
+          ]
+        }
       }
     ]
   },
-  "expect": {"exit": 42}
+  "expect": {
+    "exit": 42
+  }
 }

@@ -107,6 +107,7 @@ from quod.model import (
     Let,
     LocalRef,
     Param,
+    Cast,
     ParamRef,
     PtrOffset,
     Return,
@@ -115,7 +116,6 @@ from quod.model import (
     StringRef,
     VoidType,
     While,
-    Widen,
     ShortCircuitAnd,
     ShortCircuitOr,
 )
@@ -1045,12 +1045,12 @@ def _check_pointer_arith(
 
 def _check_offset_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
     """Layer-B pointer offsets are i64-typed: a literal becomes
-    `IntLit(I64, N)`; a non-literal gets wrapped in `Widen(value,
-    target=I64, signed=True)`. Both shapes correspond to a single
-    layer-A `CExpr`.
+    `IntLit(I64, N)`; a non-literal gets wrapped in `Cast(value,
+    target_type=I64Type)`. Both shapes correspond to a single layer-A
+    `CExpr`.
 
     Literal: `CIntLit(N) ↔ IntLit(I64, N)`.
-    Variable: `expr ↔ Widen(expr', target=I64, signed=True)`.
+    Variable: `expr ↔ Cast(expr', target_type=I64Type)`.
     """
     if isinstance(b, IntLit):
         if not isinstance(b.type, I64Type):
@@ -1067,18 +1067,18 @@ def _check_offset_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
                 f"{path}: offset value {a.value} vs {b.value}"
             )
         return {"kind": "offset_lit", "value": a.value}
-    if isinstance(b, Widen):
-        if not isinstance(b.target, I64Type) or not b.signed:
+    if isinstance(b, Cast):
+        if not isinstance(b.target_type, I64Type):
             raise LiftCheckError(
-                f"{path}: layer-B offset Widen has unexpected shape "
-                f"(target={b.target}, signed={b.signed})"
+                f"{path}: layer-B offset Cast has unexpected target "
+                f"(target_type={b.target_type})"
             )
         return {
-            "kind": "offset ↔ widen(i64)",
+            "kind": "offset ↔ cast(i64)",
             "value": _check_expr(a, b.value, path=path, ctx=ctx),
         }
     raise LiftCheckError(
-        f"{path}: layer-B offset is {type(b).__name__}; expected IntLit(i64) or Widen"
+        f"{path}: layer-B offset is {type(b).__name__}; expected IntLit(i64) or Cast"
     )
 
 

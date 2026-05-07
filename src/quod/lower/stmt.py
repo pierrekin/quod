@@ -92,6 +92,34 @@ def _collect_local_bindings(
     return out
 
 
+def _collect_local_qtypes(body) -> dict[str, "object"]:
+    """Parallel to `_collect_local_bindings`, but yields the quod-side
+    `Type` for each binding (not the lowered LLVM type). Used by `Cast`
+    lowering to determine source signedness — the LLVM type alone has
+    no signedness, but quod's IXType / UXType partition does. Match-arm
+    bindings are handled inline (not pre-collected) — same as
+    `_collect_local_bindings`."""
+    out: dict[str, object] = {}
+
+    def visit(blk) -> None:
+        for s in blk.stmts:
+            match s:
+                case Let(name=name, type=ty):
+                    out[name] = ty
+                case For(var=var, type=ty, body=for_body):
+                    out[var] = ty
+                    visit(for_body)
+                case If(then_body=t, else_body=e):
+                    visit(t); visit(e)
+                case While(body=w_body) | DoWhile(body=w_body):
+                    visit(w_body)
+                case Match(arms=arms):
+                    for arm in arms:
+                        visit(arm.body)
+    visit(body)
+    return out
+
+
 def _lower_stmt(
     builder: ir.IRBuilder,
     stmt,
@@ -110,11 +138,18 @@ def _lower_stmt(
     enum_defs: dict[str, EnumDef],
     enum_tys: dict[str, "ir.IdentifiedStructType"],
     loop_stack: list[tuple[ir.Block, ir.Block]] | None = None,
+    fn=None,
+    local_qtypes: dict[str, object] | None = None,
+    fn_returns: dict[str, object] | None = None,
 ) -> None:
     """Lower a statement. `return_claims` are emitted as llvm.assume / runtime
     check at every ret, so callers (after inlining) see the bound. The
     `loop_stack` carries (continue_target, break_target) for each enclosing
-    loop, so `Break` / `Continue` can branch to the right basic block."""
+    loop, so `Break` / `Continue` can branch to the right basic block.
+
+    `fn`, `local_qtypes`, and `fn_returns` are quod-side type lookups
+    needed by `Cast` lowering to recover source signedness (the LLVM
+    type alone is signedness-free)."""
     if loop_stack is None:
         loop_stack = []
 
@@ -124,6 +159,7 @@ def _lower_stmt(
             constants=constants, extern_sigs=extern_sigs, locals_=locals_,
             struct_defs=struct_defs, struct_tys=struct_tys,
             enum_defs=enum_defs, enum_tys=enum_tys,
+            fn=fn, local_qtypes=local_qtypes, fn_returns=fn_returns,
         )
 
     def lower_body(body):
@@ -136,6 +172,7 @@ def _lower_stmt(
                 struct_defs=struct_defs, struct_tys=struct_tys,
                 enum_defs=enum_defs, enum_tys=enum_tys,
                 loop_stack=loop_stack,
+                fn=fn, local_qtypes=local_qtypes, fn_returns=fn_returns,
             )
 
     match stmt:
@@ -273,6 +310,7 @@ def _lower_stmt(
                     struct_defs=struct_defs, struct_tys=struct_tys,
                     enum_defs=enum_defs, enum_tys=enum_tys,
                     loop_stack=loop_stack,
+                    fn=fn, local_qtypes=local_qtypes, fn_returns=fn_returns,
                 )
             if not builder.block.is_terminated:
                 builder.branch(ensure_merge())
@@ -287,6 +325,7 @@ def _lower_stmt(
                     struct_defs=struct_defs, struct_tys=struct_tys,
                     enum_defs=enum_defs, enum_tys=enum_tys,
                     loop_stack=loop_stack,
+                    fn=fn, local_qtypes=local_qtypes, fn_returns=fn_returns,
                 )
             if not builder.block.is_terminated:
                 builder.branch(ensure_merge())
@@ -434,6 +473,7 @@ def _lower_stmt(
                         extern_sigs=extern_sigs,
                         struct_defs=struct_defs, struct_tys=struct_tys,
                         enum_defs=enum_defs, enum_tys=enum_tys,
+                        fn=fn, local_qtypes=local_qtypes, fn_returns=fn_returns,
                     )
                 if not builder.block.is_terminated:
                     builder.branch(ensure_end())
@@ -453,6 +493,7 @@ def _lower_stmt(
                 variant_ty = _variant_struct_ty(var, struct_tys, enum_tys)
                 variant_ptr = builder.bitcast(payload_ptr, variant_ty.as_pointer())
                 saved: dict[str, ir.AllocaInstr | None] = {}
+                saved_qtypes: dict[str, object | None] = {}
                 for i, (binding, field) in enumerate(zip(arm.bindings, var.fields)):
                     saved[binding] = locals_.get(binding)
                     field_ll_ty = _type_to_llvm(field.type, struct_tys, enum_tys)
@@ -464,12 +505,21 @@ def _lower_stmt(
                     field_val = builder.load(field_ptr)
                     builder.store(field_val, binding_alloca)
                     locals_[binding] = binding_alloca
+                    if local_qtypes is not None:
+                        saved_qtypes[binding] = local_qtypes.get(binding)
+                        local_qtypes[binding] = field.type
                 lower_arm_body(arm)
                 for b, prior in saved.items():
                     if prior is None:
                         locals_.pop(b, None)
                     else:
                         locals_[b] = prior
+                if local_qtypes is not None:
+                    for b, prior in saved_qtypes.items():
+                        if prior is None:
+                            local_qtypes.pop(b, None)
+                        else:
+                            local_qtypes[b] = prior
             if wildcard_arm is not None:
                 builder.position_at_end(wildcard_bb)
                 lower_arm_body(wildcard_arm)

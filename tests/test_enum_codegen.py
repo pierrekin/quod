@@ -62,7 +62,6 @@ from quod.model import (
     StructInit,
     StructType,
     TryExpr,
-    Widen,
     WithArena,
 
     Block,

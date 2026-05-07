@@ -42,7 +42,7 @@ from quod.model import (
     TryExpr,
     VoidType,
     While,
-    Widen,
+    Cast,
     WithArena,
 )
 from quod.script import ScriptError, parse_function, tokenize
@@ -300,21 +300,19 @@ def test_expr_struct_init_with_trailing_comma():
     ]
 
 
-def test_expr_load_widen_uwiden_ptr_offset():
+def test_expr_load_cast_ptr_offset():
     fn = parse_function(
         "fn f(p: i8*) -> i32 { "
         "let b: i8 = load[i8](ptr_offset(p, 0)) "
-        "let w: i32 = uwiden(b to i32) "
-        "let s: i32 = widen(b to i32) "
-        "return w + s }"
+        "let s: i32 = cast(b to i32) "
+        "return s }"
     )
     assert isinstance(fn.body.stmts[0].init, Load)
     load = fn.body.stmts[0].init
     assert isinstance(load.ptr, PtrOffset)
-    uw = fn.body.stmts[1].init
-    assert isinstance(uw, Widen) and uw.signed is False
-    sw = fn.body.stmts[2].init
-    assert isinstance(sw, Widen) and sw.signed is True
+    s = fn.body.stmts[1].init
+    assert isinstance(s, Cast)
+    assert isinstance(s.target_type, I32Type)
 
 
 def test_expr_short_circuit_and_or():

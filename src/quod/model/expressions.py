@@ -242,26 +242,37 @@ class PtrOffset(_Node):
     offset: "Expr"   # must lower to i64
 
 
-class Widen(_Node):
-    """Cast an integer value between widths.
+class Cast(_Node):
+    """Cast a numeric value to a different numeric type.
 
-    Lowers to `sext` (default) / `zext` / `trunc` depending on the
-    relationship between the source type's width and `target`'s. When
-    `signed=True` (default) and the target is wider, the high bits get
-    sign-extended; when `signed=False`, zero-extended. Truncation is
-    width-only and ignores `signed`. A no-op cast (same width) returns
-    the value unchanged.
+    The (source-type, target-type) pair determines the LLVM operation
+    uniquely — quod's IXType / UXType partition encodes signedness on
+    the type, so no separate `signed` flag is needed:
 
-    Quod's convention is signed integers, so `signed=True` matches the
-    common case (`int x; (int64_t)x;` → sign-extend). Reach for
-    `signed=False` only when the source value is genuinely unsigned in
-    intent (e.g., a byte read from a buffer being widened to i64 for
-    arithmetic).
+    - int → int wider, signed source: `sext`
+    - int → int wider, unsigned source: `zext`
+    - int → int narrower (signed or unsigned): `trunc`
+    - int → int same width, signedness reinterpret: identity (LLVM no-op)
+    - int → float, signed source: `sitofp`
+    - int → float, unsigned source: `uitofp`
+    - float → int, signed target: `llvm.fptosi.sat.iN.fM`
+    - float → int, unsigned target: `llvm.fptoui.sat.iN.fM`
+    - float → float wider: `fpext`
+    - float → float narrower: `fptrunc`
+    - same source and target: identity
+
+    Float-to-int saturates out-of-range values to the target's MAX/MIN;
+    NaN-to-int is 0. To zero-extend a *signed* int (e.g. an i32 read
+    that should not be sign-extended), reinterpret-cast first to the
+    same-width unsigned type, then widen — two casts, but explicit
+    intent.
+
+    Non-numeric source/target types (struct, enum, pointer, void) are
+    rejected by the validator.
     """
-    kind: Literal["quod.widen"] = "quod.widen"
+    kind: Literal["quod.cast"] = "quod.cast"
     value: "Expr"
-    target: "IntType"
-    signed: bool = True
+    target_type: "Type"
 
 
 class Load(_Node):
@@ -406,7 +417,7 @@ Expr = Annotated[
     Union[
         IntLit, ParamRef, LocalRef, BinOp, ShortCircuitOr, ShortCircuitAnd,
         IfExpr, Not, ReturnRef,
-        Call, StringRef, FieldRead, LoadField, StructInit, PtrOffset, Widen,
+        Call, StringRef, FieldRead, LoadField, StructInit, PtrOffset, Cast,
         Load, NullPtr, CharLit, EnumInit, SizeOf, TryExpr, TraitCall,
     ],
     Field(discriminator="kind"),

@@ -28,12 +28,15 @@ from quod.model import (
     Assign,
     BinOp,
     Call,
+    Cast,
     CharLit,
     EnumDef,
     EnumInit,
     EnumType,
     ExprStmt,
     ExternFunction,
+    F32Type,
+    F64Type,
     FieldRead,
     FieldSet,
     For,
@@ -86,8 +89,9 @@ from quod.model import (
     Unreachable,
     VoidType,
     While,
-    Widen,
     WithArena,
+    int_type_signed,
+    int_type_width,
 )
 
 
@@ -132,6 +136,7 @@ CONTINUE_OUTSIDE_LOOP = "continue_outside_loop"
 # Phase 3: type-aware checks (downstream of inference).
 FIELD_READ_NON_STRUCT = "field_read_non_struct"
 FIELDSET_NON_STRUCT_LOCAL = "fieldset_non_struct_local"
+CAST_NON_NUMERIC = "cast_non_numeric"
 
 
 # ---------- Diagnostic ----------
@@ -659,7 +664,7 @@ def _check_expr_reads(ctx: _Ctx, expr, defined: set[str]) -> None:
         case PtrOffset(base=b, offset=o):
             _check_expr_reads(ctx, b, defined)
             _check_expr_reads(ctx, o, defined)
-        case Widen(value=v):
+        case Cast(value=v):
             _check_expr_reads(ctx, v, defined)
         case Load(ptr=p):
             _check_expr_reads(ctx, p, defined)
@@ -844,8 +849,10 @@ def _check_expr(ctx: _Ctx, expr) -> None:
         case PtrOffset(base=p, offset=o):
             _check_expr(ctx, p)
             _check_expr(ctx, o)
-        case Widen(value=v):
+        case Cast(value=v, target_type=t):
             _check_expr(ctx, v)
+            _check_type(ctx, t)
+            _check_cast_arm(ctx, v, t)
         case Load(ptr=p, type=t):
             _check_expr(ctx, p)
             _check_type(ctx, t)
@@ -894,6 +901,46 @@ def _check_try(ctx: _Ctx, inner) -> None:
         ctx.emit(TRY_RETURN_TYPE_MISMATCH,
                  f"? on {ed.name!r} requires the enclosing function to "
                  f"return {ed.name!r}, got {_type_name(ret_ty)}")
+
+
+_NUMERIC_INT_CLASSES = (
+    I1Type, I8Type, I16Type, I32Type, I64Type,
+    U8Type, U16Type, U32Type, U64Type,
+    IsizeType, UsizeType,
+)
+_NUMERIC_FLOAT_CLASSES = (F32Type, F64Type)
+_NUMERIC_CLASSES = _NUMERIC_INT_CLASSES + _NUMERIC_FLOAT_CLASSES
+
+
+def _check_cast_arm(ctx: _Ctx, value, target_type) -> None:
+    """A `Cast` is legal iff both source and target are numeric (int or
+    float). Any pair of numeric types lowers cleanly — int↔int (sext /
+    zext / trunc / identity), int↔float (sitofp / uitofp / fptosi.sat /
+    fptoui.sat), float↔float (fpext / fptrunc / identity). Non-numeric
+    sources (struct, enum, pointer, void) and non-numeric targets are
+    rejected here.
+
+    `TypeParamRef` is accepted in both source and target positions —
+    this validator runs both pre- and post-monomorphization, and pre-mono
+    a generic Cast may legitimately reference an unbound type param.
+    The post-mono pass sees concrete types and re-checks.
+    """
+    if isinstance(target_type, TypeParamRef):
+        return
+    if not isinstance(target_type, _NUMERIC_CLASSES):
+        ctx.emit(CAST_NON_NUMERIC,
+                 f"cast target must be a numeric type (int or float); "
+                 f"got {_type_name(target_type)}")
+        return
+    src_ty = _infer_type(ctx, value)
+    if src_ty is None or isinstance(src_ty, TypeParamRef):
+        # Inference failed or source is a generic type param — let
+        # other validation / the post-mono pass pick it up.
+        return
+    if not isinstance(src_ty, _NUMERIC_CLASSES):
+        ctx.emit(CAST_NON_NUMERIC,
+                 f"cast source must be a numeric value (int or float); "
+                 f"got {_type_name(src_ty)}")
 
 
 def _check_field_inits(
@@ -954,7 +1001,7 @@ def _infer_type(ctx: _Ctx, expr) -> object | None:
             return t
         case SizeOf():
             return I64Type()
-        case Widen(target=t):
+        case Cast(target_type=t):
             return t
         case ShortCircuitAnd() | ShortCircuitOr():
             return I1Type()
@@ -1025,6 +1072,10 @@ def _type_name(t) -> str:
             return "isize"
         case UsizeType():
             return "usize"
+        case F32Type():
+            return "f32"
+        case F64Type():
+            return "f64"
         case I8PtrType():
             return "i8*"
         case VoidType():

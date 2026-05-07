@@ -510,15 +510,14 @@
           {
             "kind": "quod.return_expr",
             "value": {
-              "kind": "quod.widen",
+              "kind": "quod.cast",
               "value": {
                 "kind": "llvm.param_ref",
                 "name": "x"
               },
-              "target": {
+              "target_type": {
                 "kind": "llvm.i32"
-              },
-              "signed": true
+              }
             }
           }
         ]
@@ -582,15 +581,14 @@
           {
             "kind": "quod.return_expr",
             "value": {
-              "kind": "quod.widen",
+              "kind": "quod.cast",
               "value": {
                 "kind": "llvm.param_ref",
                 "name": "x"
               },
-              "target": {
+              "target_type": {
                 "kind": "llvm.u32"
-              },
-              "signed": false
+              }
             }
           }
         ]
@@ -657,15 +655,14 @@
           {
             "kind": "quod.return_expr",
             "value": {
-              "kind": "quod.widen",
+              "kind": "quod.cast",
               "value": {
                 "kind": "llvm.param_ref",
                 "name": "x"
               },
-              "target": {
+              "target_type": {
                 "kind": "llvm.u64"
-              },
-              "signed": false
+              }
             }
           }
         ]
@@ -691,7 +688,7 @@
         }
       ],
       "notes": [
-        "Same-width Widen lowers to identity; non_negative ensures the unsigned interpretation matches the signed one."
+        "Same-width Cast lowers to identity; non_negative ensures the unsigned interpretation matches the signed one."
       ]
     },
     {
@@ -713,15 +710,14 @@
           {
             "kind": "quod.return_expr",
             "value": {
-              "kind": "quod.widen",
+              "kind": "quod.cast",
               "value": {
                 "kind": "llvm.param_ref",
                 "name": "x"
               },
-              "target": {
+              "target_type": {
                 "kind": "llvm.i64"
-              },
-              "signed": false
+              }
             }
           }
         ]

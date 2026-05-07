@@ -43,7 +43,7 @@ from quod.model import (
     U64Type,
     IsizeType,
     UsizeType,
-    Widen,
+    Cast,
 
     Block,
 )
@@ -94,8 +94,9 @@ def _print_llu(value):
 
 
 def _zext_to_i64(u_value):
-    """Zero-extend a u<N> value to i64 for printing."""
-    return Widen(value=u_value, target=I64Type(), signed=False)
+    """Zero-extend a u<N> value to i64 for printing. Cast derives
+    zext from the source's UXType."""
+    return Cast(value=u_value, target_type=I64Type())
 
 
 # ---------- Core: u-typed values lower and run ----------
@@ -177,14 +178,13 @@ def test_udiv_vs_sdiv_divergence_on_u32_max():
                 lhs=IntLit(type=U32Type(), value=0xFFFFFFFF),
                 rhs=IntLit(type=U32Type(), value=2),
             ))),
-            _print_lld(Widen(
+            _print_lld(Cast(
                 value=BinOp(
                     op="sdiv",
                     lhs=IntLit(type=I32Type(), value=-1),
                     rhs=IntLit(type=I32Type(), value=2),
                 ),
-                target=I64Type(),
-                signed=True,
+                target_type=I64Type(),
             )),
             ReturnExpr(value=IntLit(type=I32Type(), value=0)),
         )),

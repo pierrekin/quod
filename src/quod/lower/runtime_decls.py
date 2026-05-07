@@ -9,7 +9,7 @@ from __future__ import annotations
 from llvmlite import binding as llvm
 from llvmlite import ir
 
-from quod.lower.types import I1, I8, I64
+from quod.lower.types import F32, F64, I1, I8, I64
 
 
 def _get_or_declare_assume(module: ir.Module) -> ir.Function:
@@ -34,6 +34,32 @@ def _get_or_declare_atoll(module: ir.Module) -> ir.Function:
     if "atoll" in module.globals:
         return module.globals["atoll"]
     return ir.Function(module, ir.FunctionType(I64, [I8.as_pointer()]), name="atoll")
+
+
+def _get_or_declare_fptosi_sat(module: ir.Module, int_ty: ir.IntType, float_ty: ir.Type) -> ir.Function:
+    """Saturating float→signed-int conversion intrinsic. Out-of-range
+    floats clamp to MAX/MIN of the int type; NaN maps to 0."""
+    name = f"llvm.fptosi.sat.i{int_ty.width}.f{_float_bits(float_ty)}"
+    if name in module.globals:
+        return module.globals[name]
+    return ir.Function(module, ir.FunctionType(int_ty, [float_ty]), name=name)
+
+
+def _get_or_declare_fptoui_sat(module: ir.Module, int_ty: ir.IntType, float_ty: ir.Type) -> ir.Function:
+    """Saturating float→unsigned-int conversion intrinsic. Out-of-range
+    floats clamp to MAX/0 of the int type; NaN maps to 0."""
+    name = f"llvm.fptoui.sat.i{int_ty.width}.f{_float_bits(float_ty)}"
+    if name in module.globals:
+        return module.globals[name]
+    return ir.Function(module, ir.FunctionType(int_ty, [float_ty]), name=name)
+
+
+def _float_bits(t: ir.Type) -> int:
+    if isinstance(t, ir.FloatType):
+        return 32
+    if isinstance(t, ir.DoubleType):
+        return 64
+    raise ValueError(f"not an LLVM float type: {t}")
 
 
 def _emit_for_enforcement(builder: ir.IRBuilder, cond: ir.Value, enforcement: str, llvm_fn: ir.Function, module: ir.Module) -> None:

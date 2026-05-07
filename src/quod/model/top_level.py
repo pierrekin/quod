@@ -15,6 +15,7 @@ from quod.model.claims import Claim, claim_param
 from quod.model.expressions import (
     BinOp,
     Call,
+    Cast,
     EnumInit,
     FieldRead,
     Load,
@@ -23,7 +24,6 @@ from quod.model.expressions import (
     ShortCircuitOr,
     StructInit,
     TryExpr,
-    Widen,
 )
 from quod.model.layer_b import BlockOrScoped
 from quod.model.statements import (
@@ -377,7 +377,7 @@ def function_callees(fn: "Function") -> tuple[str, ...]:
             case PtrOffset(base=b, offset=o):
                 visit_expr(b)
                 visit_expr(o)
-            case Widen(value=v):
+            case Cast(value=v):
                 visit_expr(v)
             case Load(ptr=p):
                 visit_expr(p)

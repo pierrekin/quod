@@ -27,110 +27,115 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": {"id": "@blk_byte_round_trip_2", "stmts": [
-          {
-            "kind": "quod.with_arena",
-            "name": "a",
-            "capacity": {
-              "kind": "llvm.const_int",
-              "type": {
-                "kind": "llvm.i64"
-              },
-              "value": 64
-            },
-            "body": {"id": "@blk_byte_round_trip_1", "stmts": [
-              {
-                "kind": "quod.let",
-                "name": "buf",
+        "body": {
+          "id": "@blk_byte_round_trip_2",
+          "stmts": [
+            {
+              "kind": "quod.with_arena",
+              "name": "a",
+              "capacity": {
+                "kind": "llvm.const_int",
                 "type": {
-                  "kind": "llvm.i8_ptr"
+                  "kind": "llvm.i64"
                 },
-                "init": {
-                  "kind": "llvm.call",
-                  "function": "mem.arena.alloc",
-                  "args": [
-                    {
-                      "kind": "quod.local_ref",
-                      "name": "a"
+                "value": 64
+              },
+              "body": {
+                "id": "@blk_byte_round_trip_1",
+                "stmts": [
+                  {
+                    "kind": "quod.let",
+                    "name": "buf",
+                    "type": {
+                      "kind": "llvm.i8_ptr"
                     },
-                    {
+                    "init": {
+                      "kind": "llvm.call",
+                      "function": "mem.arena.alloc",
+                      "args": [
+                        {
+                          "kind": "quod.local_ref",
+                          "name": "a"
+                        },
+                        {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i64"
+                          },
+                          "value": 4
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "quod.store",
+                    "ptr": {
+                      "kind": "quod.local_ref",
+                      "name": "buf"
+                    },
+                    "value": {
                       "kind": "llvm.const_int",
                       "type": {
-                        "kind": "llvm.i64"
+                        "kind": "llvm.i8"
                       },
-                      "value": 4
+                      "value": 65
                     }
-                  ]
-                }
-              },
-              {
-                "kind": "quod.store",
-                "ptr": {
-                  "kind": "quod.local_ref",
-                  "name": "buf"
-                },
-                "value": {
-                  "kind": "llvm.const_int",
-                  "type": {
-                    "kind": "llvm.i8"
                   },
-                  "value": 65
-                }
-              },
-              {
-                "kind": "quod.let",
-                "name": "b",
-                "type": {
-                  "kind": "llvm.i8"
-                },
-                "init": {
-                  "kind": "quod.load",
-                  "ptr": {
-                    "kind": "quod.local_ref",
-                    "name": "buf"
-                  },
-                  "type": {
-                    "kind": "llvm.i8"
-                  }
-                }
-              },
-              {
-                "kind": "quod.expr_stmt",
-                "value": {
-                  "kind": "llvm.call",
-                  "function": "printf",
-                  "args": [
-                    {
-                      "kind": "quod.string_ref",
-                      "name": ".fmt"
+                  {
+                    "kind": "quod.let",
+                    "name": "b",
+                    "type": {
+                      "kind": "llvm.i8"
                     },
-                    {
-                      "kind": "quod.widen",
-                      "value": {
+                    "init": {
+                      "kind": "quod.load",
+                      "ptr": {
                         "kind": "quod.local_ref",
-                        "name": "b"
+                        "name": "buf"
                       },
-                      "target": {
-                        "kind": "llvm.i32"
-                      },
-                      "signed": false
+                      "type": {
+                        "kind": "llvm.i8"
+                      }
                     }
-                  ]
-                }
+                  },
+                  {
+                    "kind": "quod.expr_stmt",
+                    "value": {
+                      "kind": "llvm.call",
+                      "function": "printf",
+                      "args": [
+                        {
+                          "kind": "quod.string_ref",
+                          "name": ".fmt"
+                        },
+                        {
+                          "kind": "quod.cast",
+                          "value": {
+                            "kind": "quod.local_ref",
+                            "name": "b"
+                          },
+                          "target_type": {
+                            "kind": "llvm.i32"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
               }
-            ]}
-          },
-          {
-            "kind": "quod.return_expr",
-            "value": {
-              "kind": "llvm.const_int",
-              "type": {
-                "kind": "llvm.i32"
-              },
-              "value": 0
+            },
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 0
+              }
             }
-          }
-        ]},
+          ]
+        },
         "claims": []
       }
     ],

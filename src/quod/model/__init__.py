@@ -33,6 +33,9 @@ from quod.model.justifications import (
 )
 from quod.model.types import (
     EnumType,
+    F32Type,
+    F64Type,
+    FloatType,
     I1Type,
     I8PtrType,
     I8Type,
@@ -60,6 +63,7 @@ from quod.model.types import (
 from quod.model.expressions import (
     BinOp,
     Call,
+    Cast,
     CharLit,
     EnumInit,
     Expr,
@@ -83,7 +87,6 @@ from quod.model.expressions import (
     StructInit,
     TraitCall,
     TryExpr,
-    Widen,
     _collect_predicate_refs,
 )
 

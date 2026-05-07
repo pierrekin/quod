@@ -57,6 +57,7 @@ from .model import (
     ShortCircuitAnd,
     ShortCircuitOr,
     SizeOf,
+    Cast,
     Store,
     StoreField,
     StringRef,
@@ -64,7 +65,6 @@ from .model import (
     TraitCall,
     TryExpr,
     Unreachable,
-    Widen,
     While,
     WithArena,
 )
@@ -82,9 +82,10 @@ def substitute_in_expr(expr, type_fn: Callable):
         })
     if isinstance(expr, SizeOf):
         return expr.model_copy(update={"type": type_fn(expr.type)})
-    if isinstance(expr, Widen):
+    if isinstance(expr, Cast):
         return expr.model_copy(update={
             "value": substitute_in_expr(expr.value, type_fn),
+            "target_type": type_fn(expr.target_type),
         })
     if isinstance(expr, StructInit):
         new_fields = tuple(

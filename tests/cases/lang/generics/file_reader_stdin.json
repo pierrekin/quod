@@ -186,15 +186,14 @@
                       {
                         "kind": "quod.return_expr",
                         "value": {
-                          "kind": "quod.widen",
+                          "kind": "quod.cast",
                           "value": {
                             "kind": "quod.local_ref",
                             "name": "byte"
                           },
-                          "target": {
+                          "target_type": {
                             "kind": "llvm.i32"
-                          },
-                          "signed": false
+                          }
                         }
                       }
                     ]

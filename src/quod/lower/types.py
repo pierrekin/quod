@@ -17,6 +17,8 @@ from quod.model import (
     EnumDef,
     EnumType,
     EnumVariant,
+    F32Type,
+    F64Type,
     I1Type,
     I8PtrType,
     I8Type,
@@ -42,6 +44,8 @@ I8 = ir.IntType(8)
 I16 = ir.IntType(16)
 I32 = ir.IntType(32)
 I64 = ir.IntType(64)
+F32 = ir.FloatType()
+F64 = ir.DoubleType()
 
 
 # Map quod.BinOp.op -> the icmp predicate (cmp ops only).
@@ -79,6 +83,10 @@ def _type_to_llvm(
             return I32
         case I64Type() | U64Type() | IsizeType() | UsizeType():
             return I64
+        case F32Type():
+            return F32
+        case F64Type():
+            return F64
         case I8PtrType():
             return I8.as_pointer()
         case StructType(name=name):
@@ -169,9 +177,9 @@ def _size_of_quod_type(
             return (1, 1)
         case I16Type() | U16Type():
             return (2, 2)
-        case I32Type() | U32Type():
+        case I32Type() | U32Type() | F32Type():
             return (4, 4)
-        case I64Type() | U64Type() | IsizeType() | UsizeType() | I8PtrType():
+        case I64Type() | U64Type() | IsizeType() | UsizeType() | F64Type() | I8PtrType():
             return (8, 8)
         case StructType(name=name):
             sd = struct_defs.get(name)

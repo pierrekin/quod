@@ -64,6 +64,32 @@ class UsizeType(_Node):
     kind: Literal["llvm.usize"] = "llvm.usize"
 
 
+class F32Type(_Node):
+    """IEEE 754 binary32 floating-point type.
+
+    Strict-IEEE semantics in quod:
+
+    - NaN-payload-undefined (specific bit patterns of NaN payloads are
+      not preserved across operations; no sNaN/qNaN distinction).
+    - Subnormals preserved (no FTZ / DAZ).
+    - No FMA contraction in codegen.
+    - Round-to-nearest-even (IEEE default); no fenv manipulation.
+    - Float-to-int out-of-range saturates; NaN-to-int is 0.
+    - Comparisons use LLVM ordered predicates plus `une` for `!=` so
+      `NaN != NaN` is true.
+
+    No constructor for f32 values exists in this commit (Cast preview
+    only); FloatLit / FNeg / float BinOp ops land in the next commit.
+    """
+    kind: Literal["llvm.f32"] = "llvm.f32"
+
+
+class F64Type(_Node):
+    """IEEE 754 binary64 floating-point type. Same strict-IEEE
+    semantics as F32Type — see that docstring for the full list."""
+    kind: Literal["llvm.f64"] = "llvm.f64"
+
+
 class I8PtrType(_Node):
     kind: Literal["llvm.i8_ptr"] = "llvm.i8_ptr"
 
@@ -163,6 +189,13 @@ IntType = Annotated[
     Field(discriminator="kind"),
 ]
 
+# Float-only sub-union. F32 / F64 are deliberately NOT in IntType —
+# floats must not pass `isinstance(_, IntType)` anywhere.
+FloatType = Annotated[
+    Union[F32Type, F64Type],
+    Field(discriminator="kind"),
+]
+
 # Full type union, including pointer, struct, and enum types — used for
 # Let bindings, struct fields, and other value-bearing contexts. Void is
 # deliberately excluded; see ReturnType for return positions.
@@ -174,7 +207,9 @@ IntType = Annotated[
 Type = Annotated[
     Union[I1Type, I8Type, I16Type, I32Type, I64Type,
           U8Type, U16Type, U32Type, U64Type,
-          IsizeType, UsizeType, I8PtrType,
+          IsizeType, UsizeType,
+          F32Type, F64Type,
+          I8PtrType,
           StructType, EnumType, TypeParamRef, SelfType],
     Field(discriminator="kind"),
 ]
@@ -183,7 +218,9 @@ Type = Annotated[
 ReturnType = Annotated[
     Union[I1Type, I8Type, I16Type, I32Type, I64Type,
           U8Type, U16Type, U32Type, U64Type,
-          IsizeType, UsizeType, I8PtrType,
+          IsizeType, UsizeType,
+          F32Type, F64Type,
+          I8PtrType,
           StructType, EnumType, TypeParamRef, SelfType, VoidType],
     Field(discriminator="kind"),
 ]

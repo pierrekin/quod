@@ -22,6 +22,9 @@ from quod.model import (
     FieldInit,
     FieldRead,
     FieldSet,
+    Cast,
+    F32Type,
+    F64Type,
     For,
     Function,
     I1Type,
@@ -60,7 +63,6 @@ from quod.model import (
     StructType,
     VoidType,
     While,
-    Widen,
     WithArena,
 )
 
@@ -224,6 +226,7 @@ class Parser:
         "i32": I32Type, "i64": I64Type,
         "u8": U8Type, "u16": U16Type, "u32": U32Type, "u64": U64Type,
         "isize": IsizeType, "usize": UsizeType,
+        "f32": F32Type, "f64": F64Type,
     }
 
     def _type(self, *, allow_void: bool):
@@ -435,8 +438,8 @@ class Parser:
         if t.kind in ("INT", "CHAR", "IDENT"):
             return True
         if t.kind == "KW" and t.value in (
-            "null", "true", "false", "load", "widen", "uwiden", "ptr_offset",
-            "sizeof",
+            "null", "true", "false", "load", "cast",
+            "ptr_offset", "sizeof",
         ):
             return True
         if t.kind == "OP" and t.value in ("(", "&", "-"):
@@ -567,10 +570,8 @@ class Parser:
                     return ReturnRef()
                 case "load":
                     return self._load()
-                case "widen":
-                    return self._widen(signed=True)
-                case "uwiden":
-                    return self._widen(signed=False)
+                case "cast":
+                    return self._cast()
                 case "ptr_offset":
                     return self._ptr_offset()
                 case "sizeof":
@@ -664,14 +665,14 @@ class Parser:
         self.expect("OP", ")")
         return Load(ptr=ptr, type=ty)
 
-    def _widen(self, *, signed: bool) -> Widen:
-        self.expect("KW", "uwiden" if not signed else "widen")
+    def _cast(self) -> Cast:
+        self.expect("KW", "cast")
         self.expect("OP", "(")
         v = self._expr()
         self.expect("KW", "to")
         target = self._type(allow_void=False)
         self.expect("OP", ")")
-        return Widen(value=v, target=target, signed=signed)
+        return Cast(value=v, target_type=target)
 
     def _sizeof(self) -> SizeOf:
         self.expect("KW", "sizeof")

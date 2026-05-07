@@ -50,157 +50,162 @@
         "return_type": {
           "kind": "llvm.i32"
         },
-        "body": {"id": "@blk_struct_round_trip_2", "stmts": [
-          {
-            "kind": "quod.with_arena",
-            "name": "a",
-            "capacity": {
-              "kind": "llvm.const_int",
-              "type": {
-                "kind": "llvm.i64"
-              },
-              "value": 64
-            },
-            "body": {"id": "@blk_struct_round_trip_1", "stmts": [
-              {
-                "kind": "quod.let",
-                "name": "buf",
+        "body": {
+          "id": "@blk_struct_round_trip_2",
+          "stmts": [
+            {
+              "kind": "quod.with_arena",
+              "name": "a",
+              "capacity": {
+                "kind": "llvm.const_int",
                 "type": {
-                  "kind": "llvm.i8_ptr"
+                  "kind": "llvm.i64"
                 },
-                "init": {
-                  "kind": "llvm.call",
-                  "function": "mem.arena.alloc",
-                  "args": [
-                    {
-                      "kind": "quod.local_ref",
-                      "name": "a"
-                    },
-                    {
-                      "kind": "llvm.const_int",
-                      "type": {
-                        "kind": "llvm.i64"
-                      },
-                      "value": 16
-                    }
-                  ]
-                }
+                "value": 64
               },
-              {
-                "kind": "quod.store",
-                "ptr": {
-                  "kind": "quod.local_ref",
-                  "name": "buf"
-                },
-                "value": {
-                  "kind": "quod.struct_init",
-                  "type": "Str",
-                  "fields": [
-                    {
-                      "name": "ptr",
-                      "value": {
-                        "kind": "quod.string_ref",
-                        "name": ".s"
-                      }
+              "body": {
+                "id": "@blk_struct_round_trip_1",
+                "stmts": [
+                  {
+                    "kind": "quod.let",
+                    "name": "buf",
+                    "type": {
+                      "kind": "llvm.i8_ptr"
                     },
-                    {
-                      "name": "len",
-                      "value": {
-                        "kind": "llvm.const_int",
-                        "type": {
-                          "kind": "llvm.i64"
+                    "init": {
+                      "kind": "llvm.call",
+                      "function": "mem.arena.alloc",
+                      "args": [
+                        {
+                          "kind": "quod.local_ref",
+                          "name": "a"
                         },
-                        "value": 13
+                        {
+                          "kind": "llvm.const_int",
+                          "type": {
+                            "kind": "llvm.i64"
+                          },
+                          "value": 16
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "quod.store",
+                    "ptr": {
+                      "kind": "quod.local_ref",
+                      "name": "buf"
+                    },
+                    "value": {
+                      "kind": "quod.struct_init",
+                      "type": "Str",
+                      "fields": [
+                        {
+                          "name": "ptr",
+                          "value": {
+                            "kind": "quod.string_ref",
+                            "name": ".s"
+                          }
+                        },
+                        {
+                          "name": "len",
+                          "value": {
+                            "kind": "llvm.const_int",
+                            "type": {
+                              "kind": "llvm.i64"
+                            },
+                            "value": 13
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "kind": "quod.let",
+                    "name": "s",
+                    "type": {
+                      "kind": "llvm.struct",
+                      "name": "Str"
+                    },
+                    "init": {
+                      "kind": "quod.load",
+                      "ptr": {
+                        "kind": "quod.local_ref",
+                        "name": "buf"
+                      },
+                      "type": {
+                        "kind": "llvm.struct",
+                        "name": "Str"
                       }
                     }
-                  ]
-                }
-              },
-              {
-                "kind": "quod.let",
-                "name": "s",
-                "type": {
-                  "kind": "llvm.struct",
-                  "name": "Str"
-                },
-                "init": {
-                  "kind": "quod.load",
-                  "ptr": {
-                    "kind": "quod.local_ref",
-                    "name": "buf"
                   },
-                  "type": {
-                    "kind": "llvm.struct",
-                    "name": "Str"
-                  }
-                }
-              },
-              {
-                "kind": "quod.let",
-                "name": "first",
-                "type": {
-                  "kind": "llvm.i8"
-                },
-                "init": {
-                  "kind": "quod.load",
-                  "ptr": {
-                    "kind": "quod.field",
-                    "value": {
-                      "kind": "quod.local_ref",
-                      "name": "s"
+                  {
+                    "kind": "quod.let",
+                    "name": "first",
+                    "type": {
+                      "kind": "llvm.i8"
                     },
-                    "name": "ptr"
-                  },
-                  "type": {
-                    "kind": "llvm.i8"
-                  }
-                }
-              },
-              {
-                "kind": "quod.expr_stmt",
-                "value": {
-                  "kind": "llvm.call",
-                  "function": "printf",
-                  "args": [
-                    {
-                      "kind": "quod.string_ref",
-                      "name": ".fmt"
-                    },
-                    {
-                      "kind": "quod.field",
-                      "value": {
-                        "kind": "quod.local_ref",
-                        "name": "s"
+                    "init": {
+                      "kind": "quod.load",
+                      "ptr": {
+                        "kind": "quod.field",
+                        "value": {
+                          "kind": "quod.local_ref",
+                          "name": "s"
+                        },
+                        "name": "ptr"
                       },
-                      "name": "len"
-                    },
-                    {
-                      "kind": "quod.widen",
-                      "value": {
-                        "kind": "quod.local_ref",
-                        "name": "first"
-                      },
-                      "target": {
-                        "kind": "llvm.i32"
-                      },
-                      "signed": false
+                      "type": {
+                        "kind": "llvm.i8"
+                      }
                     }
-                  ]
-                }
+                  },
+                  {
+                    "kind": "quod.expr_stmt",
+                    "value": {
+                      "kind": "llvm.call",
+                      "function": "printf",
+                      "args": [
+                        {
+                          "kind": "quod.string_ref",
+                          "name": ".fmt"
+                        },
+                        {
+                          "kind": "quod.field",
+                          "value": {
+                            "kind": "quod.local_ref",
+                            "name": "s"
+                          },
+                          "name": "len"
+                        },
+                        {
+                          "kind": "quod.cast",
+                          "value": {
+                            "kind": "quod.local_ref",
+                            "name": "first"
+                          },
+                          "target_type": {
+                            "kind": "llvm.i32"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
               }
-            ]}
-          },
-          {
-            "kind": "quod.return_expr",
-            "value": {
-              "kind": "llvm.const_int",
-              "type": {
-                "kind": "llvm.i32"
-              },
-              "value": 0
+            },
+            {
+              "kind": "quod.return_expr",
+              "value": {
+                "kind": "llvm.const_int",
+                "type": {
+                  "kind": "llvm.i32"
+                },
+                "value": 0
+              }
             }
-          }
-        ]},
+          ]
+        },
         "claims": []
       }
     ],
