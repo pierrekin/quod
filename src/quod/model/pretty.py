@@ -98,6 +98,7 @@ from quod.model.types import (
     I32Type,
     I64Type,
     IsizeType,
+    bits_to_python_float,
     SelfType,
     StructType,
     TypeParamRef,
@@ -289,8 +290,8 @@ def _format_c_expr(e) -> str:
     match e:
         case CIntLit(value=v):
             return str(v)
-        case CFloatLit(value=v):
-            return repr(v)
+        case CFloatLit(type=t, bits=b):
+            return _format_float_bits(b, t)
         case CStringLit(value=v):
             return repr(v)
         case CVarRef(name=n):
@@ -523,12 +524,27 @@ _BINOP_SYMBOL = {
 }
 
 
+def _format_float_bits(bits: int, t) -> str:
+    """Human-readable rendering of a `FloatLit`/`CFloatLit` bit
+    pattern. Special values render as `+inf`/`-inf`/`nan`/`-nan`;
+    finite values use Python's repr (shortest decimal that round-trips
+    at the type's precision)."""
+    f = bits_to_python_float(bits, t)
+    import math
+    if math.isnan(f):
+        sign_bit = 1 << (31 if isinstance(t, F32Type) else 63)
+        return "-nan" if (bits & sign_bit) else "nan"
+    if math.isinf(f):
+        return "-inf" if f < 0 else "+inf"
+    return repr(f)
+
+
 def _format_expr(expr) -> str:
     match expr:
         case IntLit(value=v):
             return str(v)
-        case FloatLit(value=v):
-            return repr(v)
+        case FloatLit(type=t, bits=b):
+            return _format_float_bits(b, t)
         case FNeg(operand=op):
             return f"fneg({_format_expr(op)})"
         case ParamRef(name=n):

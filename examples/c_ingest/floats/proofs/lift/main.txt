@@ -11,14 +11,14 @@
           "init": {
             "args": [
               {
+                "bits": 4609434218613702656,
                 "kind": "float_lit",
-                "type": "llvm.f64",
-                "value": 1.5
+                "type": "llvm.f64"
               },
               {
+                "bits": 4612811918334230528,
                 "kind": "float_lit",
-                "type": "llvm.f64",
-                "value": 2.5
+                "type": "llvm.f64"
               }
             ],
             "callee": "scale",
@@ -59,14 +59,14 @@
               {
                 "args": [
                   {
+                    "bits": 4609434218613702656,
                     "kind": "float_lit",
-                    "type": "llvm.f64",
-                    "value": 1.5
+                    "type": "llvm.f64"
                   },
                   {
+                    "bits": 4612811918334230528,
                     "kind": "float_lit",
-                    "type": "llvm.f64",
-                    "value": 2.5
+                    "type": "llvm.f64"
                   }
                 ],
                 "callee": "below",
@@ -90,9 +90,9 @@
               {
                 "args": [
                   {
+                    "bits": 4615514078110652826,
                     "kind": "float_lit",
-                    "type": "llvm.f64",
-                    "value": 3.7
+                    "type": "llvm.f64"
                   }
                 ],
                 "callee": "truncate",
@@ -145,9 +145,9 @@
                 "value": {
                   "args": [
                     {
+                      "bits": 1069547520,
                       "kind": "float_lit",
-                      "type": "llvm.f32",
-                      "value": 1.5
+                      "type": "llvm.f32"
                     }
                   ],
                   "callee": "widen32",

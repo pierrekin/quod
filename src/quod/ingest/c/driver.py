@@ -103,6 +103,96 @@ def _default_string_prefix(path: Path) -> str:
     return "".join(c if c in _PREFIX_SAFE else "_" for c in path.stem)
 
 
+# ---------- Strict-IEEE 754 boundary refusals ----------
+
+# C source can request looseness in three ways that would observably
+# change codegen bits. quod commits to strict IEEE 754 (no FMA
+# contraction, default rounding, no fenv access); the ingester refuses
+# anything in C that requests the looseness.
+
+_FP_PRAGMA_NAMES = frozenset({"FP_CONTRACT", "FENV_ACCESS"})
+
+# `OFF` explicitly grants strict IEEE behavior — that's what we already
+# do, so accept. `ON` requests looseness; `DEFAULT` defers to the
+# implementation default (which on clang is ON for FP_CONTRACT).
+_PRAGMA_FORBIDDEN_STATES = frozenset({"ON", "DEFAULT"})
+
+
+def _refuse_at_token(tok: cx.Token, why: str) -> IngestError:
+    """Like `_refuse(cursor, why)` but for a token (no enclosing cursor).
+    Pragmas live only in the token stream — there's no AST node to
+    attach the error to, so we build the location from `tok.extent.start`.
+    """
+    f = tok.extent.start.file
+    fname = f.name if f else "<unknown>"
+    return IngestError(
+        f"{fname}:{tok.extent.start.line}:{tok.extent.start.column}: {why}"
+    )
+
+
+def _check_no_fp_pragmas(tu: cx.TranslationUnit, source_path: Path) -> None:
+    """Refuse `#pragma STDC FP_CONTRACT ON|DEFAULT` and
+    `#pragma STDC FENV_ACCESS ON|DEFAULT` in the primary source file.
+
+    clang doesn't expose pragmas in the AST and emits no diagnostic;
+    the only signal is the token stream. Filter by source file so
+    pragmas in system headers don't trip the refusal.
+    """
+    tokens = list(tu.cursor.get_tokens())
+    for i in range(len(tokens) - 4):
+        t0, t1, t2, t3, t4 = tokens[i:i + 5]
+        if t0.spelling != "#" or t1.spelling != "pragma":
+            continue
+        if t2.spelling != "STDC":
+            continue
+        if t3.spelling not in _FP_PRAGMA_NAMES:
+            continue
+        if t4.spelling not in _PRAGMA_FORBIDDEN_STATES:
+            continue
+        f = t0.extent.start.file
+        if f is None or Path(f.name).resolve() != source_path:
+            continue
+        if t3.spelling == "FP_CONTRACT":
+            raise _refuse_at_token(
+                t0,
+                "#pragma STDC FP_CONTRACT ON not supported — "
+                "quod codegen does not insert FMA contraction "
+                "(strict IEEE 754)"
+            )
+        else:  # FENV_ACCESS
+            raise _refuse_at_token(
+                t0,
+                "#pragma STDC FENV_ACCESS ON not supported — "
+                "quod assumes default rounding mode and no "
+                "fenv-flag inspection"
+            )
+
+
+def _check_no_fenv_include(tu: cx.TranslationUnit, source_path: Path) -> None:
+    """Refuse `#include <fenv.h>` issued from the primary source file.
+
+    Transitive includes from system headers (e.g., a hypothetical
+    `<math.h>` that pulls in `<fenv.h>`) are intentionally not refused
+    — only what the user wrote in their own source counts. Match by
+    basename: `#include <fenv.h>` always resolves to a file named
+    `fenv.h`, regardless of which `/usr/include/.../fenv.h` clang
+    picks.
+    """
+    for inc in tu.get_includes():
+        if inc.depth != 1:
+            continue
+        loc_file = inc.location.file
+        if loc_file is None or Path(loc_file.name).resolve() != source_path:
+            continue
+        if Path(str(inc.include)).name != "fenv.h":
+            continue
+        raise IngestError(
+            f"{loc_file.name}:{inc.location.line}:{inc.location.column}: "
+            "#include <fenv.h> not supported — quod commits to default "
+            "rounding mode and ignores fenv exception flags"
+        )
+
+
 def ingest_c(
     path: Path, *,
     clang_args: tuple[str, ...] = (),
@@ -138,6 +228,13 @@ def ingest_c(
     if diags:
         msg = "; ".join(f"{d.location.file}:{d.location.line}: {d.spelling}" for d in diags)
         raise IngestError(f"{path}: parse errors: {msg}")
+
+    # Strict IEEE 754 boundary — refuse C source that requests behavior
+    # incompatible with quod's strict-IEEE codegen (FMA contraction,
+    # fenv access). See `.scratch/floats/00-overview.md` §"Decisions
+    # captured upfront" for the policy.
+    _check_no_fp_pragmas(tu, path)
+    _check_no_fenv_include(tu, path)
 
     if string_prefix is None:
         string_prefix = _default_string_prefix(path)

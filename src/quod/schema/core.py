@@ -111,12 +111,15 @@ _CORE_CATALOG: dict[str, dict[str, Any]] = {
     "quod.float_lit": {
         "class": FloatLit,
         "summary": (
-            "IEEE 754 finite floating-point literal. Distinct kind from "
-            "llvm.const_int — `type` selects f32 vs f64. Special values "
-            "(+inf / -inf / NaN) are not yet representable; constructing "
-            "with a non-finite value fails Pydantic validation."
+            "IEEE 754 floating-point literal stored as its bit pattern. "
+            "`type` selects f32 (bits is uint32) vs f64 (bits is uint64). "
+            "Special values are ordinary bit patterns: 0x7F800000 = +inf "
+            "f32; 0x7FC00000 = canonical NaN f32; 0x7FF0000000000000 = "
+            "+inf f64. Use `quod.model.python_float_to_bits` and "
+            "`bits_to_python_float` to convert at boundaries."
         ),
-        "example": {"kind": "quod.float_lit", "type": {"kind": "llvm.f64"}, "value": 1.5},
+        # 0x3FF8000000000000 is the f64 encoding of 1.5.
+        "example": {"kind": "quod.float_lit", "type": {"kind": "llvm.f64"}, "bits": 4609434218613702656},
         "see_also": ["llvm.f32", "llvm.f64", "quod.fneg", "quod.cast"],
     },
     "quod.fneg": {
@@ -128,7 +131,7 @@ _CORE_CATALOG: dict[str, dict[str, Any]] = {
         ),
         "example": {
             "kind": "quod.fneg",
-            "operand": {"kind": "quod.float_lit", "type": {"kind": "llvm.f64"}, "value": 1.5},
+            "operand": {"kind": "quod.float_lit", "type": {"kind": "llvm.f64"}, "bits": 4609434218613702656},
         },
         "see_also": ["quod.float_lit", "llvm.f32", "llvm.f64"],
     },

@@ -64,6 +64,7 @@ from quod.model import (
     StructDef,
     StructInit,
     TryExpr,
+    bits_to_python_float,
     int_type_signed,
     int_type_width,
 )
@@ -93,8 +94,14 @@ def _lower_expr(
     match expr:
         case IntLit(type=t, value=v):
             return ir.Constant(_type_to_llvm(t), v)
-        case FloatLit(type=t, value=v):
-            return ir.Constant(_type_to_llvm(t), v)
+        case FloatLit(type=t, bits=b):
+            # Decode the IEEE 754 bit pattern back to a Python float
+            # for llvmlite. For f32, struct.unpack widens to f64
+            # losslessly (every f32 is representable in f64); llvmlite
+            # then re-narrows to f32 with the same bit pattern. For f64
+            # the bits ARE the Python float. NaN/inf round-trip
+            # naturally — they're just bit patterns.
+            return ir.Constant(_type_to_llvm(t), bits_to_python_float(b, t))
         case FNeg(operand=op):
             return builder.fneg(go(op))
         case ParamRef(name=n):

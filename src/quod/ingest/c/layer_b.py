@@ -16,6 +16,7 @@ from quod.ingest.c.helpers import (
     IngestError,
     _F32,
     _F64,
+    _FENV_API_NAMES,
     _FLOAT_BIN_OP_TABLE,
     _FLOAT_TYPE_KINDS,
     _I8PTR,
@@ -26,6 +27,7 @@ from quod.ingest.c.helpers import (
     _LONG_DOUBLE_REFUSAL,
     _VOID,
     _binop_token,
+    _fenv_call_refusal,
     _is_char_array,
     _is_char_pointer,
     _is_clang_float,
@@ -410,8 +412,8 @@ class _FunctionTranslator:
             tokens = [t.spelling for t in c.get_tokens()]
             if not tokens:
                 raise _refuse(c, "float literal with no tokens")
-            v, ftype = _parse_c_float_literal_text(tokens[0], c)
-            return FloatLit(type=ftype, value=v)
+            bits, ftype = _parse_c_float_literal_text(tokens[0], c)
+            return FloatLit(type=ftype, bits=bits)
 
         if k in (cx.CursorKind.CSTYLE_CAST_EXPR, cx.CursorKind.CXX_FUNCTIONAL_CAST_EXPR):
             target_qty = _local_type(c, c.type)
@@ -477,9 +479,17 @@ class _FunctionTranslator:
             if op == "-":
                 if operand_is_float:
                     if isinstance(inner_expr, FloatLit):
-                        # Constant-fold: -1.5 → FloatLit(-1.5). FNeg of
-                        # a finite literal is just the negated literal.
-                        return FloatLit(type=inner_expr.type, value=-inner_expr.value)
+                        # Constant-fold: -1.5 → FloatLit with sign bit
+                        # flipped. FNeg of a literal is just the literal
+                        # with the sign bit toggled — this preserves
+                        # NaN payloads and avoids the IEEE corner where
+                        # `0.0 - 0.0 = +0.0` rather than -0.0.
+                        from quod.model import F32Type as _F32T
+                        sign_bit = 1 << (31 if isinstance(inner_expr.type, _F32T) else 63)
+                        return FloatLit(
+                            type=inner_expr.type,
+                            bits=inner_expr.bits ^ sign_bit,
+                        )
                     return FNeg(operand=inner_expr)
                 if isinstance(inner_expr, IntLit):
                     return IntLit(type=inner_expr.type, value=-inner_expr.value)
@@ -558,6 +568,11 @@ class _FunctionTranslator:
             callee = _unwrap(children[0])
             if callee.kind != cx.CursorKind.DECL_REF_EXPR:
                 raise _refuse(c, "indirect / function-pointer calls not supported")
+            # Belt-and-braces against `extern int fesetround(int);` declared
+            # without `<fenv.h>`. The TU-level include refusal in driver.py
+            # covers the standard case.
+            if callee.spelling in _FENV_API_NAMES:
+                raise _refuse(c, _fenv_call_refusal(callee.spelling))
             # Record signature for later extern construction (no-op if the
             # callee is one of our own functions).
             self._state.record_extern(c, callee.spelling, callee.referenced)

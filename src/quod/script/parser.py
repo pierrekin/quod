@@ -25,6 +25,11 @@ from quod.model import (
     Cast,
     F32Type,
     F64Type,
+    FloatLit,
+    FloatParseError,
+    float_bits_for_special,
+    parse_decimal_to_float_bits,
+    parse_hex_to_float_bits,
     For,
     Function,
     I1Type,
@@ -143,6 +148,32 @@ class Parser:
             self.poison_locs[id(lit)] = (tok.line, tok.col)
             return lit
         return IntLit(type=_INT_TYPE_BY_SUFFIX[suf](), value=value)
+
+    def _make_float_lit(self, tok: Token) -> "FloatLit":
+        """Build a FloatLit from a FLOAT token. Suffix `f32`/`f64`
+        sets the target type explicitly; bare floats default to f64.
+        The body parses via `parse_decimal_to_float_bits` /
+        `parse_hex_to_float_bits` (single-rounding for the target).
+        """
+        text = tok.value
+        if text.endswith("f32"):
+            ftype = F32Type()
+            body = text[:-3]
+        elif text.endswith("f64"):
+            ftype = F64Type()
+            body = text[:-3]
+        else:
+            ftype = F64Type()
+            body = text
+        is_hex = body.lower().startswith(("0x", "-0x", "+0x"))
+        try:
+            if is_hex:
+                bits = parse_hex_to_float_bits(body, ftype)
+            else:
+                bits = parse_decimal_to_float_bits(body, ftype)
+        except FloatParseError as e:
+            raise ScriptError(str(e), tok.line, tok.col)
+        return FloatLit(type=ftype, bits=bits)
 
     # -- cursor helpers --
 
@@ -435,11 +466,12 @@ class Parser:
 
     def _is_expr_start(self) -> bool:
         t = self.peek()
-        if t.kind in ("INT", "CHAR", "IDENT"):
+        if t.kind in ("INT", "FLOAT", "CHAR", "IDENT"):
             return True
         if t.kind == "KW" and t.value in (
             "null", "true", "false", "load", "cast",
             "ptr_offset", "sizeof",
+            "inf_f32", "inf_f64", "nan_f32", "nan_f64",
         ):
             return True
         if t.kind == "OP" and t.value in ("(", "&", "-"):
@@ -492,12 +524,27 @@ class Parser:
         return lhs
 
     def _unary(self):
-        # Negative integer sugar: -INT becomes IntLit(value=-N). Otherwise
-        # parse a postfix.
+        # Negative integer sugar: -INT becomes IntLit(value=-N).
         if self.at("OP", "-") and self.peek(1).kind == "INT":
             self.eat()
             tok = self.eat()
             return self._make_int_lit(tok, negate=True)
+        # Negative float sugar: -FLOAT becomes FloatLit with sign-bit
+        # flipped (matches what FNeg of a literal would produce).
+        if self.at("OP", "-") and self.peek(1).kind == "FLOAT":
+            self.eat()
+            tok = self.eat()
+            fl = self._make_float_lit(tok)
+            sign_bit = 1 << (31 if isinstance(fl.type, F32Type) else 63)
+            return FloatLit(type=fl.type, bits=fl.bits ^ sign_bit)
+        # Negative special-value sugar: -inf_fN / -nan_fN.
+        if (self.at("OP", "-") and self.peek(1).kind == "KW"
+                and self.peek(1).value in ("inf_f32", "inf_f64", "nan_f32", "nan_f64")):
+            self.eat()
+            kw = self.eat()
+            ftype = F32Type() if kw.value.endswith("_f32") else F64Type()
+            kind = "-inf" if kw.value.startswith("inf") else "-nan"
+            return FloatLit(type=ftype, bits=float_bits_for_special(ftype, kind))
         return self._postfix()
 
     def _postfix(self):
@@ -545,6 +592,11 @@ class Parser:
         if t.kind == "INT":
             tok = self.eat()
             return self._make_int_lit(tok)
+        # Float literal — required type suffix when ambiguous; `1.5`
+        # defaults to f64. See `_make_float_lit`.
+        if t.kind == "FLOAT":
+            tok = self.eat()
+            return self._make_float_lit(tok)
         # Char literal
         if t.kind == "CHAR":
             self.eat()
@@ -576,6 +628,18 @@ class Parser:
                     return self._ptr_offset()
                 case "sizeof":
                     return self._sizeof()
+                case "inf_f32":
+                    self.eat()
+                    return FloatLit(type=F32Type(), bits=float_bits_for_special(F32Type(), "+inf"))
+                case "inf_f64":
+                    self.eat()
+                    return FloatLit(type=F64Type(), bits=float_bits_for_special(F64Type(), "+inf"))
+                case "nan_f32":
+                    self.eat()
+                    return FloatLit(type=F32Type(), bits=float_bits_for_special(F32Type(), "nan"))
+                case "nan_f64":
+                    self.eat()
+                    return FloatLit(type=F64Type(), bits=float_bits_for_special(F64Type(), "nan"))
         # Identifier — could be call (incl. dotted `core.bytes.eq(...)`),
         # struct_init, enum_init, or local/param ref.
         if t.kind == "IDENT":

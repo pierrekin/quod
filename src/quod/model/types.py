@@ -252,3 +252,149 @@ def int_type_signed(t: "IntType") -> bool:
         case I1Type() | U8Type() | U16Type() | U32Type() | U64Type() | UsizeType():
             return False
     raise ValueError(f"not an int type: {t!r}")
+
+
+# ---------- Float bit-pattern utilities ----------
+#
+# `FloatLit` and `CFloatLit` store IEEE 754 bit patterns directly (uint32
+# for f32, uint64 for f64) rather than Python floats. Python `float` is
+# IEEE 754 binary64, which is a wider container than f32 — storing an
+# f32 value as a Python float and converting at lower time produces a
+# silent double-rounding artifact when the f64 representation falls on
+# a different side of an f32 midpoint than the original decimal would.
+#
+# Bit-pattern storage eliminates that hazard by construction. Special
+# values (`+inf`, `-inf`, NaN, NaN-with-payload) become representable
+# trivially — they're just bit patterns like any other.
+
+import struct as _struct
+
+
+def float_type_width(t: "FloatType") -> int:
+    """Bit width of a float type: 32 for F32Type, 64 for F64Type."""
+    match t:
+        case F32Type():
+            return 32
+        case F64Type():
+            return 64
+    raise ValueError(f"not a float type: {t!r}")
+
+
+def python_float_to_bits(value: float, t: "FloatType") -> int:
+    """Round `value` to the nearest representable `t` value and return
+    its IEEE 754 bit pattern as an unsigned int. Round-to-nearest-even
+    (the IEEE default) — same rounding mode the lower path uses.
+    """
+    if isinstance(t, F32Type):
+        packed = _struct.pack("<f", value)
+        return int.from_bytes(packed, "little")
+    if isinstance(t, F64Type):
+        packed = _struct.pack("<d", value)
+        return int.from_bytes(packed, "little")
+    raise ValueError(f"not a float type: {t!r}")
+
+
+def bits_to_python_float(bits: int, t: "FloatType") -> float:
+    """Inverse of `python_float_to_bits`: decode the IEEE 754 bit
+    pattern as a Python float. Every f32 bit pattern has an exact
+    f64 representation, so the round-trip
+    `python_float_to_bits(bits_to_python_float(b, t), t) == b` holds
+    for every well-formed `b`.
+    """
+    width = float_type_width(t)
+    if bits < 0 or bits >= (1 << width):
+        raise ValueError(
+            f"bits 0x{bits:x} out of range for {t.kind} "
+            f"(must fit in {width} bits)"
+        )
+    if isinstance(t, F32Type):
+        return _struct.unpack("<f", bits.to_bytes(4, "little"))[0]
+    return _struct.unpack("<d", bits.to_bytes(8, "little"))[0]
+
+
+def float_bits_for_special(t: "FloatType", kind: str) -> int:
+    """Return the canonical bit pattern for a special-value name:
+    `"+inf"`, `"-inf"`, `"nan"`, or `"-nan"`. The NaN payload is the
+    quiet-NaN canonical form for the width (matches what most C
+    libraries produce for `NAN`)."""
+    width = float_type_width(t)
+    if width == 32:
+        if kind == "+inf": return 0x7F800000
+        if kind == "-inf": return 0xFF800000
+        if kind == "nan":  return 0x7FC00000
+        if kind == "-nan": return 0xFFC00000
+    else:  # 64
+        if kind == "+inf": return 0x7FF0000000000000
+        if kind == "-inf": return 0xFFF0000000000000
+        if kind == "nan":  return 0x7FF8000000000000
+        if kind == "-nan": return 0xFFF8000000000000
+    raise ValueError(f"unknown float-special kind {kind!r}")
+
+
+# ---------- Decimal-text → float bits via libc strtof / strtod ----------
+#
+# Single-rounding decimal-to-fN conversion. Going through Python's
+# `float()` (which is f64) and then truncating to f32 introduces
+# double-rounding artifacts on rare boundary decimals; calling strtof
+# directly produces the exact f32 bit pattern a C compiler would emit.
+#
+# Lives in the model module (not the ingester) so both the C ingester
+# and the script parser can use it without cross-package deps.
+
+import ctypes as _ctypes
+import ctypes.util as _ctypes_util
+
+
+_libc_path = _ctypes_util.find_library("c")
+if _libc_path is None:
+    raise RuntimeError("ctypes.util.find_library('c') returned None — libc not found")
+_libc = _ctypes.CDLL(_libc_path)
+
+_libc.strtof.argtypes = [_ctypes.c_char_p, _ctypes.POINTER(_ctypes.c_char_p)]
+_libc.strtof.restype = _ctypes.c_float
+_libc.strtod.argtypes = [_ctypes.c_char_p, _ctypes.POINTER(_ctypes.c_char_p)]
+_libc.strtod.restype = _ctypes.c_double
+
+
+class FloatParseError(ValueError):
+    """Raised when a decimal/hex float text fails to parse cleanly."""
+
+
+def parse_decimal_to_float_bits(text: str, t: "FloatType") -> int:
+    """Parse `text` (a decimal float literal like `1.5`, `1e10`,
+    `-3.14`) as the target type `t` via libc `strtof` / `strtod`.
+    Returns the IEEE 754 bit pattern. Single-rounding for the target
+    precision — bit-identical to what a C compiler would emit.
+
+    The entire string must be consumed; trailing junk raises.
+    """
+    if not text:
+        raise FloatParseError("empty decimal float literal")
+    encoded = text.encode("ascii")
+    end = _ctypes.c_char_p(None)
+    if isinstance(t, F32Type):
+        f = float(_libc.strtof(encoded, _ctypes.byref(end)))
+    elif isinstance(t, F64Type):
+        f = float(_libc.strtod(encoded, _ctypes.byref(end)))
+    else:
+        raise FloatParseError(f"not a float type: {t!r}")
+    consumed = (len(encoded) if end.value is None
+                else len(encoded) - len(end.value))
+    if consumed != len(encoded):
+        raise FloatParseError(
+            f"trailing characters in float literal {text!r}: "
+            f"only consumed {text[:consumed]!r}"
+        )
+    return python_float_to_bits(f, t)
+
+
+def parse_hex_to_float_bits(text: str, t: "FloatType") -> int:
+    """Parse `text` as a hex float literal (`0x1.8p+1`) via Python's
+    `float.fromhex`, then round to the target precision. f64 is exact
+    via `fromhex`; f32 may round once (single-rounding for the target).
+    """
+    try:
+        f = float.fromhex(text)
+    except ValueError as e:
+        raise FloatParseError(f"could not parse hex float {text!r}: {e}")
+    return python_float_to_bits(f, t)

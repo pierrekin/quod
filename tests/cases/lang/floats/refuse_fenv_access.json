@@ -1,0 +1,6 @@
+{
+  "c_file": "refuse_fenv_access.c",
+  "expect": {
+    "ingest_error": "FENV_ACCESS"
+  }
+}

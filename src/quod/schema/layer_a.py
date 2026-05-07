@@ -77,13 +77,16 @@ _LAYER_A_CATALOG: dict[str, dict[str, Any]] = {
     "c.lit_float": {
         "class": CFloatLit,
         "summary": (
-            "A C floating-point literal. `type` selects f32 vs f64 "
-            "based on the source suffix (`1.5f` → f32; plain `1.5` → "
-            "f64). Hex floats (`0x1.8p+1`) round-trip via "
-            "Python's `float.fromhex`. Non-finite values (+inf / "
-            "-inf / NaN) are deferred — Pydantic rejects at construction."
+            "A C floating-point literal stored as its IEEE 754 bit "
+            "pattern. `type` selects f32 vs f64 based on the source "
+            "suffix (`1.5f` → f32; plain `1.5` → f64). Decimal forms "
+            "parse via libc `strtof`/`strtod` (single-rounding for the "
+            "target precision). Hex floats (`0x1.8p+1`) parse via "
+            "`float.fromhex` and round to the target if needed. "
+            "Special values (`+inf`, `-inf`, NaN) are ordinary bit "
+            "patterns."
         ),
-        "example": {"kind": "c.lit_float", "type": {"kind": "llvm.f64"}, "value": 1.5},
+        "example": {"kind": "c.lit_float", "type": {"kind": "llvm.f64"}, "bits": 4609434218613702656},
     },
 
     "c.cast": {

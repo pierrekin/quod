@@ -1,19 +1,20 @@
 """End-to-end tests for FloatLit, FNeg, and float-typed `BinOp`.
 
-Commit 1 of the floats roadmap. Cast's float arms (sitofp / uitofp /
-fpext / fptrunc / fptosi.sat / fptoui.sat) ride on this — they were
-declared in Commit 0 but unreachable until FloatLit existed.
+Float literals store IEEE 754 bit patterns directly (uint32 for f32,
+uint64 for f64). The `_flit` helper takes a Python float and rounds it
+to the target's bit pattern via `python_float_to_bits` — equivalent to
+what a single-rounding C compiler would produce for the same decimal
+literal. Special values (`+inf`, `-inf`, NaN) are first-class via
+`float_bits_for_special`.
 
-Float ops follow strict IEEE 754. NaN comparisons go via LLVM
-ordered preds + `une` for `!=` so `NaN != NaN` returns true. FNeg
-flips the sign bit unconditionally (distinct from `0.0 - x`, which
-returns +0.0 for -0.0 input).
+Float ops follow strict IEEE 754. NaN comparisons go via LLVM ordered
+preds + `une` for `!=` so `NaN != NaN` returns true. FNeg flips the
+sign bit unconditionally (distinct from `0.0 - x`, which returns +0.0
+for -0.0 input).
 """
 
 from __future__ import annotations
 
-import json
-import math
 import subprocess
 import tempfile
 from pathlib import Path
@@ -46,7 +47,9 @@ from quod.model import (
     StringConstant,
     StringRef,
     U32Type,
-    U64Type,
+    bits_to_python_float,
+    float_bits_for_special,
+    python_float_to_bits,
 )
 from quod.predicate.validate import (
     PredicateError,
@@ -68,9 +71,14 @@ _PRINTF = ExternFunction(
     linkage=LibcLinkage(),
 )
 _FMT_LLD = StringConstant(name=".fmt_lld", value="%lld\n")
-_FMT_LLU = StringConstant(name=".fmt_llu", value="%llu\n")
 _FMT_G = StringConstant(name=".fmt_g", value="%g\n")
 _FMT_17G = StringConstant(name=".fmt_17g", value="%.17g\n")
+
+
+def _flit(t, value: float) -> FloatLit:
+    """Construct a FloatLit by rounding `value` to the bit pattern of
+    target type `t`. Single conversion point for all tests."""
+    return FloatLit(type=t, bits=python_float_to_bits(value, t))
 
 
 def _build_and_run(program: Program) -> str:
@@ -122,28 +130,50 @@ def _main(stmts):
 
 # ---------- FloatLit construction & round-trip ----------
 
-def test_float_lit_finite_round_trips_through_json():
+def test_float_lit_round_trips_through_json():
     """Construct a FloatLit, serialize to JSON, validate back: same node."""
-    fl = FloatLit(type=F64Type(), value=0.1)
+    fl = _flit(F64Type(), 0.1)
     j = fl.model_dump_json()
     parsed = FloatLit.model_validate_json(j)
     assert parsed == fl
-    assert parsed.value == 0.1
+    assert bits_to_python_float(parsed.bits, parsed.type) == 0.1
 
 
-def test_float_lit_rejects_nan_at_construction():
-    """Pydantic JSON serialization silently coerces NaN to null, which
-    would round-trip as a parse error. Reject at construction so the
-    failure is loud."""
+def test_float_lit_f32_eliminates_double_rounding():
+    """An f32 literal stored as bits never round-trips through f64.
+    Constructing via `_flit(F32Type(), value)` rounds the Python float
+    once, to the nearest representable f32. The stored bits exactly
+    match what `struct.pack('<f', value)` produces — i.e., what a C
+    compiler would emit for the same decimal."""
+    import struct
+    for value in (0.1, 0.2, 1.0 / 3.0, 1e20, -3.14):
+        fl = _flit(F32Type(), value)
+        # Bits should match a direct struct.pack — the canonical f32.
+        expected = int.from_bytes(struct.pack("<f", value), "little")
+        assert fl.bits == expected, f"f32({value}): bits {fl.bits:#x} vs {expected:#x}"
+        # Bits fit in 32 bits.
+        assert 0 <= fl.bits < (1 << 32)
+
+
+def test_float_lit_rejects_oversized_bits():
+    """Bits must fit the type's width. f32 with bits >= 2^32 is
+    rejected; same for f64 with bits >= 2^64."""
     with pytest.raises(ValidationError):
-        FloatLit(type=F64Type(), value=float("nan"))
+        FloatLit(type=F32Type(), bits=1 << 32)
+    with pytest.raises(ValidationError):
+        FloatLit(type=F32Type(), bits=-1)
 
 
-def test_float_lit_rejects_inf_at_construction():
-    with pytest.raises(ValidationError):
-        FloatLit(type=F64Type(), value=float("inf"))
-    with pytest.raises(ValidationError):
-        FloatLit(type=F64Type(), value=float("-inf"))
+def test_float_lit_special_values_are_first_class():
+    """+inf, -inf, NaN, -NaN are ordinary bit patterns. Constructing
+    via `float_bits_for_special` makes them explicit; round-tripping
+    through JSON preserves the bit pattern exactly."""
+    for kind in ("+inf", "-inf", "nan", "-nan"):
+        for ty in (F32Type(), F64Type()):
+            fl = FloatLit(type=ty, bits=float_bits_for_special(ty, kind))
+            j = fl.model_dump_json()
+            parsed = FloatLit.model_validate_json(j)
+            assert parsed.bits == fl.bits, f"{kind} {ty.kind}: bits drift"
 
 
 # ---------- Float arithmetic ----------
@@ -153,8 +183,8 @@ def test_fadd_f64_lowers_and_runs():
     main = _main((
         _print_g(BinOp(
             op="fadd",
-            lhs=FloatLit(type=F64Type(), value=1.5),
-            rhs=FloatLit(type=F64Type(), value=2.25),
+            lhs=_flit(F64Type(), 1.5),
+            rhs=_flit(F64Type(), 2.25),
         )),
     ))
     prog = Program(constants=(_FMT_G,), externs=(_PRINTF,), functions=(main,))
@@ -170,12 +200,12 @@ def test_fsub_fmul_fdiv_chain():
             op="fmul",
             lhs=BinOp(
                 op="fsub",
-                lhs=FloatLit(type=F64Type(), value=10.0),
-                rhs=FloatLit(type=F64Type(), value=4.0),
+                lhs=_flit(F64Type(), 10.0),
+                rhs=_flit(F64Type(), 4.0),
             ),
-            rhs=FloatLit(type=F64Type(), value=2.0),
+            rhs=_flit(F64Type(), 2.0),
         ),
-        rhs=FloatLit(type=F64Type(), value=3.0),
+        rhs=_flit(F64Type(), 3.0),
     )
     main = _main((_print_g(expr),))
     prog = Program(constants=(_FMT_G,), externs=(_PRINTF,), functions=(main,))
@@ -185,15 +215,14 @@ def test_fsub_fmul_fdiv_chain():
 def test_arithmetic_round_trip_exactly_representable():
     """`(a + b) - b == a` for powers-of-2 (exactly representable in
     f64). printf %.17g prints the exact value."""
-    # 2^10 + 1.0 = 1025.0; subtract 1.0 = 1024.0
     expr = BinOp(
         op="fsub",
         lhs=BinOp(
             op="fadd",
-            lhs=FloatLit(type=F64Type(), value=1024.0),
-            rhs=FloatLit(type=F64Type(), value=1.0),
+            lhs=_flit(F64Type(), 1024.0),
+            rhs=_flit(F64Type(), 1.0),
         ),
-        rhs=FloatLit(type=F64Type(), value=1.0),
+        rhs=_flit(F64Type(), 1.0),
     )
     main = _main((_print_17g(expr),))
     prog = Program(constants=(_FMT_17G,), externs=(_PRINTF,), functions=(main,))
@@ -204,8 +233,8 @@ def test_frem_is_fmod_like():
     """LLVM `frem` is fmod-like: `5.5 % 2.0 == 1.5`."""
     expr = BinOp(
         op="frem",
-        lhs=FloatLit(type=F64Type(), value=5.5),
-        rhs=FloatLit(type=F64Type(), value=2.0),
+        lhs=_flit(F64Type(), 5.5),
+        rhs=_flit(F64Type(), 2.0),
     )
     main = _main((_print_g(expr),))
     prog = Program(constants=(_FMT_G,), externs=(_PRINTF,), functions=(main,))
@@ -218,75 +247,58 @@ def test_feq_lowers_to_oeq_and_returns_true_for_equal():
     """`feq` lowers to LLVM `fcmp oeq`; equal values return true (1)."""
     cmp = BinOp(
         op="feq",
-        lhs=FloatLit(type=F64Type(), value=3.14),
-        rhs=FloatLit(type=F64Type(), value=3.14),
+        lhs=_flit(F64Type(), 3.14),
+        rhs=_flit(F64Type(), 3.14),
     )
-    # Cast i1 → i64 for printing.
-    main = _main((
-        _print_lld(Cast(value=cmp, target_type=I64Type())),
-    ))
+    main = _main((_print_lld(Cast(value=cmp, target_type=I64Type())),))
     prog = Program(constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,))
     assert _build_and_run(prog) == "1\n"
 
 
 def test_fne_lowers_to_une_so_nan_ne_nan_is_true():
-    """`fne` lowers to `une` so `NaN != NaN` returns true. We can't
-    construct a NaN literal directly (Pydantic rejects), so build NaN
-    via `0.0 / 0.0`."""
-    nan = BinOp(
-        op="fdiv",
-        lhs=FloatLit(type=F64Type(), value=0.0),
-        rhs=FloatLit(type=F64Type(), value=0.0),
-    )
+    """`fne` lowers to `une` so `NaN != NaN` returns true. Construct
+    NaN directly via `float_bits_for_special` (no longer needs the
+    `0.0 / 0.0` workaround Commit 1 used)."""
+    nan = FloatLit(type=F64Type(), bits=float_bits_for_special(F64Type(), "nan"))
     cmp = BinOp(op="fne", lhs=nan, rhs=nan)
-    main = _main((
-        _print_lld(Cast(value=cmp, target_type=I64Type())),
-    ))
+    main = _main((_print_lld(Cast(value=cmp, target_type=I64Type())),))
     prog = Program(constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,))
-    # NaN != NaN → true (1)
     assert _build_and_run(prog) == "1\n"
 
 
 def test_feq_with_nan_is_false():
     """`feq` lowers to `oeq` (ordered) — false if either operand is NaN."""
-    nan = BinOp(
-        op="fdiv",
-        lhs=FloatLit(type=F64Type(), value=0.0),
-        rhs=FloatLit(type=F64Type(), value=0.0),
-    )
+    nan = FloatLit(type=F64Type(), bits=float_bits_for_special(F64Type(), "nan"))
     cmp = BinOp(op="feq", lhs=nan, rhs=nan)
-    main = _main((
-        _print_lld(Cast(value=cmp, target_type=I64Type())),
-    ))
+    main = _main((_print_lld(Cast(value=cmp, target_type=I64Type())),))
     prog = Program(constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,))
     assert _build_and_run(prog) == "0\n"
 
 
 def test_flt_with_nan_is_false():
-    """All ordered magnitude predicates (flt/fle/fgt/fge) return false
-    if either operand is NaN."""
-    nan = BinOp(
-        op="fdiv",
-        lhs=FloatLit(type=F64Type(), value=0.0),
-        rhs=FloatLit(type=F64Type(), value=0.0),
-    )
-    cmp = BinOp(op="flt", lhs=nan, rhs=FloatLit(type=F64Type(), value=1.0))
-    main = _main((
-        _print_lld(Cast(value=cmp, target_type=I64Type())),
-    ))
+    """All ordered magnitude predicates return false if either operand
+    is NaN."""
+    nan = FloatLit(type=F64Type(), bits=float_bits_for_special(F64Type(), "nan"))
+    cmp = BinOp(op="flt", lhs=nan, rhs=_flit(F64Type(), 1.0))
+    main = _main((_print_lld(Cast(value=cmp, target_type=I64Type())),))
     prog = Program(constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,))
     assert _build_and_run(prog) == "0\n"
 
 
 def test_flt_finite_is_true():
-    cmp = BinOp(
-        op="flt",
-        lhs=FloatLit(type=F64Type(), value=1.0),
-        rhs=FloatLit(type=F64Type(), value=2.0),
-    )
-    main = _main((
-        _print_lld(Cast(value=cmp, target_type=I64Type())),
-    ))
+    cmp = BinOp(op="flt", lhs=_flit(F64Type(), 1.0), rhs=_flit(F64Type(), 2.0))
+    main = _main((_print_lld(Cast(value=cmp, target_type=I64Type())),))
+    prog = Program(constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,))
+    assert _build_and_run(prog) == "1\n"
+
+
+def test_inf_compares_greater_than_finite():
+    """`+inf > 1e308` is true; `-inf < -1e308` is true. Direct
+    special-value construction means we don't need to compute infs at
+    runtime (which is itself a useful capability)."""
+    pos_inf = FloatLit(type=F64Type(), bits=float_bits_for_special(F64Type(), "+inf"))
+    cmp = BinOp(op="fgt", lhs=pos_inf, rhs=_flit(F64Type(), 1e308))
+    main = _main((_print_lld(Cast(value=cmp, target_type=I64Type())),))
     prog = Program(constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,))
     assert _build_and_run(prog) == "1\n"
 
@@ -295,32 +307,27 @@ def test_flt_finite_is_true():
 
 def test_fneg_of_positive_zero_yields_negative_zero():
     """FNeg flips the sign bit unconditionally — `-0.0` is observable
-    via `%g` as `-0`. This is the IEEE corner that justifies a separate
-    FNeg node (vs `0.0 - x`, which returns +0.0)."""
-    main = _main((
-        _print_g(FNeg(operand=FloatLit(type=F64Type(), value=0.0))),
-    ))
+    via `%g` as `-0`. This is the IEEE corner that justifies a
+    separate FNeg node (vs `0.0 - x`, which returns +0.0)."""
+    main = _main((_print_g(FNeg(operand=_flit(F64Type(), 0.0))),))
     prog = Program(constants=(_FMT_G,), externs=(_PRINTF,), functions=(main,))
     assert _build_and_run(prog) == "-0\n"
 
 
 def test_fneg_of_finite_flips_sign():
-    main = _main((
-        _print_g(FNeg(operand=FloatLit(type=F64Type(), value=3.5))),
-    ))
+    main = _main((_print_g(FNeg(operand=_flit(F64Type(), 3.5))),))
     prog = Program(constants=(_FMT_G,), externs=(_PRINTF,), functions=(main,))
     assert _build_and_run(prog) == "-3.5\n"
 
 
 def test_fsub_zero_minus_zero_is_positive_zero_not_negative():
     """Confirms the rationale for FNeg: `0.0 - 0.0` yields +0.0 even
-    though IEEE negation of 0.0 yields -0.0. Round-tripping printf %g
-    distinguishes them: +0.0 prints as `0`, -0.0 prints as `-0`."""
+    though IEEE negation of 0.0 yields -0.0."""
     main = _main((
         _print_g(BinOp(
             op="fsub",
-            lhs=FloatLit(type=F64Type(), value=0.0),
-            rhs=FloatLit(type=F64Type(), value=0.0),
+            lhs=_flit(F64Type(), 0.0),
+            rhs=_flit(F64Type(), 0.0),
         )),
     ))
     prog = Program(constants=(_FMT_G,), externs=(_PRINTF,), functions=(main,))
@@ -330,7 +337,6 @@ def test_fsub_zero_minus_zero_is_positive_zero_not_negative():
 # ---------- Cast float arms (now exercised) ----------
 
 def test_cast_int_to_float_signed_is_sitofp():
-    """Cast(IntLit(I32, -1), F64Type()) → -1.0 via `sitofp`."""
     main = _main((
         _print_g(Cast(
             value=IntLit(type=I32Type(), value=-1),
@@ -342,9 +348,6 @@ def test_cast_int_to_float_signed_is_sitofp():
 
 
 def test_cast_int_to_float_unsigned_is_uitofp():
-    """Cast(IntLit(U32, 0xFFFFFFFF), F64Type()) → 4294967295.0 via
-    `uitofp`. (`sitofp` would treat the bit pattern as signed and give
-    -1.0.)"""
     main = _main((
         _print_g(Cast(
             value=IntLit(type=U32Type(), value=0xFFFFFFFF),
@@ -356,12 +359,11 @@ def test_cast_int_to_float_unsigned_is_uitofp():
 
 
 def test_cast_float_to_signed_int_saturates_at_max():
-    """Cast(FloatLit(F64, 1e20), I32Type()) saturates to INT32_MAX
-    (2147483647) via `llvm.fptosi.sat.i32.f64`."""
+    """`fptosi.sat` saturates out-of-range floats to INT_MAX."""
     main = _main((
         _print_lld(Cast(
             value=Cast(
-                value=FloatLit(type=F64Type(), value=1e20),
+                value=_flit(F64Type(), 1e20),
                 target_type=I32Type(),
             ),
             target_type=I64Type(),
@@ -372,12 +374,9 @@ def test_cast_float_to_signed_int_saturates_at_max():
 
 
 def test_cast_nan_to_signed_int_yields_zero():
-    """`fptosi.sat` maps NaN to 0. Build NaN via 0.0/0.0."""
-    nan = BinOp(
-        op="fdiv",
-        lhs=FloatLit(type=F64Type(), value=0.0),
-        rhs=FloatLit(type=F64Type(), value=0.0),
-    )
+    """`fptosi.sat` maps NaN to 0. Using direct NaN construction
+    (no longer via 0.0/0.0)."""
+    nan = FloatLit(type=F64Type(), bits=float_bits_for_special(F64Type(), "nan"))
     main = _main((
         _print_lld(Cast(
             value=Cast(value=nan, target_type=I32Type()),
@@ -388,12 +387,36 @@ def test_cast_nan_to_signed_int_yields_zero():
     assert _build_and_run(prog) == "0\n"
 
 
+def test_cast_pos_inf_to_signed_int_saturates_at_max():
+    """`fptosi.sat` maps +inf to INT_MAX."""
+    pos_inf = FloatLit(type=F64Type(), bits=float_bits_for_special(F64Type(), "+inf"))
+    main = _main((
+        _print_lld(Cast(
+            value=Cast(value=pos_inf, target_type=I32Type()),
+            target_type=I64Type(),
+        )),
+    ))
+    prog = Program(constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,))
+    assert _build_and_run(prog) == "2147483647\n"
+
+
+def test_cast_neg_inf_to_signed_int_saturates_at_min():
+    """`fptosi.sat` maps -inf to INT_MIN."""
+    neg_inf = FloatLit(type=F64Type(), bits=float_bits_for_special(F64Type(), "-inf"))
+    main = _main((
+        _print_lld(Cast(
+            value=Cast(value=neg_inf, target_type=I32Type()),
+            target_type=I64Type(),
+        )),
+    ))
+    prog = Program(constants=(_FMT_LLD,), externs=(_PRINTF,), functions=(main,))
+    assert _build_and_run(prog) == "-2147483648\n"
+
+
 def test_cast_f32_to_f64_is_exact_fpext():
-    """f32 → f64 widening is exact (`fpext`). 1.5 has the same bit
-    pattern in f32 and f64 mantissas for short mantissas, so 1.5 ⊆ both."""
     main = _main((
         _print_g(Cast(
-            value=FloatLit(type=F32Type(), value=1.5),
+            value=_flit(F32Type(), 1.5),
             target_type=F64Type(),
         )),
     ))
@@ -402,15 +425,9 @@ def test_cast_f32_to_f64_is_exact_fpext():
 
 
 def test_cast_f64_to_f32_rounds_to_nearest_even():
-    """0.1 in f64 rounds-to-nearest-even to f32. f32(0.1) ≈ 0.10000000149…;
-    widen back to f64 (fpext) before passing to printf — C's varargs
-    promote float→double on the call boundary, but quod doesn't, so
-    the test does it explicitly. Print via %.17g to observe the f32
-    rounding (it differs from the original f64 0.1 in low bits)."""
-    f32_val = Cast(
-        value=FloatLit(type=F64Type(), value=0.1),
-        target_type=F32Type(),
-    )
+    """0.1 in f64 rounds-to-nearest-even to f32; widen back via fpext
+    for printf to see the rounding artifact."""
+    f32_val = Cast(value=_flit(F64Type(), 0.1), target_type=F32Type())
     f64_again = Cast(value=f32_val, target_type=F64Type())
     main = _main((_print_17g(f64_again),))
     prog = Program(constants=(_FMT_17G,), externs=(_PRINTF,), functions=(main,))
@@ -460,7 +477,7 @@ def test_validator_rejects_fneg_of_int():
 
 def test_predicate_rejects_float_lit():
     with pytest.raises(PredicateError, match="FloatLit"):
-        assert_is_predicate(FloatLit(type=F64Type(), value=1.0))
+        assert_is_predicate(_flit(F64Type(), 1.0))
 
 
 def test_predicate_rejects_fneg():
@@ -487,7 +504,6 @@ def test_predicate_rejects_float_comparison_op():
 
 
 def test_predicate_still_accepts_int_binop():
-    """Sanity check: int ops continue to pass the predicate validator."""
     assert_is_predicate(BinOp(
         op="slt",
         lhs=ParamRef(name="x"),

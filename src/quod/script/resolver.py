@@ -39,6 +39,7 @@ from quod.model import (
     UsizeType,
     IfExpr,
     If,
+    FloatLit,
     IntLit,
     Let,
     Load,
@@ -73,7 +74,31 @@ _INT_TYPE_CLASSES = (
 _NUMERIC_TYPE_CLASSES = _INT_TYPE_CLASSES + (F32Type, F64Type)
 
 _BINOP_CMP = frozenset({"slt", "sle", "sgt", "sge", "eq", "ne",
-                        "ult", "ule", "ugt", "uge"})
+                        "ult", "ule", "ugt", "uge",
+                        "feq", "fne", "flt", "fle", "fgt", "fge"})
+
+
+# Map int-form BinOp ops to their float-form counterparts. The script
+# parser produces int ops by default; the resolver re-routes when both
+# operands turn out to be float-typed. Only ops with a meaningful
+# float counterpart appear here — bitwise (`|`, `&`, `^`) and shifts
+# don't apply to floats.
+_INT_TO_FLOAT_OP = {
+    "add": "fadd", "sub": "fsub", "mul": "fmul",
+    "sdiv": "fdiv", "srem": "frem",
+    "slt": "flt", "sle": "fle", "sgt": "fgt", "sge": "fge",
+    "eq": "feq", "ne": "fne",
+}
+
+
+def _maybe_float_op(op: str, operand_ty) -> str:
+    """If `operand_ty` is a float type and `op` has a float
+    counterpart, return the float op. Otherwise return `op` unchanged.
+    Called by `_binop` after operand resolution to retype `+` etc. as
+    `fadd` etc. when operands are float-typed."""
+    if isinstance(operand_ty, (F32Type, F64Type)) and op in _INT_TO_FLOAT_OP:
+        return _INT_TO_FLOAT_OP[op]
+    return op
 
 
 class _Scope:
@@ -114,6 +139,11 @@ class _Resolver:
         match e:
             case IntLit():
                 return self._int_lit(e, expected)
+            case FloatLit(type=t):
+                # FloatLits carry their type unambiguously (no
+                # poison-style placeholder), so the resolver just
+                # propagates the type up.
+                return e, t
             case ParamRef(name=name):
                 return e, scope.lookup_param(name)
             case LocalRef(name=name):
@@ -245,7 +275,8 @@ class _Resolver:
             new_rhs, r_ty = self.expr(rhs, l_ty, scope)
             if l_ty is None and r_ty is not None:
                 new_lhs, l_ty = self.expr(lhs, r_ty, scope)
-            return e.model_copy(update={"lhs": new_lhs, "rhs": new_rhs}), I1Type()
+            new_op = _maybe_float_op(op, l_ty)
+            return e.model_copy(update={"op": new_op, "lhs": new_lhs, "rhs": new_rhs}), I1Type()
         # arith / bitwise / shift: operands and result share a type.
         # `expected` may flow from the surrounding context (the let's
         # declared type, the return type, etc.).
@@ -254,7 +285,8 @@ class _Resolver:
         if expected is None and l_ty is None and r_ty is not None:
             new_lhs, l_ty = self.expr(lhs, r_ty, scope)
         result_ty = expected or l_ty or r_ty
-        return e.model_copy(update={"lhs": new_lhs, "rhs": new_rhs}), result_ty
+        new_op = _maybe_float_op(op, result_ty)
+        return e.model_copy(update={"op": new_op, "lhs": new_lhs, "rhs": new_rhs}), result_ty
 
     def _field_inits(self, fields, scope, *, drop_poison: bool = False):
         """Walk a tuple of FieldInit; struct/enum field types aren't

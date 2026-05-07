@@ -73,30 +73,40 @@ class CIntLit(_Node):
 
 
 class CFloatLit(_Node):
-    """C floating-point literal — verbatim source form. Suffix-aware
-    at ingest: `1.5f` lifts with type=F32Type, plain `1.5` with
-    type=F64Type. Hex floats (`0x1.8p+1`) preserved exactly via
-    Python's `float.fromhex` round-trip. `1.5l` (long double) is
-    refused at ingest.
+    """C floating-point literal stored as its IEEE 754 bit pattern.
+    Suffix-aware at ingest: `1.5f` lifts with `type=F32Type`, plain
+    `1.5` with `type=F64Type`; hex floats (`0x1.8p+1`) preserved by
+    parsing through libc's `strtof`/`strtod` (single-rounding for the
+    target precision). `1.5l` (long double) is refused at ingest.
 
-    Like `FloatLit` at layer B, only finite values are representable —
-    Pydantic's JSON mode silently coerces non-finite floats to null on
-    serialize, so non-finite values are rejected at construction.
+    Bit-pattern storage matches `FloatLit` at layer B and eliminates
+    the silent double-rounding hazard of going through Python `float`
+    (which is f64). See `FloatLit`'s docstring for the full rationale.
+    Special values (`+inf`, `-inf`, NaN) are ordinary bit patterns —
+    `quod.model.float_bits_for_special` returns the canonical encodings.
     """
     kind: Literal["c.lit_float"] = "c.lit_float"
     type: "FloatType"
-    value: float
+    bits: int
 
-    @field_validator("value")
-    @classmethod
-    def _reject_non_finite(cls, v: float) -> float:
-        import math
-        if not math.isfinite(v):
+    def model_post_init(self, __context) -> None:
+        from quod.model.types import F32Type, F64Type
+        if isinstance(self.type, F32Type):
+            width = 32
+        elif isinstance(self.type, F64Type):
+            width = 64
+        else:
+            raise ValueError(f"CFloatLit type must be F32Type or F64Type; got {self.type!r}")
+        if self.bits < 0:
             raise ValueError(
-                f"CFloatLit value must be finite; got {v!r}. "
-                "Special values (+inf / -inf / NaN) are deferred."
+                f"CFloatLit bits must be a non-negative IEEE 754 encoding; "
+                f"got {self.bits}"
             )
-        return v
+        if self.bits >= (1 << width):
+            raise ValueError(
+                f"CFloatLit bits 0x{self.bits:x} does not fit in {width} bits "
+                f"(type {self.type.kind})"
+            )
 
 
 class CCast(_Node):

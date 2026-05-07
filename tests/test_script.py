@@ -315,6 +315,92 @@ def test_expr_load_cast_ptr_offset():
     assert isinstance(s.target_type, I32Type)
 
 
+# ---------- Float-literal script syntax ----------
+
+def test_float_lit_default_is_f64():
+    """Bare `1.5` defaults to f64. Bits match the f64 encoding of 1.5."""
+    from quod.model import F64Type, FloatLit, python_float_to_bits
+    fn = parse_function("fn pi() -> f64 { return 3.14 }")
+    fl = fn.body.stmts[0].value
+    assert isinstance(fl, FloatLit)
+    assert isinstance(fl.type, F64Type)
+    assert fl.bits == python_float_to_bits(3.14, F64Type())
+
+
+def test_float_lit_f32_suffix():
+    """`1.5f32` produces an f32 FloatLit. Bits use single-rounding via
+    libc strtof — they match what a C compiler would emit."""
+    from quod.model import F32Type, FloatLit, python_float_to_bits
+    fn = parse_function("fn half() -> f32 { return 0.5f32 }")
+    fl = fn.body.stmts[0].value
+    assert isinstance(fl, FloatLit)
+    assert isinstance(fl.type, F32Type)
+    assert fl.bits == python_float_to_bits(0.5, F32Type())
+
+
+def test_float_lit_scientific_and_hex():
+    """Scientific (`1e10`) and hex-float (`0x1.8p+1`) syntax both
+    produce FloatLit with single-rounded bits."""
+    from quod.model import F64Type, parse_decimal_to_float_bits, parse_hex_to_float_bits
+    fn = parse_function("fn e() -> f64 { return 1e10 }")
+    assert fn.body.stmts[0].value.bits == parse_decimal_to_float_bits("1e10", F64Type())
+    fn = parse_function("fn h() -> f64 { return 0x1.8p+1 }")
+    assert fn.body.stmts[0].value.bits == parse_hex_to_float_bits("0x1.8p+1", F64Type())
+
+
+def test_float_arithmetic_routes_to_float_op():
+    """`x + y` on f64 params resolves to `fadd`, not `add`. The
+    parser produces `add` by default; the resolver retypes after seeing
+    operand types."""
+    from quod.model import BinOp
+    fn = parse_function("fn add(x: f64, y: f64) -> f64 { return x + y }")
+    ret = fn.body.stmts[0].value
+    assert isinstance(ret, BinOp)
+    assert ret.op == "fadd"
+
+
+def test_float_comparison_routes_to_float_op():
+    """`x < y` on f64 params resolves to `flt`, not `slt`."""
+    from quod.model import BinOp
+    fn = parse_function("fn lt(x: f64, y: f64) -> i1 { return x < y }")
+    ret = fn.body.stmts[0].value
+    assert isinstance(ret, BinOp)
+    assert ret.op == "flt"
+
+
+def test_special_value_keywords():
+    """`inf_f64`, `nan_f32`, `-inf_f32`, `-nan_f64` produce FloatLits
+    with the canonical bit patterns."""
+    from quod.model import F32Type, F64Type, FloatLit, float_bits_for_special
+    fn = parse_function("fn x() -> f64 { return inf_f64 }")
+    fl = fn.body.stmts[0].value
+    assert isinstance(fl, FloatLit)
+    assert fl.bits == float_bits_for_special(F64Type(), "+inf")
+
+    fn = parse_function("fn x() -> f32 { return nan_f32 }")
+    fl = fn.body.stmts[0].value
+    assert fl.bits == float_bits_for_special(F32Type(), "nan")
+
+    fn = parse_function("fn x() -> f32 { return -inf_f32 }")
+    fl = fn.body.stmts[0].value
+    assert fl.bits == float_bits_for_special(F32Type(), "-inf")
+
+    fn = parse_function("fn x() -> f64 { return -nan_f64 }")
+    fl = fn.body.stmts[0].value
+    assert fl.bits == float_bits_for_special(F64Type(), "-nan")
+
+
+def test_negative_float_literal_flips_sign_bit():
+    """`-1.5` produces a single FloatLit (not BinOp(sub, 0, 1.5))
+    with the sign bit toggled — matches the C ingester's fold."""
+    from quod.model import F64Type, FloatLit, python_float_to_bits
+    fn = parse_function("fn x() -> f64 { return -1.5 }")
+    fl = fn.body.stmts[0].value
+    assert isinstance(fl, FloatLit)
+    expected = python_float_to_bits(1.5, F64Type()) ^ (1 << 63)
+    assert fl.bits == expected
+
+
 def test_expr_short_circuit_and_or():
     fn = parse_function(
         "fn f(x: i1, y: i1, z: i1) -> i1 { return x || y && z }"

@@ -60,6 +60,7 @@ from quod.model import (
     FNeg,
     I8PtrType,
     If,
+    bits_to_python_float,
     IfExpr,
     IntLit,
     Let,
@@ -251,6 +252,22 @@ def _format_type_short(t) -> str:
     return _format_type(t)
 
 
+def _render_float_bits(bits: int, t) -> str:
+    """Human-readable rendering of a `FloatLit` bit pattern. Special
+    values render with an explicit name (`+inf`, `-inf`, `nan`); finite
+    values use Python's repr (shortest decimal that round-trips at the
+    type's precision)."""
+    f = bits_to_python_float(bits, t)
+    import math
+    if math.isnan(f):
+        # Distinguish negative-NaN by sign bit (top bit set).
+        sign_bit = 1 << (31 if isinstance(t, F32Type) else 63)
+        return "-nan" if (bits & sign_bit) else "nan"
+    if math.isinf(f):
+        return "-inf" if f < 0 else "+inf"
+    return repr(f)
+
+
 # ---------- Expression spans (flat — never wraps) ----------
 
 _BINOP_SYMBOL = {
@@ -269,8 +286,8 @@ def _expr_spans(expr) -> tuple[Span, ...]:
     match expr:
         case IntLit(value=v):
             return (Span(str(v), "literal_int"),)
-        case FloatLit(value=v):
-            return (Span(repr(v), "literal_float"),)
+        case FloatLit(type=t, bits=b):
+            return (Span(_render_float_bits(b, t), "literal_float"),)
         case FNeg(operand=op):
             return (
                 Span("fneg", "fn_name"), Span("(", "punct"),

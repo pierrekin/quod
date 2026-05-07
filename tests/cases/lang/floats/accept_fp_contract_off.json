@@ -1,0 +1,7 @@
+{
+  "c_file": "accept_fp_contract_off.c",
+  "expect": {
+    "stdout": "hello\n",
+    "exit": 0
+  }
+}

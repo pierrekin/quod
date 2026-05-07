@@ -1,0 +1,6 @@
+{
+  "c_file": "refuse_fp_contract.c",
+  "expect": {
+    "ingest_error": "FP_CONTRACT"
+  }
+}

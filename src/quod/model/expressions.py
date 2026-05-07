@@ -27,37 +27,48 @@ class IntLit(_Node):
 
 
 class FloatLit(_Node):
-    """IEEE 754 finite floating-point literal.
+    """IEEE 754 floating-point literal stored as its bit pattern.
 
-    Distinct kind from `IntLit` so the discriminator stays unambiguous
-    and the type union is cleanly partitioned. The strict-IEEE
-    decisions (NaN-payload-undefined, subnormals preserved, no FMA
-    contraction, default rounding) live on the `F32Type` / `F64Type`
-    docstrings.
+    `bits` is the exact IEEE 754 encoding for `type` — uint32 for f32,
+    uint64 for f64. Storing the bit pattern (rather than a Python float
+    which is always f64) eliminates the silent double-rounding hazard
+    that arises when an f32 value is round-tripped through f64: the
+    decimal `0.1f` parses to one f32 bit pattern via direct decimal→f32
+    rounding (what a C compiler does), and a *different* f32 bit
+    pattern via decimal→f64→f32 (double rounding). Bit storage means
+    the literal carries exactly what we'll emit.
 
-    Special values (`+inf`, `-inf`, `NaN`) are not yet representable.
-    Pydantic's JSON mode silently coerces non-finite floats to `null`
-    on serialize (round-tripping as a parse error), so we reject them
-    at construction with `field_validator` to fail loudly. The design
-    chose to defer the special-value vocabulary until a real consumer
-    arrives — see ".scratch/floats/00-overview.md" §"Open:
-    special-value literals" for the recommended option.
+    Special values (`+inf`, `-inf`, NaN, and NaN-with-payload) are
+    representable as ordinary bit patterns — `0x7F800000` for `+inf`
+    f32, `0x7FC00000` for canonical-NaN f32, etc. The
+    `quod.model.float_bits_for_special` helper returns the canonical
+    bit patterns by name.
+
+    Use `python_float_to_bits` and `bits_to_python_float` (also in
+    `quod.model`) to convert at boundaries.
     """
     kind: Literal["quod.float_lit"] = "quod.float_lit"
     type: "FloatType"
-    value: float
+    bits: int
 
-    @field_validator("value")
-    @classmethod
-    def _reject_non_finite(cls, v: float) -> float:
-        import math
-        if not math.isfinite(v):
+    def model_post_init(self, __context) -> None:
+        from quod.model.types import F32Type, F64Type
+        if isinstance(self.type, F32Type):
+            width = 32
+        elif isinstance(self.type, F64Type):
+            width = 64
+        else:
+            raise ValueError(f"FloatLit type must be F32Type or F64Type; got {self.type!r}")
+        if self.bits < 0:
             raise ValueError(
-                f"FloatLit value must be finite; got {v!r}. "
-                "Special values (+inf / -inf / NaN) are deferred — "
-                "see .scratch/floats/00-overview.md."
+                f"FloatLit bits must be a non-negative IEEE 754 encoding; "
+                f"got {self.bits}"
             )
-        return v
+        if self.bits >= (1 << width):
+            raise ValueError(
+                f"FloatLit bits 0x{self.bits:x} does not fit in {width} bits "
+                f"(type {self.type.kind})"
+            )
 
 
 class FNeg(_Node):

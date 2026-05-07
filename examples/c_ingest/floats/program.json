@@ -278,14 +278,14 @@
                   "type": {
                     "kind": "llvm.f64"
                   },
-                  "value": 1.5
+                  "bits": 4609434218613702656
                 },
                 {
                   "kind": "quod.float_lit",
                   "type": {
                     "kind": "llvm.f64"
                   },
-                  "value": 2.5
+                  "bits": 4612811918334230528
                 }
               ]
             }
@@ -326,14 +326,14 @@
                       "type": {
                         "kind": "llvm.f64"
                       },
-                      "value": 1.5
+                      "bits": 4609434218613702656
                     },
                     {
                       "kind": "quod.float_lit",
                       "type": {
                         "kind": "llvm.f64"
                       },
-                      "value": 2.5
+                      "bits": 4612811918334230528
                     }
                   ]
                 }
@@ -359,7 +359,7 @@
                       "type": {
                         "kind": "llvm.f64"
                       },
-                      "value": 3.7
+                      "bits": 4615514078110652826
                     }
                   ]
                 }
@@ -413,7 +413,7 @@
                         "type": {
                           "kind": "llvm.f32"
                         },
-                        "value": 1.5
+                        "bits": 1069547520
                       }
                     ]
                   },
@@ -694,7 +694,7 @@
       "justification": {
         "kind": "lift_equivalence",
         "artifact_path": "proofs/lift/main.txt",
-        "artifact_hash": "282e827aef4239afa3c7e098ce373888b0e9cff8e0948a33a5ead27407821897"
+        "artifact_hash": "49cbfdf50d2bc34979ac3d47b1f6511b37e4b535a9c2ee0f7b905a5bece79c77"
       }
     }
   ],
@@ -919,14 +919,14 @@
                     "type": {
                       "kind": "llvm.f64"
                     },
-                    "value": 1.5
+                    "bits": 4609434218613702656
                   },
                   {
                     "kind": "c.lit_float",
                     "type": {
                       "kind": "llvm.f64"
                     },
-                    "value": 2.5
+                    "bits": 4612811918334230528
                   }
                 ]
               }
@@ -974,14 +974,14 @@
                         "type": {
                           "kind": "llvm.f64"
                         },
-                        "value": 1.5
+                        "bits": 4609434218613702656
                       },
                       {
                         "kind": "c.lit_float",
                         "type": {
                           "kind": "llvm.f64"
                         },
-                        "value": 2.5
+                        "bits": 4612811918334230528
                       }
                     ]
                   }
@@ -1011,7 +1011,7 @@
                         "type": {
                           "kind": "llvm.f64"
                         },
-                        "value": 3.7
+                        "bits": 4615514078110652826
                       }
                     ]
                   }
@@ -1078,7 +1078,7 @@
                           "type": {
                             "kind": "llvm.f32"
                           },
-                          "value": 1.5
+                          "bits": 1069547520
                         }
                       ]
                     }
@@ -1359,14 +1359,14 @@
                   "type": {
                     "kind": "llvm.f64"
                   },
-                  "value": 1.5
+                  "bits": 4609434218613702656
                 },
                 {
                   "kind": "quod.float_lit",
                   "type": {
                     "kind": "llvm.f64"
                   },
-                  "value": 2.5
+                  "bits": 4612811918334230528
                 }
               ]
             }
@@ -1407,14 +1407,14 @@
                       "type": {
                         "kind": "llvm.f64"
                       },
-                      "value": 1.5
+                      "bits": 4609434218613702656
                     },
                     {
                       "kind": "quod.float_lit",
                       "type": {
                         "kind": "llvm.f64"
                       },
-                      "value": 2.5
+                      "bits": 4612811918334230528
                     }
                   ]
                 }
@@ -1440,7 +1440,7 @@
                       "type": {
                         "kind": "llvm.f64"
                       },
-                      "value": 3.7
+                      "bits": 4615514078110652826
                     }
                   ]
                 }
@@ -1494,7 +1494,7 @@
                         "type": {
                           "kind": "llvm.f32"
                         },
-                        "value": 1.5
+                        "bits": 1069547520
                       }
                     ]
                   },

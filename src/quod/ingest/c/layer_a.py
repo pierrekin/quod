@@ -21,8 +21,10 @@ import clang.cindex as cx
 
 from quod.ingest.c.helpers import (
     _COMPOUND_ASSIGN_TABLE,
+    _FENV_API_NAMES,
     _LONG_DOUBLE_REFUSAL,
     _binop_token,
+    _fenv_call_refusal,
     _int_type_for,
     _parse_c_float_literal_text,
     _parse_c_int_literal_text,
@@ -109,8 +111,8 @@ class _LayerATranslator:
             tokens = [t.spelling for t in c.get_tokens()]
             if not tokens:
                 raise _refuse(c, "float literal with no tokens")
-            v, ftype = _parse_c_float_literal_text(tokens[0], c)
-            return CFloatLit(type=ftype, value=v)
+            bits, ftype = _parse_c_float_literal_text(tokens[0], c)
+            return CFloatLit(type=ftype, bits=bits)
         if k in (cx.CursorKind.CSTYLE_CAST_EXPR, cx.CursorKind.CXX_FUNCTIONAL_CAST_EXPR):
             target_c_type = _c_source_type(c, c.type)
             # The cast cursor has children (TYPE_REF, the inner expr).
@@ -161,6 +163,8 @@ class _LayerATranslator:
             callee = _unwrap(children[0])
             if callee.kind != cx.CursorKind.DECL_REF_EXPR:
                 raise _refuse(c, "layer A: indirect / function-pointer calls not supported")
+            if callee.spelling in _FENV_API_NAMES:
+                raise _refuse(c, _fenv_call_refusal(callee.spelling))
             args = tuple(self.expr(a) for a in children[1:])
             return CCall(
                 id=self._mint("ccall"),
@@ -219,11 +223,12 @@ class _LayerATranslator:
                 if isinstance(inner, CIntLit):
                     return CIntLit(type=inner.type, value=-inner.value)
                 if isinstance(inner, CFloatLit):
-                    # Same constant-fold for floats — layer-B does the
-                    # same fold (FNeg(FloatLit(v)) → FloatLit(-v) for
-                    # finite v), so the lift-check sees identical
-                    # FloatLit nodes on both sides.
-                    return CFloatLit(type=inner.type, value=-inner.value)
+                    # Same constant-fold for floats — layer-B flips the
+                    # sign bit, so the lift-check sees identical
+                    # CFloatLit / FloatLit bit patterns on both sides.
+                    from quod.model import F32Type as _F32T
+                    sign_bit = 1 << (31 if isinstance(inner.type, _F32T) else 63)
+                    return CFloatLit(type=inner.type, bits=inner.bits ^ sign_bit)
                 return CUnary(id=self._mint("cunary"), op="-", value=inner)
             if op == "!":
                 return CUnary(id=self._mint("cunary"), op="!", value=inner)

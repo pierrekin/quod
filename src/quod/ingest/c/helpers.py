@@ -256,6 +256,28 @@ _LONG_DOUBLE_REFUSAL = (
 )
 
 
+# Standard `<fenv.h>` API names (C99 7.6 + glibc extensions). Refused
+# in CALL_EXPR translation as belt-and-braces against the rare case
+# where a user manually declares `extern int fesetround(int);` without
+# including `<fenv.h>`. The TU-level include refusal in driver.py
+# covers the standard case.
+_FENV_API_NAMES = frozenset({
+    "fesetround", "fegetround",
+    "feclearexcept", "feraiseexcept", "fetestexcept",
+    "feenableexcept", "fedisableexcept", "fegetexcept",
+    "feholdexcept", "feupdateenv",
+    "fegetenv", "fesetenv",
+    "fegetexceptflag", "fesetexceptflag",
+})
+
+
+def _fenv_call_refusal(name: str) -> str:
+    return (
+        f"call to {name!r} not supported — quod does not model the "
+        f"fenv API (strict IEEE 754, default rounding mode)"
+    )
+
+
 def _local_type(cursor: cx.Cursor, t: cx.Type) -> Type:
     """Map a clang scalar type to a quod Type. Accepts every signed and
     unsigned integer width (char/short/int/long/long_long, plus their
@@ -313,27 +335,41 @@ def _parse_c_int_literal_text(text: str, cursor: cx.Cursor) -> int:
         raise _refuse(cursor, f"could not parse integer literal {text!r}: {e}")
 
 
-def _parse_c_float_literal_text(text: str, cursor: cx.Cursor) -> tuple[float, "F32Type | F64Type"]:
-    """Parse a C float-literal token into `(value, quod_type)`.
+def _parse_c_float_literal_text(
+    text: str, cursor: cx.Cursor,
+) -> tuple[int, "F32Type | F64Type"]:
+    """Parse a C float-literal token into `(bits, quod_type)` where
+    `bits` is the IEEE 754 bit pattern (uint32 for f32, uint64 for f64).
 
-    Suffix `f`/`F` → f32; default and `l`/`L` → f64 (we refuse `l`/`L`).
-    Decimal forms parse via `float()`; hex forms (`0x1.8p+1`) via
-    `float.fromhex`. Returns the type as the quod F32Type/F64Type
-    instance so the caller can build CFloatLit / FloatLit identically.
+    Suffix `f`/`F` → f32; default → f64; `l`/`L` (long double) refused.
+    Decimal forms parse via libc `strtof`/`strtod` (single-rounding for
+    the target precision — no decimal→f64→f32 double rounding). Hex
+    forms (`0x1.8p+1`) parse via `float.fromhex` and round to f32 if
+    needed.
     """
+    from quod.model import (
+        FloatParseError,
+        parse_decimal_to_float_bits,
+        parse_hex_to_float_bits,
+    )
+
     if not text:
         raise _refuse(cursor, "float literal with empty token")
     suffix = text[-1] if text[-1] in "fFlL" else ""
     if suffix in ("l", "L"):
         raise _refuse(cursor, "long double literal not supported")
     body = text[:-1] if suffix else text
-    lower = body.lower()
-    if lower.startswith(("0x", "-0x", "+0x")):
-        v = float.fromhex(body)
-    else:
-        v = float(body)
     ftype = _F32 if suffix in ("f", "F") else _F64
-    return v, ftype
+
+    is_hex = body.lower().startswith(("0x", "-0x", "+0x"))
+    try:
+        if is_hex:
+            bits = parse_hex_to_float_bits(body, ftype)
+        else:
+            bits = parse_decimal_to_float_bits(body, ftype)
+    except FloatParseError as e:
+        raise _refuse(cursor, str(e))
+    return bits, ftype
 
 
 def _parse_switch_groups(

@@ -947,15 +947,15 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
             raise LiftCheckError(
                 f"{path}: layer-A CFloatLit vs layer-B {type(b).__name__}"
             )
-        if a.value != b.value:
+        if a.bits != b.bits:
             raise LiftCheckError(
-                f"{path}: float_lit value {a.value!r} vs {b.value!r}"
+                f"{path}: float_lit bits 0x{a.bits:x} vs 0x{b.bits:x}"
             )
         if type(a.type) is not type(b.type):
             raise LiftCheckError(
                 f"{path}: float_lit type {a.type.kind!r} vs {b.type.kind!r}"
             )
-        return {"kind": "float_lit", "value": a.value, "type": b.type.kind}
+        return {"kind": "float_lit", "bits": a.bits, "type": b.type.kind}
 
     if isinstance(a, CCast):
         # Reaches here only when layer-B is NOT a Cast — that's a
