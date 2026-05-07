@@ -28,7 +28,7 @@ from quod.model import (
 )
 from quod.render import recognize_predicate
 from quod.script import ScriptError, parse_predicate
-from quod.validate import PredicateError, assert_is_predicate
+from quod.predicate_validate import PredicateError, assert_is_predicate
 
 
 # ---------- Parses sugar shapes that round-trip via the recognizer ----------

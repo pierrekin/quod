@@ -213,7 +213,7 @@ def _parse_predicate_arg(target_fn: Function | ExternFunction, src: str):
     """
     from quod.canonicalize import canonicalize
     from quod.script import ScriptError, parse_predicate
-    from quod.validate import PredicateError, assert_is_predicate
+    from quod.predicate_validate import PredicateError, assert_is_predicate
 
     if isinstance(target_fn, Function):
         param_types = {p.name: p.type for p in target_fn.params}
