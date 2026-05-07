@@ -416,25 +416,80 @@ def _calls(program, function, monitor) -> list[dict[str, Any]]:
 # ---------- Data items ----------
 
 
+# ELF user-data section prefixes. Anything matching these (or a sub-
+# section like `.data.rel.ro`) carries program data the binary
+# frontend wants at Layer A. Everything else (`.dynamic`, `.got`,
+# `.plt`, `.gnu.*`, `.eh_frame*`, `.init_array`, …) is linker
+# bookkeeping that we drop. PE/Mach-O sections use different names
+# (`__data`, `__bss`, etc.) — for v1 only ELF globals are surfaced;
+# other formats still emit strings via `hasStringValue()`.
+_ELF_USER_DATA_SECTIONS = (".rodata", ".data", ".bss")
+
+# Cap on a single global's byte length. Real .data segments can be
+# multi-MB (initialized arrays, jump tables left in user data). For
+# v1 we don't surface those — anything bigger than this is dropped.
+# Strings are unaffected (they're emitted via the hasStringValue path
+# regardless of length).
+_GLOBAL_MAX_BYTES = 4096
+
+
+def _is_user_data_section(name: str | None) -> bool:
+    if not name:
+        return False
+    for prefix in _ELF_USER_DATA_SECTIONS:
+        if name == prefix or name.startswith(prefix + "."):
+            return True
+    return False
+
+
 def _data_dump(program) -> list[dict[str, Any]]:
+    """Emit defined data items: strings (always, regardless of section)
+    plus user-data globals from `.data` / `.bss` / `.rodata`. Skips
+    structural data in `.dynamic`, `.got`, `.plt`, etc. — that's
+    linker bookkeeping with no Layer-A consumer.
+
+    Globals are emitted with `data_kind="global"` and base64-encoded
+    raw bytes; downstream consumers don't try to interpret the bytes
+    (BinDataItem is opaque-by-contract). The exporter caps each
+    global's length at `_GLOBAL_MAX_BYTES` so a multi-MB initialized
+    array doesn't bloat the dump."""
+    memory = program.getMemory()
     listing = program.getListing()
     out: list[dict[str, Any]] = []
     it = listing.getDefinedData(True)
     while it.hasNext():
         data = it.next()
+        addr = data.getAddress()
         if data.hasStringValue():
             value = data.getValue()
             out.append({
-                "address": _hex(data.getAddress()),
+                "address": _hex(addr),
                 "kind": "string",
                 "value": str(value) if value is not None else "",
             })
             continue
-        # Skip non-string defined data for v1 — Ghidra's
-        # `getDefinedData` includes import directories, jump tables,
-        # and other structural data, much of which the binary frontend
-        # has no use for at Layer A. A future export-script flag can
-        # opt in.
+        block = memory.getBlock(addr)
+        if block is None:
+            continue
+        if not _is_user_data_section(str(block.getName())):
+            continue
+        length = data.getLength()
+        if length is None or length <= 0 or length > _GLOBAL_MAX_BYTES:
+            continue
+        try:
+            raw = data.getBytes()
+        except Exception:
+            continue
+        if raw is None:
+            continue
+        # Ghidra returns a Java `byte[]`; JPype yields signed Python
+        # ints in [-128, 127). Mask each to a byte before packing.
+        buf = bytes((b & 0xFF) for b in raw)
+        out.append({
+            "address": _hex(addr),
+            "kind": "global",
+            "value": base64.b64encode(buf).decode("ascii"),
+        })
     return out
 
 

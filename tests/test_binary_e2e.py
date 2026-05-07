@@ -215,6 +215,33 @@ def test_real_ghidra_chain_walker_recovers_compare_const_threshold(ingested_prog
     )
 
 
+def test_real_ghidra_data_dump_emits_strings_and_globals(ingested_program):
+    """The exporter surfaces both string literals (`data_kind="string"`)
+    and user-data globals from `.data` / `.bss` / `.rodata`
+    (`data_kind="global"`, base64-encoded). Anything in structural
+    sections (`.dynamic`, `.got`, `.plt`, …) is filtered out — those
+    are linker bookkeeping with no Layer-A consumer.
+
+    For the demo binaries (built with `clang -O0 -g`), at least one
+    global should land (clang emits `.data.rel.ro` / `.eh_frame_hdr`
+    aliases that Ghidra labels as user-data). The bytes round-trip as
+    valid base64."""
+    import base64
+    program, _, _ = ingested_program
+    unit = program.binary_units[0]
+    strings = [d for d in unit.data_items if d.data_kind == "string"]
+    globals_ = [d for d in unit.data_items if d.data_kind == "global"]
+    assert strings, "expected at least one string in a `clang -g` .so"
+    assert globals_, (
+        "expected at least one user-data global; if none surface, the "
+        "section-name filter is rejecting everything (regression)"
+    )
+    for g in globals_:
+        # Round-trip through base64 to confirm the value is valid.
+        decoded = base64.b64decode(g.value)
+        assert len(decoded) > 0
+
+
 def test_real_ghidra_type_refs_bounded_by_signatures(ingested_program):
     """The exporter filters Ghidra's DataType universe down to types
     that actually appear on a function signature in this dump. Without
