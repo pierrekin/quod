@@ -53,6 +53,7 @@ from quod.model import (
 
 
 SUM_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/sum/sum.c"
+FLOATS_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/floats/floats.c"
 
 
 # ---------- walk_lift on a real ingest ----------
@@ -65,6 +66,21 @@ def test_walk_lift_succeeds_on_sum_c():
     record = walk_lift(cfn, fn)
     assert record["kind"] == "lift-check"
     assert record["fn"]["name"] == "sum"
+
+
+def test_walk_lift_succeeds_on_floats_c():
+    """walk_lift handles every float-side shape: CFloatLit ↔ FloatLit,
+    float-op CBinOp ↔ BinOp(fadd/fmul/flt/...), CCast ↔ Cast (explicit
+    `(int)x`), and the implicit-cast asymmetry (int→double promotion
+    surfaces as a layer-B Cast that wraps the layer-A CIntLit-or-CVarRef
+    inner with no layer-A counterpart)."""
+    p = ingest_c(FLOATS_C)
+    assert p.source_units, "layer-A should have produced source_units"
+    cfns = {cfn.name: cfn for cfn in p.source_units[0].functions}
+    fns = {fn.name: fn for fn in p.structured_functions}
+    for name in ("scale", "below", "truncate", "promote", "widen32", "main"):
+        record = walk_lift(cfns[name], fns[name], program=p)
+        assert record["kind"] == "lift-check", f"{name}: {record}"
 
 
 def test_lift_check_artifact_is_deterministic():

@@ -1,0 +1,7 @@
+{
+  "c_file": "explicit_cast.c",
+  "expect": {
+    "stdout": "(int)3.7  = 3\n(int)-2.1 = -2\n(int)0.9  = 0\n",
+    "exit": 0
+  }
+}

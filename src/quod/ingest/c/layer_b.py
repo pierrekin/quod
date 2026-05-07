@@ -13,18 +13,25 @@ from typing import cast
 import clang.cindex as cx
 
 from quod.ingest.c.helpers import (
-    _BIN_OP_TABLE,
     _COMPOUND_ASSIGN_TABLE,
+    _F32,
+    _F64,
+    _FLOAT_BIN_OP_TABLE,
+    _FLOAT_TYPE_KINDS,
     _I8PTR,
     _I32,
     _I64,
+    _INT_BIN_OP_TABLE,
+    _LONG_DOUBLE_REFUSAL,
     _VOID,
     _binop_token,
     _is_char_array,
     _is_char_pointer,
+    _is_clang_float,
     _is_i1_typed,
     _is_pointer,
     _local_type,
+    _parse_c_float_literal_text,
     _parse_switch_groups,
     _quod_type,
     _refuse,
@@ -43,6 +50,8 @@ from quod.model import (
     Expr,
     ExprStmt,
     ExternFunction,
+    FNeg,
+    FloatLit,
     Function,
     If,
     IfExpr,
@@ -296,11 +305,12 @@ def _extern_type(cursor: cx.Cursor, t: cx.Type, *, is_return: bool = False) -> T
       - any pointer → I8Ptr. LLVM has opaque pointers, so `char*`, `void*`,
         and `CURL*` are all the same type at IR level — modeling them as
         i8_ptr is honest, not a hack.
+      - `float` → F32, `double` → F64. `long double` refused.
       - `void` (return only) → VoidType. Callers must discard the return
         value via ExprStmt; using it as an rvalue is rejected by the
         validator.
 
-    Floats, wider ints, structs, function pointers (other than as opaque
+    Wider ints, structs, function pointers (other than as opaque
     i8_ptr) all refuse — quod can't represent them yet.
     """
     canon = t.get_canonical()
@@ -308,6 +318,12 @@ def _extern_type(cursor: cx.Cursor, t: cx.Type, *, is_return: bool = False) -> T
         return _I32
     if canon.kind == cx.TypeKind.POINTER:
         return _I8PTR
+    if canon.kind == cx.TypeKind.FLOAT:
+        return _F32
+    if canon.kind == cx.TypeKind.DOUBLE:
+        return _F64
+    if canon.kind == cx.TypeKind.LONGDOUBLE:
+        raise _refuse(cursor, _LONG_DOUBLE_REFUSAL)
     if is_return and canon.kind == cx.TypeKind.VOID:
         return _VOID
     raise _refuse(cursor, f"unsupported extern signature type {t.spelling!r}")
@@ -338,7 +354,47 @@ class _FunctionTranslator:
             return LocalRef(name=name)
         raise _refuse(cursor, f"unknown identifier {name!r} (only params/locals are supported)")
 
+    def _maybe_implicit_cast(self, cursor: cx.Cursor) -> Expr | None:
+        """If `cursor` is an UNEXPOSED_EXPR / PAREN_EXPR whose `cursor.type`
+        differs at the quod level from the inner cursor's `type`, return
+        a `Cast(inner, target_quod_type)`. Otherwise return None and let
+        the normal `_unwrap` path proceed.
+
+        Implicit float-involving casts (`int → double`, `double → int`,
+        `float → double`, `double → float`) take this path; same-type
+        wrappers (clang inserts these for lvalue→rvalue conversions on
+        ints) fall through to `_unwrap`.
+        """
+        if cursor.kind not in (cx.CursorKind.UNEXPOSED_EXPR, cx.CursorKind.PAREN_EXPR):
+            return None
+        children = list(cursor.get_children())
+        if len(children) != 1:
+            return None
+        inner = children[0]
+        outer_canon = cursor.type.get_canonical().kind
+        inner_canon = inner.type.get_canonical().kind
+        # Only act on float-involving casts. Pure int unwrapping (the
+        # common case for `int x = 5;`) goes through `_unwrap`.
+        outer_float = outer_canon in _FLOAT_TYPE_KINDS
+        inner_float = inner_canon in _FLOAT_TYPE_KINDS
+        if not (outer_float or inner_float):
+            return None
+        if outer_canon == inner_canon:
+            return None
+        target_qty = _local_type(cursor, cursor.type)
+        return Cast(value=self.expr(inner), target_type=target_qty)
+
     def expr(self, cursor: cx.Cursor) -> Expr:
+        # Detect type-changing implicit casts BEFORE unwrapping. clang
+        # surfaces them as `UNEXPOSED_EXPR(target_type) → inner(source_type)`
+        # — for ints (where source and target lower to the same LLVM type)
+        # the existing `_unwrap` peels through transparently, which is
+        # correct. For float-involving casts the LLVM types differ and we
+        # must materialize a `Cast(value, target_type)`.
+        cast_node = self._maybe_implicit_cast(cursor)
+        if cast_node is not None:
+            return cast_node
+
         c = _unwrap(cursor)
         k = c.kind
 
@@ -347,6 +403,23 @@ class _FunctionTranslator:
             if not tokens:
                 raise _refuse(c, "integer literal with no tokens")
             return IntLit(type=_I32, value=int(tokens[0], 0))
+
+        if k == cx.CursorKind.FLOATING_LITERAL:
+            tokens = [t.spelling for t in c.get_tokens()]
+            if not tokens:
+                raise _refuse(c, "float literal with no tokens")
+            v, ftype = _parse_c_float_literal_text(tokens[0], c)
+            return FloatLit(type=ftype, value=v)
+
+        if k in (cx.CursorKind.CSTYLE_CAST_EXPR, cx.CursorKind.CXX_FUNCTIONAL_CAST_EXPR):
+            target_qty = _local_type(c, c.type)
+            inner = None
+            for child in c.get_children():
+                if child.kind != cx.CursorKind.TYPE_REF:
+                    inner = child
+            if inner is None:
+                raise _refuse(c, "explicit cast with no expression operand")
+            return Cast(value=self.expr(inner), target_type=target_qty)
 
         if k == cx.CursorKind.STRING_LITERAL:
             tokens = [t.spelling for t in c.get_tokens()]
@@ -393,8 +466,18 @@ class _FunctionTranslator:
                 if inner.kind == cx.CursorKind.ARRAY_SUBSCRIPT_EXPR:
                     return self._array_address_of(c, inner)
                 raise _refuse(c, "address-of only supported for array subscripts (e.g. `&buf[k]`)")
+            # Determine operand type *before* recursion so we can route
+            # `-x` on float operands to FNeg (IEEE sign-bit flip) rather
+            # than the int `0 - x` desugaring.
+            operand_is_float = _is_clang_float(children[0].type)
             inner_expr = self.expr(children[0])
             if op == "-":
+                if operand_is_float:
+                    if isinstance(inner_expr, FloatLit):
+                        # Constant-fold: -1.5 → FloatLit(-1.5). FNeg of
+                        # a finite literal is just the negated literal.
+                        return FloatLit(type=inner_expr.type, value=-inner_expr.value)
+                    return FNeg(operand=inner_expr)
                 if isinstance(inner_expr, IntLit):
                     return IntLit(type=_I32, value=-inner_expr.value)
                 return BinOp(op="sub", lhs=IntLit(type=_I32, value=0), rhs=inner_expr)
@@ -428,15 +511,26 @@ class _FunctionTranslator:
                 ptr_arith = self._maybe_pointer_add(c, children)
                 if ptr_arith is not None:
                     return ptr_arith
+            # Route int vs float ops by inspecting clang's operand types
+            # *before* recursion. If both operands are float-typed, use
+            # the float op table (fadd/.../feq/...). Mixed types should
+            # already be normalized by clang's implicit-cast insertion;
+            # if we see them here, that's a bug in implicit-cast handling.
+            both_float = (
+                _is_clang_float(children[0].type)
+                and _is_clang_float(children[1].type)
+            )
             lhs = self.expr(children[0])
             rhs = self.expr(children[1])
             if tok == "&&":
                 return ShortCircuitAnd(lhs=lhs, rhs=rhs)
             if tok == "||":
                 return ShortCircuitOr(lhs=lhs, rhs=rhs)
-            if tok in _BIN_OP_TABLE:
-                return BinOp(op=cast(any, _BIN_OP_TABLE[tok]), lhs=lhs, rhs=rhs)
-            raise _refuse(c, f"unsupported binary operator {tok!r}")
+            table = _FLOAT_BIN_OP_TABLE if both_float else _INT_BIN_OP_TABLE
+            if tok in table:
+                return BinOp(op=cast(any, table[tok]), lhs=lhs, rhs=rhs)
+            kind = "float" if both_float else "int"
+            raise _refuse(c, f"unsupported {kind} binary operator {tok!r}")
 
 
         if k == cx.CursorKind.CALL_EXPR:
@@ -827,26 +921,17 @@ class _FunctionTranslator:
 def _translate_function(
     cursor: cx.Cursor, source_path, state: _ProgramState,
 ) -> Function:
-    result_canon = cursor.result_type.get_canonical()
-    if result_canon.kind == cx.TypeKind.INT:
-        return_type: Type = _I32
-        is_void = False
-    elif result_canon.kind == cx.TypeKind.VOID:
-        return_type = _VOID
-        is_void = True
-    else:
-        raise _refuse(
-            cursor,
-            f"only `int`- and `void`-returning functions are supported, "
-            f"got {cursor.result_type.spelling!r}"
-        )
+    # Reuse the extern type-mapping path so int / void / float / double
+    # all resolve through the same dispatch (and `long double` refuses
+    # uniformly). The is_void flag drives later void-return handling.
+    return_type: Type = _extern_type(cursor, cursor.result_type, is_return=True)
+    is_void = isinstance(return_type, type(_VOID))
 
     params: list[Param] = []
     body_cursor: cx.Cursor | None = None
     for child in cursor.get_children():
         if child.kind == cx.CursorKind.PARM_DECL:
-            _quod_type(child, child.type)
-            params.append(Param(name=child.spelling, type=_I32))
+            params.append(Param(name=child.spelling, type=_local_type(child, child.type)))
         elif child.kind == cx.CursorKind.COMPOUND_STMT:
             body_cursor = child
 

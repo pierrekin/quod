@@ -72,11 +72,13 @@ from quod.model import (
     CCall,
     CCompoundAssign,
     CContinue,
+    CCast,
     CDoWhile,
     CEnumConstRef,
     Continue,
     DoWhile,
     CExprStmt,
+    CFloatLit,
     CFn,
     CFor,
     CIf,
@@ -109,6 +111,9 @@ from quod.model import (
     LocalRef,
     Param,
     Cast,
+    F32Type,
+    F64Type,
+    FloatLit,
     ParamRef,
     PtrOffset,
     Return,
@@ -158,6 +163,40 @@ _BINOP_LAYER_A_TO_B = {
     "^": "xor",
     "<<": "shl",
     ">>": "ashr",
+}
+
+# Float-op counterpart. The layer-A operator string is identical (`+`,
+# `<`, …); the layer-B op disambiguates int vs float. The CBinOp arm
+# of `_check_expr` accepts either map depending on the layer-B op
+# observed.
+_BINOP_LAYER_A_TO_B_FLOAT = {
+    "+": "fadd",
+    "-": "fsub",
+    "*": "fmul",
+    "/": "fdiv",
+    "%": "frem",
+    "<": "flt",
+    "<=": "fle",
+    ">": "fgt",
+    ">=": "fge",
+    "==": "feq",
+    "!=": "fne",
+}
+
+# The set of float layer-B ops — used by the CBinOp pairing code to
+# decide which map to consult.
+_FLOAT_BINOP_LAYER_B_OPS = frozenset(_BINOP_LAYER_A_TO_B_FLOAT.values())
+
+
+# C-type name (as written in source) → expected layer-B quod-type kind.
+# Used by the CCast pairing to verify the explicit-cast target type
+# matches what the layer-B Cast carries. `int` / `enum` collapse to i32
+# at layer B; pointers to i8_ptr; floats to f32/f64.
+_C_TYPE_NAME_TO_QUOD_KIND = {
+    "int": "llvm.i32",
+    "float": "llvm.f32",
+    "double": "llvm.f64",
+    "void": "llvm.void",
 }
 
 
@@ -304,6 +343,18 @@ def _check_value_type(a, b, *, path: str) -> None:
             if not isinstance(b, VoidType):
                 raise LiftCheckError(
                     f"{path}: layer-A void but layer-B is {type(b).__name__}"
+                )
+            return
+        if a.name == "float":
+            if not isinstance(b, F32Type):
+                raise LiftCheckError(
+                    f"{path}: layer-A float but layer-B is {type(b).__name__}"
+                )
+            return
+        if a.name == "double":
+            if not isinstance(b, F64Type):
+                raise LiftCheckError(
+                    f"{path}: layer-A double but layer-B is {type(b).__name__}"
                 )
             return
         # `char`, `signed char`, `unsigned char` are only valid as
@@ -800,6 +851,34 @@ def _is_layer_a_i1_typed(expr) -> bool:
 
 
 def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
+    # Cast pairing — three cases:
+    #   1. Explicit cast matches: layer-A `CCast(T, v)` and layer-B
+    #      `Cast(T', v')` where T maps to T'. Recurse on the values.
+    #   2. Layer-B has an extra implicit Cast wrapping the layer-A
+    #      counterpart: recurse on (a, b.value).
+    #   3. Layer-A is not a CCast at all: same as case 2.
+    if isinstance(b, Cast):
+        if isinstance(a, CCast):
+            a_name = getattr(a.target_type, "name", None)
+            expected_b_kind = (
+                _C_TYPE_NAME_TO_QUOD_KIND.get(a_name) if a_name is not None else None
+            )
+            if expected_b_kind is not None and b.target_type.kind == expected_b_kind:
+                # Targets agree — case (1), explicit-cast pair.
+                return {
+                    "kind": "cast(explicit)",
+                    "target": b.target_type.kind,
+                    "value": _check_expr(a.value, b.value, path=f"{path}.value", ctx=ctx),
+                }
+            # Targets disagree — assume layer-B has an implicit cast
+            # wrapping the explicit one; case (2). Recurse with `a`
+            # unchanged against `b.value`.
+        return {
+            "kind": "cast(implicit)",
+            "target": b.target_type.kind,
+            "value": _check_expr(a, b.value, path=path, ctx=ctx),
+        }
+
     if isinstance(a, CIntLit):
         if not isinstance(b, IntLit):
             raise LiftCheckError(f"{path}: layer-A CIntLit vs layer-B {type(b).__name__}")
@@ -808,6 +887,30 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
         if not isinstance(b.type, I32Type):
             raise LiftCheckError(f"{path}: layer-B int_lit is not i32")
         return {"kind": "int_lit", "value": a.value}
+
+    if isinstance(a, CFloatLit):
+        if not isinstance(b, FloatLit):
+            raise LiftCheckError(
+                f"{path}: layer-A CFloatLit vs layer-B {type(b).__name__}"
+            )
+        if a.value != b.value:
+            raise LiftCheckError(
+                f"{path}: float_lit value {a.value!r} vs {b.value!r}"
+            )
+        if type(a.type) is not type(b.type):
+            raise LiftCheckError(
+                f"{path}: float_lit type {a.type.kind!r} vs {b.type.kind!r}"
+            )
+        return {"kind": "float_lit", "value": a.value, "type": b.type.kind}
+
+    if isinstance(a, CCast):
+        # Reaches here only when layer-B is NOT a Cast — that's a
+        # mismatch (an explicit cast in source must produce some
+        # layer-B Cast).
+        raise LiftCheckError(
+            f"{path}: layer-A CCast vs layer-B {type(b).__name__} "
+            f"(expected Cast)"
+        )
 
     if isinstance(a, CEnumConstRef):
         # `CURLOPT_URL` (layer A) ↔ `IntLit(I32, 10002)` (layer B).
@@ -876,11 +979,17 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
         # implies the type pairing.
         if a.op == "+" and isinstance(b, PtrOffset):
             return _check_pointer_arith(a.lhs, a.rhs, b, path=path, ctx=ctx)
-        expected_b_op = _BINOP_LAYER_A_TO_B.get(a.op)
-        if expected_b_op is None:
-            raise LiftCheckError(f"{path}: layer-A operator {a.op!r} not in correspondence table")
         if not isinstance(b, BinOp):
             raise LiftCheckError(f"{path}: CBinOp vs layer-B {type(b).__name__}")
+        # Consult the int- or float-op table based on which one the
+        # layer-B op belongs to. Operator spellings are shared between
+        # int and float (`+`, `<`, …); the layer-B op string disambiguates.
+        if b.op in _FLOAT_BINOP_LAYER_B_OPS:
+            expected_b_op = _BINOP_LAYER_A_TO_B_FLOAT.get(a.op)
+        else:
+            expected_b_op = _BINOP_LAYER_A_TO_B.get(a.op)
+        if expected_b_op is None:
+            raise LiftCheckError(f"{path}: layer-A operator {a.op!r} not in correspondence table")
         if b.op != expected_b_op:
             raise LiftCheckError(
                 f"{path}: operator {a.op!r} expects layer-B {expected_b_op!r}, "

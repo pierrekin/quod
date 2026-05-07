@@ -54,6 +54,8 @@ from quod.model.layer_a import (
     CFn,
     CFor,
     CIf,
+    CCast,
+    CFloatLit,
     CIntLit,
     CNamedType,
     CPointerType,
@@ -287,6 +289,8 @@ def _format_c_expr(e) -> str:
     match e:
         case CIntLit(value=v):
             return str(v)
+        case CFloatLit(value=v):
+            return repr(v)
         case CStringLit(value=v):
             return repr(v)
         case CVarRef(name=n):
@@ -302,6 +306,8 @@ def _format_c_expr(e) -> str:
             return f"{_format_c_expr(b)}[{_format_c_expr(i)}]"
         case CAddressOf(target=t):
             return f"&{_format_c_expr(t)}"
+        case CCast(target_type=t, value=v):
+            return f"({_format_c_type(t)}){_format_c_expr(v)}"
     raise ValueError(f"unhandled c.* expression: {e!r}")
 
 

@@ -1,0 +1,7 @@
+{
+  "c_file": "implicit_promotion.c",
+  "expect": {
+    "stdout": "add_int_double(3, 0.25) = 3.25\nfrom_int(7) = 7\n",
+    "exit": 0
+  }
+}

@@ -16,11 +16,13 @@ from quod.model import (
     CBinOp,
     CBreak,
     CCall,
+    CCast,
     CCompoundAssign,
     CContinue,
     CDoWhile,
     CEnumConstRef,
     CExprStmt,
+    CFloatLit,
     CFn,
     CFor,
     CIf,
@@ -70,6 +72,33 @@ _LAYER_A_CATALOG: dict[str, dict[str, Any]] = {
         "class": CIntLit,
         "summary": "A C integer literal.",
         "example": {"kind": "c.lit_int", "value": 0},
+    },
+
+    "c.lit_float": {
+        "class": CFloatLit,
+        "summary": (
+            "A C floating-point literal. `type` selects f32 vs f64 "
+            "based on the source suffix (`1.5f` → f32; plain `1.5` → "
+            "f64). Hex floats (`0x1.8p+1`) round-trip via "
+            "Python's `float.fromhex`. Non-finite values (+inf / "
+            "-inf / NaN) are deferred — Pydantic rejects at construction."
+        ),
+        "example": {"kind": "c.lit_float", "type": {"kind": "llvm.f64"}, "value": 1.5},
+    },
+
+    "c.cast": {
+        "class": CCast,
+        "summary": (
+            "An explicit C cast: `(T)expr` (CSTYLE_CAST_EXPR) or T(expr) "
+            "(CXX_FUNCTIONAL_CAST_EXPR). Implicit promotions inserted by "
+            "clang aren't source syntax — they have no layer-A "
+            "representation; they synthesize as layer-B `Cast` nodes only."
+        ),
+        "example": {
+            "kind": "c.cast",
+            "target_type": {"kind": "c.type", "name": "double"},
+            "value": {"kind": "c.lit_int", "value": 1},
+        },
     },
 
     "c.var_ref": {

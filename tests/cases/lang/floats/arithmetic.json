@@ -1,0 +1,7 @@
+{
+  "c_file": "arithmetic.c",
+  "expect": {
+    "stdout": "sum  = 3.75\ndiff = -0.75\nprod = 3.375\nquot = 1.5\n",
+    "exit": 0
+  }
+}

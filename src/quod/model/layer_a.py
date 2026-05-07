@@ -11,9 +11,10 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Union
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from quod.model.base import _Node, _mint_node_id
+from quod.model.types import FloatType
 
 
 class CNamedType(_Node):
@@ -58,6 +59,50 @@ CType = Annotated[
 class CIntLit(_Node):
     kind: Literal["c.lit_int"] = "c.lit_int"
     value: int
+
+
+class CFloatLit(_Node):
+    """C floating-point literal — verbatim source form. Suffix-aware
+    at ingest: `1.5f` lifts with type=F32Type, plain `1.5` with
+    type=F64Type. Hex floats (`0x1.8p+1`) preserved exactly via
+    Python's `float.fromhex` round-trip. `1.5l` (long double) is
+    refused at ingest.
+
+    Like `FloatLit` at layer B, only finite values are representable —
+    Pydantic's JSON mode silently coerces non-finite floats to null on
+    serialize, so non-finite values are rejected at construction.
+    """
+    kind: Literal["c.lit_float"] = "c.lit_float"
+    type: "FloatType"
+    value: float
+
+    @field_validator("value")
+    @classmethod
+    def _reject_non_finite(cls, v: float) -> float:
+        import math
+        if not math.isfinite(v):
+            raise ValueError(
+                f"CFloatLit value must be finite; got {v!r}. "
+                "Special values (+inf / -inf / NaN) are deferred."
+            )
+        return v
+
+
+class CCast(_Node):
+    """Explicit C cast: `(T)expr` (CSTYLE_CAST_EXPR) or T(expr)
+    (CXX_FUNCTIONAL_CAST_EXPR). Only for source-form casts —
+    implicit promotions inserted by clang aren't source syntax and
+    have no layer-A representation; they synthesize as layer-B `Cast`
+    nodes only.
+
+    `target_type` is the C type as written (e.g., `CNamedType("double")`
+    for `(double)x`). The lift-check pairs CCast with layer-B `Cast`
+    by checking that the C type maps to the same quod type.
+    """
+    kind: Literal["c.cast"] = "c.cast"
+    id: str = Field(default_factory=lambda: _mint_node_id("ccast"))
+    target_type: "CType"
+    value: "CExpr"
 
 
 class CVarRef(_Node):
@@ -201,8 +246,8 @@ class CUnary(_Node):
 
 
 CExpr = Annotated[
-    Union[CIntLit, CVarRef, CEnumConstRef, CBinOp, CStringLit, CCall,
-          CArraySubscript, CAddressOf, CUnary, CTernary],
+    Union[CIntLit, CFloatLit, CVarRef, CEnumConstRef, CBinOp, CStringLit, CCall,
+          CArraySubscript, CAddressOf, CUnary, CTernary, CCast],
     Field(discriminator="kind"),
 ]
 

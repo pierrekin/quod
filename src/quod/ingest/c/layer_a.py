@@ -22,7 +22,9 @@ import clang.cindex as cx
 from quod.ingest.c.helpers import (
     _CHAR_POINTEE_KINDS,
     _COMPOUND_ASSIGN_TABLE,
+    _LONG_DOUBLE_REFUSAL,
     _binop_token,
+    _parse_c_float_literal_text,
     _parse_switch_groups,
     _refuse,
     _split_for_children,
@@ -37,10 +39,12 @@ from quod.model import (
     CCall,
     CCompoundAssign,
     CContinue,
+    CCast,
     CDoWhile,
     CEnumConstRef,
     CExpr,
     CExprStmt,
+    CFloatLit,
     CFn,
     CFor,
     CForInit,
@@ -97,6 +101,27 @@ class _LayerATranslator:
             if not tokens:
                 raise _refuse(c, "integer literal with no tokens")
             return CIntLit(value=int(tokens[0], 0))
+        if k == cx.CursorKind.FLOATING_LITERAL:
+            tokens = [t.spelling for t in c.get_tokens()]
+            if not tokens:
+                raise _refuse(c, "float literal with no tokens")
+            v, ftype = _parse_c_float_literal_text(tokens[0], c)
+            return CFloatLit(type=ftype, value=v)
+        if k in (cx.CursorKind.CSTYLE_CAST_EXPR, cx.CursorKind.CXX_FUNCTIONAL_CAST_EXPR):
+            target_c_type = _c_source_type(c, c.type)
+            # The cast cursor has children (TYPE_REF, the inner expr).
+            # The inner expression is the last non-TYPE_REF child.
+            inner = None
+            for child in c.get_children():
+                if child.kind != cx.CursorKind.TYPE_REF:
+                    inner = child
+            if inner is None:
+                raise _refuse(c, "explicit cast with no expression operand")
+            return CCast(
+                id=self._mint("ccast"),
+                target_type=target_c_type,
+                value=self.expr(inner),
+            )
         if k == cx.CursorKind.STRING_LITERAL:
             # Decode via Python's literal_eval (a strict superset of C
             # string-literal escape syntax — same path the layer-B
@@ -189,6 +214,12 @@ class _LayerATranslator:
             if op == "-":
                 if isinstance(inner, CIntLit):
                     return CIntLit(value=-inner.value)
+                if isinstance(inner, CFloatLit):
+                    # Same constant-fold for floats — layer-B does the
+                    # same fold (FNeg(FloatLit(v)) → FloatLit(-v) for
+                    # finite v), so the lift-check sees identical
+                    # FloatLit nodes on both sides.
+                    return CFloatLit(type=inner.type, value=-inner.value)
                 return CUnary(id=self._mint("cunary"), op="-", value=inner)
             if op == "!":
                 return CUnary(id=self._mint("cunary"), op="!", value=inner)
@@ -454,6 +485,12 @@ def _c_source_type(cursor: cx.Cursor, t: cx.Type) -> CType:
         # the source spelling so `signed char` and `unsigned char` show
         # up distinctly in layer A.
         return CNamedType(name=t.spelling)
+    if canon.kind == cx.TypeKind.FLOAT:
+        return CNamedType(name="float")
+    if canon.kind == cx.TypeKind.DOUBLE:
+        return CNamedType(name="double")
+    if canon.kind == cx.TypeKind.LONGDOUBLE:
+        raise _refuse(cursor, _LONG_DOUBLE_REFUSAL)
     if canon.kind == cx.TypeKind.RECORD:
         # Opaque struct (e.g. `struct Curl_easy` behind `CURL`). Use the
         # source spelling so typedef aliases survive.
@@ -470,17 +507,10 @@ def _translate_function_layer_a(
     derived from the spelling so it's stable across re-ingest of the
     same source — the same convention the layer-B Function uses, with a
     distinct `@cfn_c_*` prefix so the two are addressable separately."""
-    result_canon = cursor.result_type.get_canonical()
-    if result_canon.kind == cx.TypeKind.INT:
-        return_type = CNamedType(name="int")
-    elif result_canon.kind == cx.TypeKind.VOID:
-        return_type = CNamedType(name="void")
-    else:
-        raise _refuse(
-            cursor,
-            f"layer A: only `int`- and `void`-returning functions are "
-            f"supported, got {cursor.result_type.spelling!r}"
-        )
+    # Reuse the source-type mapping so int/void/float/double/char/etc.
+    # all resolve through the same dispatch (and `long double` refuses
+    # uniformly).
+    return_type = _c_source_type(cursor, cursor.result_type)
     params: list[CParam] = []
     body_cursor: cx.Cursor | None = None
     for child in cursor.get_children():

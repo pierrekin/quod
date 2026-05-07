@@ -51,9 +51,9 @@ _CATEGORIES: dict[str, list[str]] = {
         "c.var_decl", "c.multi_var_decl", "c.assign", "c.compound_assign",
         "c.return", "c.for", "c.if", "c.while", "c.do_while", "c.expr_stmt",
         "c.break", "c.continue", "c.switch", "c.switch_case",
-        "c.binop", "c.lit_int", "c.lit_str", "c.var_ref",
+        "c.binop", "c.lit_int", "c.lit_float", "c.lit_str", "c.var_ref",
         "c.enum_const_ref", "c.call",
-        "c.array_subscript", "c.addr_of", "c.unary", "c.ternary",
+        "c.array_subscript", "c.addr_of", "c.unary", "c.ternary", "c.cast",
     ],
     # Layer-B `c.*` extensions — constructs core quod can't represent;
     # lowered to core by lower/c_family.py.

@@ -1,0 +1,39 @@
+{
+  "fn": {
+    "a_id": "@cfn_c_promote",
+    "b_id": "@fn_c_promote",
+    "body": {
+      "a_block": "<inline>",
+      "b_block_id": "@blk_c_6",
+      "stmts": [
+        {
+          "a_id": "@creturn_c_promote_1",
+          "kind": "return e \u2194 return_expr",
+          "value": {
+            "kind": "cast(implicit)",
+            "target": "llvm.f64",
+            "value": {
+              "kind": "var_ref \u2194 param_ref",
+              "name": "n"
+            }
+          }
+        }
+      ]
+    },
+    "name": "promote",
+    "params": [
+      {
+        "a_type": "int",
+        "b_type": "llvm.i32",
+        "name": "n"
+      }
+    ],
+    "return_type": {
+      "a": "double",
+      "b": "llvm.f64"
+    }
+  },
+  "kind": "lift-check",
+  "rule": "c.transcription",
+  "version": "1"
+}

@@ -1,0 +1,6 @@
+{
+  "c_file": "refuse_long_double.c",
+  "expect": {
+    "ingest_error": "long double not supported"
+  }
+}
