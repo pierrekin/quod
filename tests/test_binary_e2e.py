@@ -73,11 +73,17 @@ int compare_const(int v) {
 @pytest.fixture(scope="module")
 def ingested_program(tmp_path_factory):
     """Build `libgreet.so`, ingest its C source AND the binary, return
-    the merged `Program`. Done **once per module** because PyGhidra
-    drives a JVM with a Ghidra project lifecycle that doesn't recover
-    cleanly from multiple loads in the same process — sharing the
-    ingested program across assertion tests avoids the JVM crash and
-    keeps the suite fast (~5–10s of Ghidra time, paid once)."""
+    the merged `Program`. Done **once per module** as a perf
+    optimization — Ghidra analysis costs ~3–5s per binary even on a
+    tiny `.so`, and several independent assertions can share the same
+    output. Per-test ingest also works (function-scope is fine for the
+    JVM lifecycle); the module scope just keeps the suite fast.
+
+    Companion regression: `test_real_ghidra_multi_ingest_in_one_process`
+    explicitly exercises the multi-call pattern (an earlier version of
+    this code segfaulted on the second `pyghidra.analyze` in one
+    process). If the workaround starts being needed again, that test
+    fails first."""
     from quod.ingest.binary import ingest_binary
     clang = _need_clang()
     work = tmp_path_factory.mktemp("libgreet")
@@ -207,3 +213,49 @@ def test_real_ghidra_chain_walker_recovers_compare_const_threshold(ingested_prog
         f"chain walker missed clang's INT_SUB→INT_SLESS lowering of "
         f"`v < 100`; recovered constants only: {rendered}"
     )
+
+
+def test_real_ghidra_multi_ingest_in_one_process(tmp_path_factory):
+    """Regression for the JVM-multi-load issue (P0 in 06-polish.md).
+
+    An earlier draft of the binary frontend segfaulted on the second
+    `pyghidra.analyze` call within a single Python process — the
+    workaround was the `scope="module"` shared-fixture above. The
+    underlying cause was likely tied to the deprecated `open_program`
+    API (now replaced with `program_loader`) or to PyGhidra/JPype
+    versions we've since picked up; the symptom is no longer
+    reproducible. This test locks in the working behavior so a
+    regression surfaces immediately rather than at the next person to
+    write multi-binary tests.
+
+    Three independent ingest cycles in one process (each with its own
+    .so, each going through `ingest_c` first because the original
+    failure surfaced specifically *after* libclang was used). Asserts
+    each cycle's `binary_units` is intact and contains the function
+    we authored."""
+    from quod.ingest import ingest_c
+    from quod.ingest.binary import ingest_binary
+    from quod.merge import merge_program
+    from quod.model import Program
+
+    clang = _need_clang()
+    for i in range(3):
+        work = tmp_path_factory.mktemp(f"multi_ingest_{i}")
+        src = work / "src.c"
+        src.write_text(f"int f{i}(int n) {{ return n + {i}; }}\n")
+        so = work / "lib.so"
+        subprocess.run(
+            [clang, "-O0", "-g", "-shared", "-fPIC", "-o", str(so), str(src)],
+            check=True, capture_output=True, text=True,
+        )
+        c_program = ingest_c(src)
+        program, _ = merge_program(Program(), c_program)
+        program = ingest_binary(so, program=program)
+
+        assert len(program.binary_units) == 1, (
+            f"iteration {i}: expected 1 binary_unit, got {len(program.binary_units)}"
+        )
+        names = {f.demangled_name for u in program.binary_units for f in u.functions}
+        assert f"f{i}" in names, (
+            f"iteration {i}: bin.fn `f{i}` missing from {sorted(names)}"
+        )
