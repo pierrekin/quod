@@ -156,13 +156,31 @@ class BinCallEdge(_Node):
     a function pointer or vtable slot), and tail calls (`JMP` to a
     function). C++ virtual dispatch surfaces here as `kind="indirect"`
     in v1 — vtable/RTTI modeling is deferred.
+
+    `callee_id` is the resolved target's stable ID; `None` means the
+    call exists in the binary but the callee couldn't be resolved
+    (typically `kind="indirect"` calls where Ghidra didn't propagate
+    a constant target — virtual dispatch, function pointers from
+    arrays, jump tables). The strategy memo's framing for these:
+    silent omission is worse than unresolved-but-marked, so we keep
+    the edge in the graph even when the target is unknown — claim
+    providers that need full call-graph reachability can see the
+    edge exists and decide how to model the unresolved target
+    (uninterpreted function, conservative over-approximation, etc.).
     """
     kind: Literal["bin.call"] = "bin.call"
     id: str = Field(default_factory=lambda: _mint_node_id("bincall"))
     caller_block_id: str
     instruction_address: int
-    callee_id: str
+    callee_id: str | None = None
     call_kind: Literal["direct", "indirect", "tail"]
+
+    @model_serializer(mode="wrap")
+    def _drop_none_callee_id(self, handler, info):
+        data = handler(self)
+        if self.callee_id is None:
+            data.pop("callee_id", None)
+        return data
 
 
 class BinFunction(_Node):

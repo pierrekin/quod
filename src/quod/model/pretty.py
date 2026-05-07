@@ -320,7 +320,7 @@ def format_bin_fn(
         lines.append("  calls:")
         for c in fn.call_edges:
             lines.append(
-                f"    0x{c.instruction_address:x} -> {c.callee_id} "
+                f"    0x{c.instruction_address:x} -> {c.callee_id or '<unresolved>'} "
                 f"({c.call_kind})"
             )
     decompile_text = (

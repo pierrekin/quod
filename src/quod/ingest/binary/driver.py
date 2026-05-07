@@ -312,12 +312,13 @@ def _build_function(
             raise BinaryIngestError(
                 f"unknown call_kind {call_kind!r}; expected direct/indirect/tail"
             )
-        if callee_id is None:
-            # Indirect call site Ghidra couldn't resolve; emit a synthetic
-            # extern ref so the callee_id is still a valid stable ID.
-            # The caller is responsible for adding the synthetic extern
-            # to the unit's extern_refs — for now we just skip.
-            continue
+        # `callee_id` may be None when the call site is indirect and
+        # Ghidra couldn't propagate a target (function pointer from an
+        # array, vtable dispatch, etc.). Keep the edge in the graph
+        # rather than dropping it — `BinCallEdge.callee_id` is
+        # intentionally optional so unresolved-indirect calls show up
+        # for reachability analyses; silent omission is worse than
+        # unresolved-but-marked.
         call_edges.append(BinCallEdge(
             caller_block_id=block_id,
             instruction_address=_parse_int_addr(c.get("instr_address")),

@@ -400,6 +400,53 @@ def test_seeder_refuses_when_dwarf_points_at_unknown_file(tmp_path):
     assert len(program.equivalences) == 0
 
 
+def test_unresolved_indirect_call_keeps_edge_with_none_callee(tmp_path):
+    """When the call's `to` field doesn't resolve to any known target
+    (no internal function at the address, no extern with that name or
+    address), the parser keeps the edge with `callee_id=None` rather
+    than silently dropping it. Reachability/call-graph analyses can
+    then see the edge exists even when the target is unknown."""
+    dump = _libdemo_dump()
+    # Replace the resolved `puts` call with an unresolved indirect.
+    dump["functions"][0]["calls"][0] = {
+        "from_block": "0x401120",
+        "instr_address": "0x401128",
+        "to": {"kind": "external", "name": None, "address": "0xdeadbeef"},
+        "call_kind": "indirect",
+    }
+    dump_path = _write_dump(tmp_path, dump)
+    program = ingest_binary_dump(dump_path)
+    fn = program.binary_units[0].functions[0]
+    assert len(fn.call_edges) == 1
+    edge = fn.call_edges[0]
+    assert edge.callee_id is None
+    assert edge.call_kind == "indirect"
+
+
+def test_unresolved_call_edge_round_trips_through_save_load(tmp_path):
+    """A None callee_id survives the JSON I/O boundary — drop-None on
+    serialize, restored as None on load (Pydantic default)."""
+    dump = _libdemo_dump()
+    dump["functions"][0]["calls"][0] = {
+        "from_block": "0x401120",
+        "instr_address": "0x401128",
+        "to": {"kind": "external", "name": None, "address": "0xdeadbeef"},
+        "call_kind": "indirect",
+    }
+    dump_path = _write_dump(tmp_path, dump)
+    program = ingest_binary_dump(dump_path)
+
+    out = tmp_path / "program.json"
+    save_program(program, out)
+    blob = json.loads(out.read_text())
+    edge_blob = blob["binary_units"][0]["functions"][0]["call_edges"][0]
+    assert "callee_id" not in edge_blob  # drop-None on serialize
+
+    loaded = load_program(out)
+    edge = loaded.binary_units[0].functions[0].call_edges[0]
+    assert edge.callee_id is None
+
+
 def test_extern_ref_links_to_existing_authored_extern(tmp_path):
     """When the program already has an authored `ExternFunction` whose
     `name` matches a `BinExternRef.symbol`, the ingester sets
