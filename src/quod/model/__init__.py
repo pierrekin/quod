@@ -24,6 +24,7 @@ from quod.model.base import (
 
 # Independent leaves.
 from quod.model.justifications import (
+    BinaryProvenance,
     DerivedJustification,
     FamilyLowering,
     Justification,
@@ -174,6 +175,23 @@ from quod.model.layer_a import (
     CWhile,
 )
 
+# Layer A — binary frontend (Ghidra ingest). Independent from core
+# and from the C frontend; mirrors `layer_a` but for `.so` / `.exe` /
+# `.o` artifacts.
+from quod.model.layer_a_bin import (
+    BinBasicBlock,
+    BinBlockEdge,
+    BinCallEdge,
+    BinDataItem,
+    BinExternRef,
+    BinFunction,
+    BinFunctionParam,
+    BinPCodeOp,
+    BinTypeRef,
+    BinUnit,
+    BinVarnode,
+)
+
 # Layer B — depends on statements (Block, Statement) and expressions (Expr).
 from quod.model.layer_b import (
     BlockOrScoped,
@@ -261,6 +279,7 @@ from quod.model.pretty import (
     NodeLabel,
     _NO_LABEL,
     _format_type,
+    format_bin_fn,
     format_c_fn,
     format_claim_metadata,
     format_enum_def,

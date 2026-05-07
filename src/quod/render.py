@@ -27,7 +27,9 @@ from typing import Literal
 from quod.hashing import HASH_DISPLAY_LEN, short_hash
 from quod.model import (
     Assign,
+    BinFunction,
     BinOp,
+    BinUnit,
     Block,
     Call,
     CFn,
@@ -35,6 +37,7 @@ from quod.model import (
     CUnit,
     Equivalence,
     ExprStmt,
+    format_bin_fn,
     format_c_fn,
     ExternFunction,
     FieldRead,
@@ -811,6 +814,10 @@ def format_program_lines(program: Program) -> Iterator[Line]:
         yield Line(None, 2, (Span("source_units:", "section"),))
         for unit in program.source_units:
             yield from _c_unit_lines(unit, 4)
+    if program.binary_units:
+        yield Line(None, 2, (Span("binary_units:", "section"),))
+        for unit in program.binary_units:
+            yield from _bin_unit_lines(unit, 4)
     if program.structured_functions:
         yield Line(None, 2, (Span("structured_functions:", "section"),))
         for fn in program.structured_functions:
@@ -843,11 +850,29 @@ def format_program_lines(program: Program) -> Iterator[Line]:
         not program.constants and not program.functions
         and not program.externs and not program.structs
         and not program.enums and not program.imports
-        and not program.source_units and not program.structured_functions
+        and not program.source_units and not program.binary_units
+        and not program.structured_functions
         and not program.edges and not program.equivalences
     ):
         yield Line(None, 2, (Span("(empty)", "comment"),))
     yield Line(None, 0, (Span("}", "punct"),))
+
+
+def _bin_unit_lines(unit: BinUnit, indent: int) -> Iterator[Line]:
+    """Render a layer-A `BinUnit` as a section with a structural summary
+    plus per-function decompile blocks. Same convention as `_c_unit_lines`:
+    Ghidra output is not quod source, so we drop into plain comment spans
+    rather than coloring with quod's vocabulary."""
+    yield Line(unit, indent, (
+        Span("bin_unit ", "keyword"),
+        Span(repr(unit.path), "string"),
+        Span(f" ({unit.arch}, {unit.file_format})", "meta_label"),
+        Span(" {", "punct"),
+    ))
+    for fn in unit.functions:
+        for raw_line in format_bin_fn(fn).splitlines():
+            yield Line(None, indent + 2, (Span(raw_line, "comment"),))
+    yield Line(None, indent, (Span("}", "punct"),))
 
 
 def _c_unit_lines(unit: CUnit, indent: int) -> Iterator[Line]:

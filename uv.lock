@@ -69,6 +69,15 @@ wheels = [
 ]
 
 [[package]]
+name = "jpype1"
+version = "1.5.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bd/68/47fa634cbd0418cbca86355e9421425f5892ee994f7338106327e49f9117/jpype1-1.5.2.tar.gz", hash = "sha256:74a42eccf21d30394c1832aec3985a14965fa5320da087b65029d172c0cec43b", size = 1011421, upload-time = "2025-01-27T10:33:16.738Z" }
+
+[[package]]
 name = "libclang"
 version = "18.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -197,6 +206,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pyghidra"
+version = "3.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jpype1" },
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f9/2a/81907d90f3cfa6f1c5dff1b3b5f6cfb0315b27db962604c36e8986ce7776/pyghidra-3.0.2.tar.gz", hash = "sha256:79ad4fd571e32f343cf3fcdbd84fc6e333ef1a26475a3a8f72b629a9f3c879da", size = 52479, upload-time = "2026-01-15T11:17:25.074Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/69/95/b63d7950dd83af3be92dda506ed0b6abe00a1cd623883bf3ff574507a38a/pyghidra-3.0.2-py3-none-any.whl", hash = "sha256:1bd49496e90d67b8aa06adeb3d80e0a5be6f5582f754e83625197a326772ebfe", size = 50728, upload-time = "2026-01-15T11:17:24.179Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -243,6 +265,7 @@ dependencies = [
     { name = "libclang" },
     { name = "llvmlite" },
     { name = "pydantic" },
+    { name = "pyghidra" },
     { name = "typer" },
 ]
 
@@ -258,6 +281,7 @@ requires-dist = [
     { name = "libclang", specifier = ">=18.1.1" },
     { name = "llvmlite", specifier = ">=0.47.0" },
     { name = "pydantic", specifier = ">=2.13.3" },
+    { name = "pyghidra", specifier = ">=3.0.2" },
     { name = "typer", specifier = ">=0.25.0" },
 ]
 

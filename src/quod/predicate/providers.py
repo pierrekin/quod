@@ -37,6 +37,7 @@ from quod.model import (
     Regime,
     Z3Justification,
 )
+from quod.predicate.binary_hints import derive_binary_range_hints
 from quod.predicate.proof import Z3NotInstalled, goal_smt_lib, run_z3_on_smt
 
 
@@ -114,6 +115,26 @@ LATTICE_LITERAL_RANGE = Provider(
 )
 
 
+# ---------- Built-in: Ghidra range hints (cross-layer) ----------
+
+def _ghidra_range_hints_derive(program: Program) -> dict[str, tuple[Claim, ...]]:
+    return derive_binary_range_hints(program)
+
+
+GHIDRA_RANGE_HINTS = Provider(
+    name="ghidra.range_hints",
+    regime="lattice",
+    description=(
+        "Cross-layer range hints from Ghidra-recovered binaries: for each "
+        "BinaryProvenance-paired (source.fn, bin.fn), scan the bin.fn's "
+        "p-code for signed-compare constants and emit candidate "
+        "int_range claims on the source function. Unsound by design — "
+        "the verifier filters via `quod claim prove`."
+    ),
+    derive=_ghidra_range_hints_derive,
+)
+
+
 # ---------- Built-in: Z3 / QF_LIA ----------
 
 def _z3_qf_lia_prove(
@@ -182,7 +203,7 @@ Z3_QF_LIA = Provider(
 
 # ---------- Registry ----------
 
-_BUILT_IN: tuple[Provider, ...] = (LATTICE_LITERAL_RANGE, Z3_QF_LIA)
+_BUILT_IN: tuple[Provider, ...] = (LATTICE_LITERAL_RANGE, GHIDRA_RANGE_HINTS, Z3_QF_LIA)
 
 
 def all_providers() -> dict[str, Provider]:

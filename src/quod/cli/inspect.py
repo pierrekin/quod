@@ -42,32 +42,45 @@ def show(
              "the extension-bearing transcription. Other function-ish "
              "sections are hidden; program-scaffolding still renders.",
     ),
+    binary: bool = typer.Option(
+        False, "--binary",
+        help="Filter the rendering to the binary side of layer A — "
+             "`Program.binary_units`, Ghidra-recovered binary artifacts. "
+             "Other function-ish sections are hidden; program-scaffolding "
+             "still renders.",
+    ),
 ) -> None:
     """Print the program. Color follows TTY (disable with `quod --no-color`).
 
     By default prints every populated section (the canonical layer-C
     `functions` plus, for C-derived programs, `source_units` and
-    `structured_functions`). `--source` and `--structured` filter to a
-    single function-section view; both are mutually exclusive with
-    each other and with `--hashes` (which dumps node hashes regardless
-    of layer)."""
+    `structured_functions`, and for binary-derived programs,
+    `binary_units`). `--source`, `--structured`, and `--binary` each
+    filter to a single function-section view; the three are mutually
+    exclusive with each other and with `--hashes` (which dumps node
+    hashes regardless of layer)."""
     from quod.cli.output import _theme
-    if source and structured:
-        typer.echo("error: --source and --structured are mutually exclusive", err=True)
+    layer_flags = [source, structured, binary]
+    if sum(layer_flags) > 1:
+        typer.echo(
+            "error: --source, --structured, and --binary are mutually exclusive",
+            err=True,
+        )
         raise typer.Exit(2)
-    if (source or structured) and hashes:
+    if any(layer_flags) and hashes:
         typer.echo(
             "error: --hashes is layer-independent (dumps every node); "
-            "drop --source / --structured to combine, or use them without --hashes",
+            "drop --source / --structured / --binary to combine, or use "
+            "them without --hashes",
             err=True,
         )
         raise typer.Exit(2)
 
     program = _load()
-    if source or structured:
+    if source or structured or binary:
         program = _project_to_layer(
             program,
-            source=source, structured=structured,
+            source=source, structured=structured, binary=binary,
         )
 
     if json_output:
@@ -99,7 +112,9 @@ def show(
     typer.echo(render(format_program_lines(program), theme=theme, mode="columnar"))
 
 
-def _project_to_layer(program: Program, *, source: bool, structured: bool) -> Program:
+def _project_to_layer(
+    program: Program, *, source: bool, structured: bool, binary: bool,
+) -> Program:
     """Return a copy of `program` with the function-ish sections
     other than the requested layer's hidden. Program-scaffolding
     (constants, externs, structs, enums, imports, edges,
@@ -110,10 +125,18 @@ def _project_to_layer(program: Program, *, source: bool, structured: bool) -> Pr
         return program.model_copy(update={
             "structured_functions": (),
             "functions": (),
+            "binary_units": (),
         })
     if structured:
         return program.model_copy(update={
             "source_units": (),
+            "functions": (),
+            "binary_units": (),
+        })
+    if binary:
+        return program.model_copy(update={
+            "source_units": (),
+            "structured_functions": (),
             "functions": (),
         })
     return program

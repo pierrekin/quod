@@ -20,10 +20,12 @@ from quod.editor import (
 )
 from quod.hashing import HASH_DISPLAY_LEN, node_hash, short_hash
 from quod.model import (
+    BinFunction,
     CFn,
     Function,
     Program,
     claim_param,
+    format_bin_fn,
     format_c_fn,
     function_callees,
     remove_function,
@@ -41,9 +43,48 @@ from quod.render import (
 @fn_app.command("ls")
 def fn_ls(
     json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
+    binary: bool = typer.Option(
+        False, "--binary",
+        help="List functions from `Program.binary_units` (Ghidra-recovered "
+             "binary artifacts) instead of the canonical layer-C "
+             "`Program.functions`.",
+    ),
 ) -> None:
-    """List all functions with signatures and hashes."""
+    """List all functions with signatures and hashes.
+
+    Defaults to the canonical layer-C functions in `Program.functions`.
+    `--binary` lists `bin.fn`s across every `BinUnit` in
+    `Program.binary_units` instead — parallel to `--source` /
+    `--structured` on `quod show`."""
     program = _load()
+    if binary:
+        bin_fns = [(unit, fn) for unit in program.binary_units for fn in unit.functions]
+        if json_output:
+            _emit_json([
+                {
+                    "unit_path": unit.path,
+                    "address": fn.address,
+                    "demangled_name": fn.demangled_name,
+                    "mangled_name": fn.mangled_name,
+                    "return_type": fn.return_type_name,
+                    "params": [{"name": p.name, "type": p.type_name} for p in fn.params],
+                    "block_count": len(fn.basic_blocks),
+                    "id": fn.id,
+                }
+                for unit, fn in bin_fns
+            ])
+            return
+        if not bin_fns:
+            typer.echo("(no binary functions)")
+            return
+        for unit, fn in bin_fns:
+            params = ", ".join(f"{p.type_name} {p.name}" for p in fn.params)
+            typer.echo(
+                f"{unit.path}: 0x{fn.address:x} "
+                f"{fn.return_type_name} {fn.demangled_name}({params})"
+            )
+        return
+
     if json_output:
         _emit_json([
             {
@@ -84,16 +125,26 @@ def fn_show(
              "constructs like c.for_general). Only available for "
              "C-derived programs.",
     ),
+    binary: bool = typer.Option(
+        False, "--binary",
+        help="Render the layer-A binary form from `Program.binary_units` "
+             "(Ghidra-recovered `bin.fn`). Only available for binary-"
+             "derived programs.",
+    ),
 ) -> None:
     """Print a single function. Accepts a name or a content-hash prefix.
 
     By default prints the canonical core form from `Program.functions`
-    — the lowered, `quod.lower`-bound version. `--source` and
-    `--structured` select alternate views for C-derived programs
-    (mutually exclusive with each other; `--json` works with any of the
-    three)."""
-    if source and structured:
-        typer.echo("error: --source and --structured are mutually exclusive", err=True)
+    — the lowered, `quod.lower`-bound version. `--source`,
+    `--structured`, and `--binary` select alternate views: layer-A C
+    source for C-derived programs, layer-B structured form, and the
+    Ghidra-recovered binary form respectively. The three are mutually
+    exclusive with each other; `--json` works with any of them."""
+    if sum([source, structured, binary]) > 1:
+        typer.echo(
+            "error: --source, --structured, and --binary are mutually exclusive",
+            err=True,
+        )
         raise typer.Exit(2)
 
     program = _load()
@@ -112,6 +163,14 @@ def fn_show(
             _emit_json(fn)
             return
         typer.echo(render(format_function_lines(fn), theme=_theme(), mode="columnar"))
+        return
+
+    if binary:
+        bin_fn = _find_binary_fn_ref(program, ref)
+        if json_output:
+            _emit_json(bin_fn)
+            return
+        typer.echo(format_bin_fn(bin_fn))
         return
 
     try:
@@ -151,6 +210,41 @@ def _find_csource_fn_ref(program: Program, ref: str) -> CFn:
         raise typer.Exit(_echo_err(
             f"ref {ref!r} is an ambiguous id prefix: "
             f"{[cfn.id for cfn in by_id]}"
+        ))
+    return by_id[0]
+
+
+def _find_binary_fn_ref(program: Program, ref: str) -> BinFunction:
+    """Resolve a function ref against `Program.binary_units` (layer A,
+    binary). Refs match first by `demangled_name`, then by `mangled_name`,
+    then by `id` prefix. Same shape as `_find_csource_fn_ref` for the
+    C-source layer.
+
+    `0x401120`-style address refs are *not* supported as ref inputs —
+    addresses aren't stable across builds (see
+    `quod.model.layer_a_bin.BinFunction`); use the demangled name or
+    the `@binfn_…` id instead.
+    """
+    bin_fns = [fn for unit in program.binary_units for fn in unit.functions]
+    by_name = [fn for fn in bin_fns if fn.demangled_name == ref or fn.mangled_name == ref]
+    if by_name:
+        if len({fn.id for fn in by_name}) > 1:
+            raise typer.Exit(_echo_err(
+                f"ref {ref!r} is ambiguous across binary_units: "
+                f"{[fn.id for fn in by_name]}"
+            ))
+        return by_name[0]
+    by_id = [fn for fn in bin_fns if fn.id.startswith(ref)]
+    if not by_id:
+        raise typer.Exit(_echo_err(
+            f"no binary function matches {ref!r} — either the program "
+            f"has no binary_units, or the ref doesn't match any "
+            f"demangled/mangled name or id prefix"
+        ))
+    if len({fn.id for fn in by_id}) > 1:
+        raise typer.Exit(_echo_err(
+            f"ref {ref!r} is an ambiguous id prefix: "
+            f"{[fn.id for fn in by_id]}"
         ))
     return by_id[0]
 

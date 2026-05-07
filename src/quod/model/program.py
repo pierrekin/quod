@@ -16,6 +16,7 @@ from pydantic import field_validator, model_serializer, model_validator
 from quod.model.base import _Node
 from quod.model.expressions import StringConstant
 from quod.model.layer_a import CUnit
+from quod.model.layer_a_bin import BinUnit
 from quod.model.relations import Equivalence, Import, ProvenanceEdge
 from quod.model.top_level import (
     EnumDef,
@@ -51,6 +52,13 @@ class _ProgramBase(_Node):
     # no codegen — but addressable by stable IDs so cross-layer
     # provenance edges can anchor here.
     source_units: tuple[CUnit, ...] = ()
+    # Layer-A subtree (binary side): one BinUnit per ingested .so/.exe/.o.
+    # Mirrors `source_units` for the C frontend — same inert-preservation
+    # rule (no type recovery into StructDef, no re-parse of decompile
+    # text into c.* nodes), but addressable by stable IDs so cross-layer
+    # Equivalence claims have a binary-side endpoint to anchor on.
+    # Empty for programs that never went through `quod ingest binary`.
+    binary_units: tuple[BinUnit, ...] = ()
     # Structured-form functions: per-language extension-bearing
     # transcriptions of the source. For C, these contain `CStyleFor`
     # and other `c.*` family extensions; the c-family lowering pass
@@ -101,6 +109,8 @@ class _ProgramBase(_Node):
             data.pop("equivalences", None)
         if not self.source_units:
             data.pop("source_units", None)
+        if not self.binary_units:
+            data.pop("binary_units", None)
         if not self.structured_functions:
             data.pop("structured_functions", None)
         if self.quod_version is None:

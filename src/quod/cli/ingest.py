@@ -13,6 +13,7 @@ import typer
 from quod.cli.app import ingest_app
 from quod.cli.state import _cfg, _cfg_path, _exclusive_lock, _path
 from quod.ingest import IngestError, ingest_c
+from quod.ingest.binary import BinaryIngestError, ingest_binary
 from quod.merge import merge_program
 from quod.model import Program, load_program, save_program
 
@@ -56,6 +57,21 @@ def _run_one_c_ingest(
     try:
         return ingest_c(source, clang_args=clang_args, string_prefix=string_prefix)
     except IngestError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+def _run_one_binary_ingest(
+    source: Path, *, base_program: Program,
+) -> Program:
+    """Drive `ghidra-analyzeHeadless` on `source` and return the program
+    with the new `BinUnit` appended (and any seeded equivalences merged).
+    Unlike `ingest_c`, the binary ingester *extends* an existing program
+    rather than producing a fresh one to merge — equivalence seeding
+    needs the source-side functions to be visible at ingest time."""
+    try:
+        return ingest_binary(source, program=base_program)
+    except BinaryIngestError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1)
 
@@ -110,24 +126,32 @@ def ingest_callback(ctx: typer.Context) -> None:
         program = _load_or_init_program(program_path)
 
         for entry in cfg.ingests:
-            if entry.kind != "c-file":
-                typer.echo(
-                    f"error: [[ingest.entry]] kind {entry.kind!r} not supported "
-                    f"(only 'c-file' today)", err=True,
-                )
-                raise typer.Exit(1)
             source = cfg.resolve(entry.source)
             if not source.exists():
                 typer.echo(f"error: ingest source {source} does not exist", err=True)
                 raise typer.Exit(1)
-            clang_args = _resolve_ingest_args(cfg, entry, source_path=source)
-            ingested = _run_one_c_ingest(source, clang_args=clang_args)
-            program, warnings = merge_program(program, ingested)
-            for w in warnings:
-                typer.echo(f"warning: {w}", err=True)
-            typer.echo(
-                f"ingested {source} ({len(ingested.functions)} function(s))"
-            )
+            if entry.kind == "c-file":
+                clang_args = _resolve_ingest_args(cfg, entry, source_path=source)
+                ingested = _run_one_c_ingest(source, clang_args=clang_args)
+                program, warnings = merge_program(program, ingested)
+                for w in warnings:
+                    typer.echo(f"warning: {w}", err=True)
+                typer.echo(
+                    f"ingested {source} ({len(ingested.functions)} function(s))"
+                )
+            elif entry.kind == "binary":
+                program = _run_one_binary_ingest(source, base_program=program)
+                new_unit = program.binary_units[-1]
+                typer.echo(
+                    f"ingested {source} ({len(new_unit.functions)} bin.fn(s), "
+                    f"sha256 {new_unit.sha256[:12]}…)"
+                )
+            else:
+                typer.echo(
+                    f"error: [[ingest.entry]] kind {entry.kind!r} not supported "
+                    f"(supported kinds: 'c-file', 'binary')", err=True,
+                )
+                raise typer.Exit(1)
 
         program = _prove_and_stamp_lifts(program, cfg)
         save_program(program, program_path)
@@ -195,4 +219,49 @@ def ingest_c_cmd(
 
     typer.echo(
         f"ingested {source} ({len(ingested.functions)} function(s)) into {program_path}"
+    )
+
+
+@ingest_app.command("binary")
+def ingest_binary_cmd(
+    source: Path = typer.Argument(
+        ..., help="Binary artifact to ingest (`.so` / `.exe` / `.o`).",
+    ),
+    keep_dump: Path | None = typer.Option(
+        None, "--keep-dump",
+        help="Write the raw Ghidra JSON dump to this path (in addition "
+             "to parsing it). Useful for diagnosing parser issues.",
+    ),
+) -> None:
+    """Ad-hoc one-off binary ingest. Drives Ghidra in-process via
+    PyGhidra, parses the JSON dump the exporter produces, builds
+    layer-A `bin.*` nodes, and seeds equivalences against any matching
+    source functions already in the program.
+
+    Does not modify quod.toml; for repeatable ingests, declare an
+    `[[ingest.entry]] kind = "binary"` there. Ghidra analysis can take
+    minutes on a real library; the JVM stays warm across ingests in
+    the same process so subsequent calls skip the ~5s startup."""
+    if not source.exists():
+        typer.echo(f"error: {source} does not exist", err=True)
+        raise typer.Exit(1)
+
+    program_path = _path()
+    with _exclusive_lock():
+        program = _load_or_init_program(program_path)
+        try:
+            program = ingest_binary(
+                source,
+                program=program,
+                keep_dump=keep_dump,
+            )
+        except BinaryIngestError as e:
+            typer.echo(f"error: {e}", err=True)
+            raise typer.Exit(1)
+        save_program(program, program_path)
+
+    new_unit = program.binary_units[-1]
+    typer.echo(
+        f"ingested {source} ({len(new_unit.functions)} bin.fn(s), "
+        f"sha256 {new_unit.sha256[:12]}…) into {program_path}"
     )

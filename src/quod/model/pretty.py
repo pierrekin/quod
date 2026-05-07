@@ -36,6 +36,7 @@ from quod.model.expressions import (
     TryExpr,
 )
 from quod.model.justifications import (
+    BinaryProvenance,
     DerivedJustification,
     FamilyLowering,
     Justification,
@@ -66,6 +67,7 @@ from quod.model.layer_a import (
     CVarRef,
     CWhile,
 )
+from quod.model.layer_a_bin import BinFunction, BinUnit
 from quod.model.layer_b import CStyleFor
 from quod.model.program import Program
 from quod.model.relations import Equivalence, Import
@@ -145,6 +147,10 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
         lines.append("  source_units:")
         for unit in program.source_units:
             lines.extend("    " + line for line in _format_c_unit(unit, label=label).splitlines())
+    if program.binary_units:
+        lines.append("  binary_units:")
+        for unit in program.binary_units:
+            lines.extend("    " + line for line in _format_bin_unit(unit, label=label).splitlines())
     if program.wirables:
         lines.append("  wirables:")
         for w in program.wirables:
@@ -195,6 +201,7 @@ def format_program(program: Program, *, label: NodeLabel = _NO_LABEL) -> str:
         and not program.externs and not program.structs and not program.enums
         and not program.imports and not program.edges
         and not program.equivalences and not program.source_units
+        and not program.binary_units
         and not program.structured_functions
     ):
         lines.append("  (empty)")
@@ -223,6 +230,69 @@ def format_c_fn(fn: "CFn", *, label: NodeLabel = _NO_LABEL) -> str:
     lines = [head]
     for s in fn.body:
         lines.append(_format_c_stmt(s, indent=2, label=label))
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def _format_bin_unit(unit: "BinUnit", *, label: NodeLabel) -> str:
+    """Render a layer-A binary translation unit. Surface form is
+    structural metadata + per-function summaries — Ghidra output is not
+    quod source, so coloring it with quod's vocabulary would lie about
+    what it is. The decompile text and p-code are rendered as opaque
+    quoted blocks by `format_bin_fn`."""
+    head = f'{label(unit)}bin_unit "{unit.path}" ({unit.arch}, {unit.file_format}) {{'
+    lines = [head]
+    lines.append(f"  sha256: {unit.sha256}")
+    if unit.build_id:
+        lines.append(f"  build_id: {unit.build_id}")
+    if unit.extern_refs:
+        lines.append("  externs:")
+        for ref in unit.extern_refs:
+            tail = f" -> {ref.linked_extern_name}" if ref.linked_extern_name else ""
+            lines.append(f"    {ref.symbol}{tail}")
+    for fn in unit.functions:
+        lines.extend("  " + line for line in format_bin_fn(fn, label=label).splitlines())
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def format_bin_fn(fn: "BinFunction", *, label: NodeLabel = _NO_LABEL) -> str:
+    """Render a layer-A `BinFunction` as a structural summary plus the
+    decompile text. Used by `_format_bin_unit` for the `binary_units`
+    section and by the CLI's `quod fn show --binary` for single-
+    function rendering.
+
+    The decompile text is emitted verbatim — `BinFunction.decompile_text`
+    is opaque by contract (see `quod.model.layer_a_bin`); this renderer
+    does not re-tokenize or re-parse it. P-code per basic block is
+    summarized as opcodes-only (`addr [n ops]`); the full p-code is
+    accessible via `--json`."""
+    params = ", ".join(f"{p.type_name} {p.name}" for p in fn.params)
+    head = (
+        f"{label(fn)}bin.fn 0x{fn.address:x} "
+        f"{fn.return_type_name} {fn.demangled_name}({params}) "
+        f"[{fn.calling_convention}] {{"
+    )
+    lines = [head]
+    if fn.basic_blocks:
+        lines.append("  blocks:")
+        for bb in fn.basic_blocks:
+            opcodes = ", ".join(op.opcode for op in bb.pcode_ops)
+            lines.append(
+                f"    0x{bb.start_address:x}-0x{bb.end_address:x} "
+                f"[{len(bb.pcode_ops)} ops: {opcodes}]"
+            )
+    if fn.call_edges:
+        lines.append("  calls:")
+        for c in fn.call_edges:
+            lines.append(
+                f"    0x{c.instruction_address:x} -> {c.callee_id} "
+                f"({c.call_kind})"
+            )
+    if fn.decompile_text:
+        lines.append("  decompile:")
+        for raw in fn.decompile_text.splitlines() or [""]:
+            lines.append(f"    {raw}")
     lines.append("}")
     return "\n".join(lines)
 
@@ -435,6 +505,8 @@ def _format_justification(j: Justification) -> str:
         case FamilyLowering(rule_name=r, artifact_hash=h):
             tail = f"@{h[:12]}" if h else ""
             return f"family_lowering({r}{tail})"
+        case BinaryProvenance(binary_symbol=sym, source_evidence=ev, binary_sha256=h):
+            return f"binary_provenance({sym}, evidence={ev}, sha256={h[:12]})"
     raise ValueError(f"unhandled justification: {j!r}")
 
 

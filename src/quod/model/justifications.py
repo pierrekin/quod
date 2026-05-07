@@ -78,6 +78,50 @@ class LiftEquivalence(_Node):
         return data
 
 
+class BinaryProvenance(_Node):
+    """Justifies an `Equivalence` between a source-language function and
+    a binary function via build-time symbol provenance.
+
+    The claim: the binary at `binary_path` (pinned by `binary_sha256`)
+    defines a symbol `binary_symbol` whose linker-resolved source is the
+    function the equivalence's other endpoint names. Verification re-
+    reads the binary and confirms (a) the sha256 still matches, and (b)
+    the symbol table still resolves the symbol at the recorded address.
+
+    Strictly weaker evidence than Z3 — a name match doesn't prove
+    semantic equivalence, only that the build pipeline thinks these are
+    the same function. But it's the right starting axiom for a future
+    relational prover (the `z3.bin_relational` provider sketched in
+    `.scratch/ghidra/04-providers-and-the-bet.md`) to upgrade
+    axiom→witness.
+
+    `source_evidence` is a coarse epistemic label:
+      - `dwarf`   — DW_AT_decl_file/line points back at the source file.
+      - `symtab`  — only the demangled name matched; no source-line link.
+      - `explicit` — user-asserted (`quod bin equiv add`); no automatic
+                     evidence.
+
+    The cross-language regime here is genuinely an axiom in the existing
+    sense: if it's false (the build was broken, the user replaced the
+    binary, etc.) then claims the optimizer derives from one side won't
+    hold on the other — the same UB-on-falsity contract `axiom` already
+    carries, just at the cross-language layer.
+    """
+    kind: Literal["binary_provenance"] = "binary_provenance"
+    binary_path: str
+    binary_sha256: str
+    binary_symbol: str
+    source_evidence: Literal["symtab", "dwarf", "explicit"]
+    note: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_default_metadata(self, handler, info):
+        data = handler(self)
+        if self.note is None:
+            data.pop("note", None)
+        return data
+
+
 class FamilyLowering(_Node):
     """Justifies a B→C equivalence by citing a named lowering rule
     (e.g. `c.for_general`) whose equivalence theorem was proved once,
@@ -113,6 +157,7 @@ Justification = Annotated[
         DerivedJustification,
         LiftEquivalence,
         FamilyLowering,
+        BinaryProvenance,
     ],
     Field(discriminator="kind"),
 ]
