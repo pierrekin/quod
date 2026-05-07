@@ -304,7 +304,7 @@ def save_program(program: Program, path: Path) -> None:
     Atomic via write-tmp-then-rename: a concurrent reader sees either the old
     file or the new file, never a partially-written one. Mutations also need
     an external lock to prevent two writers from racing on load→save (last
-    writer wins); see `_exclusive_lock` in cli.py.
+    writer wins); see `_exclusive_lock` in `cli/cli_state.py`.
     """
     InputProgram.model_validate(program.model_dump())
     tmp = path.with_suffix(path.suffix + ".tmp")

@@ -88,9 +88,10 @@ def fn_show(
     """Print a single function. Accepts a name or a content-hash prefix.
 
     By default prints the canonical core form from `Program.functions`
-    — the lowered, lower.py-bound version. `--source` and `--structured`
-    select alternate views for C-derived programs (mutually exclusive
-    with each other; `--json` works with any of the three)."""
+    — the lowered, `quod.lower`-bound version. `--source` and
+    `--structured` select alternate views for C-derived programs
+    (mutually exclusive with each other; `--json` works with any of the
+    three)."""
     if source and structured:
         typer.echo("error: --source and --structured are mutually exclusive", err=True)
         raise typer.Exit(2)

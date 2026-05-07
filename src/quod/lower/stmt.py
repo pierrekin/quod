@@ -476,13 +476,13 @@ def _lower_stmt(
             if end_bb is not None:
                 builder.position_at_end(end_bb)
             return
-    # `c.*` extension nodes (CStyleFor, etc.) reach lower.py only when a
+    # `c.*` extension nodes (CStyleFor, etc.) reach `quod.lower` only when a
     # layer-B program slipped past the c-family lowering pass. Surface a
     # readable error pointing at the right place to fix it.
     if getattr(stmt, "kind", None) and str(stmt.kind).startswith("c."):
         raise ValueError(
-            f"lower.py refuses {stmt.kind!r}: layer C must be pure core "
+            f"lower refuses {stmt.kind!r}: layer C must be pure core "
             f"quod. Run the c-family lowering pass (lower/c_family.py) "
-            f"before lower.py."
+            f"before lower."
         )
     raise ValueError(f"unhandled stmt: {stmt!r}")

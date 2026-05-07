@@ -15,8 +15,8 @@ pre-step-4 layer-B-only output. That all-or-nothing fallback keeps the
 existing C corpus working while sum.c exercises the full staged-lift
 path.
 
-`lower.py` refuses any program containing `CStyleFor` until step 5's
-c-family lowering pass strips the family extensions; this test pins
+`quod.lower` refuses any program containing `CStyleFor`; the c-family
+lowering pass must strip the family extensions first. This test pins
 that behavior.
 """
 from __future__ import annotations
@@ -138,9 +138,9 @@ def test_ingest_sum_round_trips_through_json(tmp_path):
 
 def test_sum_c_compiles_and_runs(tmp_path):
     """Sum.c reaches a binary via the full staged pipeline:
-    ingest → A+B+C → lower.py → LLVM IR → object → linked binary.
-    The "smallest end-to-end slice" from .scratch/c-ingest is now
-    end-to-end — sum(N) returns the sum 0..N-1 as the exit code."""
+    ingest → A+B+C → quod.lower → LLVM IR → object → linked binary.
+    Exercises the smallest end-to-end slice — sum(N) returns the sum
+    0..N-1 as the exit code."""
     import subprocess
     p = ingest_c(SUM_C)
     result = compile_program(

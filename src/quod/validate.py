@@ -190,7 +190,7 @@ class ValidationError(Exception):
 class _CallableSig:
     """Just enough about a function/extern to validate calls and
     type-infer call expressions."""
-    return_type: object  # a Type node from model.py
+    return_type: object  # a Type node from quod.model
     is_void: bool
 
 

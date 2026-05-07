@@ -30,7 +30,7 @@ Supported rules:
     proof artifact — the rule is structurally a no-op.
 
 Other `c.*` extensions refuse — they'll grow rules as the C subset
-expands. Refusal mirrors `lower.py`'s discipline: rather than silently
+expands. Refusal mirrors `quod.lower`'s discipline: rather than silently
 ignore, surface a clear error naming what's missing.
 
 The pass is **idempotent on layer C**: a Program whose `functions`

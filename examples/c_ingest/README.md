@@ -70,4 +70,4 @@ pointer-typed (mapped to `i8*`). Pointer arithmetic is supported on
 Structs, floats, `unsigned`, `long`, `short`, multi-dimensional arrays,
 `for` loops, `goto`, dereference (`*p`), and `switch` are refused with a
 clear error pointing at the offending source location. See
-`src/quod/ingest/c.py` for the full list of supported AST kinds.
+`src/quod/ingest/c/` for the full list of supported AST kinds.

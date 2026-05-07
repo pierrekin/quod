@@ -1,8 +1,8 @@
 """Type-parameter substitution.
 
 Replaces TypeParamRefs in a Type or AST with concrete Types. The
-substitute-only walker thunks bind to `quod.traversal._substitute_in_*`
-shared with model.py's ImplDef Self substitution.
+substitute-only walker thunks bind to `quod.traversal._substitute_in_*`,
+shared with `model/traits.py`'s ImplDef Self substitution.
 """
 
 from __future__ import annotations

@@ -1,12 +1,8 @@
-"""Step 3 of the C-ingest redesign: layer-A C source-language nodes,
-`c.*` family-extension nodes (CStyleFor, CScopedBlock), and the
-`Program.source_units` collection.
+"""Layer-A C source-language nodes, `c.*` family-extension nodes
+(CStyleFor, CScopedBlock), and the `Program.source_units` collection.
 
-Step 3 lands the *types* without producing any layer-A or layer-B
-graphs from the existing ingester. Step 4 ports the C ingester to emit
-layer A + layer B; step 5 implements the B→C lowering rule. So these
-tests pin JSON shape, format_program rendering, the smart-union
-behavior of `Function.body`, and the lower.py refusal — not codegen.
+These tests pin JSON shape, format_program rendering, the smart-union
+behavior of `Function.body`, and the `quod.lower` refusal — not codegen.
 
 The fixture program is `sum.c`-shaped:
 
@@ -180,11 +176,11 @@ def test_function_body_accepts_block_or_scoped_block():
     assert isinstance(loaded.body, CScopedBlock)
 
 
-# ----- lower.py refusal -----
+# ----- quod.lower refusal -----
 
 
 def test_lower_refuses_function_with_scoped_block_body(tmp_path):
-    """lower.py operates on layer C only. Surface a clear error pointing
+    """`quod.lower` operates on layer C only. Surface a clear error pointing
     at the c-family lowering pass when a wrapper appears."""
     fn = Function(
         name="main",
@@ -202,7 +198,7 @@ def test_lower_refuses_function_with_scoped_block_body(tmp_path):
 
 
 def test_lower_refuses_c_style_for_in_function_body(tmp_path):
-    """A `CStyleFor` reaching lower.py means the c-family lowering pass
+    """A `CStyleFor` reaching `quod.lower` means the c-family lowering pass
     didn't run. The error names the missing pass so the fix is obvious."""
     inner = Block(stmts=(ReturnExpr(value=IntLit(type=I32Type(), value=0)),))
     fn = Function(

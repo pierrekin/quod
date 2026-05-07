@@ -1,9 +1,10 @@
 """Span/line model + theme-driven renderer for the human-readable program view.
 
-The pretty-printer in model.py emits canonical strings with optional inline
-hash labels — that is the machine view. This module produces a structured
-form (lines of styled spans) that can be rendered with a hash gutter, syntax
-highlighting, and a metadata column. Same source program, different surface.
+The pretty-printer in `quod.model.pretty` emits canonical strings with
+optional inline hash labels — that is the machine view. This module
+produces a structured form (lines of styled spans) that can be rendered
+with a hash gutter, syntax highlighting, and a metadata column. Same
+source program, different surface.
 
 Pipeline:
 

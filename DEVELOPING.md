@@ -9,21 +9,43 @@ picture; this document is internals + extension points.
 ```
 src/quod/
     __init__.py
-    cli.py             Typer CLI; noun-first sub-apps; one leaf per tool call
+    cli/               Typer CLI; one file per noun-first sub-app
+        cli_app.py        root app + lifecycle (init/check/build/run)
+        cli_state.py      config / path / load / save / locking
+        cli_output.py     theme / JSON emit / regimes constants
+        cli_inspect.py    show / schema / find / project
+        cli_ingest.py     ingest sub-app + lift-stamping
+        cli_fn.py / cli_claim.py / cli_equiv.py / cli_stmt.py
+        cli_const.py / cli_extern.py / cli_struct.py / cli_enum.py
+        cli_note.py / cli_provider.py / cli_types.py
     config.py          quod.toml loader (no implicit defaults, no walk-up)
     templates.py       Programs that `quod init` can write
-    model.py           Pydantic node types — the Program AST
-    schema.py          Node-shape introspection (powers `quod schema`)
+    model/             Pydantic node types — the Program AST, split by domain:
+        base.py / expressions.py / types.py / statements.py
+        justifications.py / claims.py / top_level.py / traits.py
+        relations.py / layer_a.py / layer_b.py / program.py
+        lookups.py / pretty.py
+    schema/            Node-shape introspection (powers `quod schema`)
+        catalog_core.py / catalog_layer_a.py / catalog_layer_b.py
+        categories.py / render.py / _aliases.py
     hashing.py         Content-addressable node hashes (Merkle-style)
     editor.py          Mutation primitives over Program (used by CLI)
     analysis.py        Call graph, data flow, lattice claim derivation
-    proof.py           SMT-LIB lowering for `quod claim prove`
-    providers.py       Pluggable claim providers (lattice / Z3)
-    lower.py           Program → LLVM IR → object/binary
+    predicate/         Predicate-vocabulary domain (everything keyed on
+                       PredicateClaim.expr):
+        predicate_validate.py    admits-or-refuses
+        predicate_canonical.py   normal form + sugar builders
+        predicate_render.py      sugar recognizer for pretty-print
+        predicate_proof.py       SMT-LIB lowering for `quod claim prove`
+        predicate_providers.py   claim provider registry (lattice / Z3)
+    lower/             Program → LLVM IR → object/binary, per-cluster siblings:
+        types.py / runtime_decls.py / expr.py / stmt.py / claims.py
+        function.py / desugar.py / main_wrapper.py / pipeline.py
+        c_family.py + c_family_proofs/   c.* family lowering
     runtime.py         Optional C runtime: compiles src/quod/runtime/*.c
                        into libquodrt-vN.a if any sources exist (empty by
                        default — the arena allocator lives in mem.arena)
-    stdlib.py          Import resolution + tier classification
+    resolve.py         Import resolution + tier classification
     stdlib/
         core.bytes.json
         core.str.json
@@ -33,10 +55,19 @@ src/quod/
         std.io.json
     ingest/
         __init__.py
-        c.py           libclang → Program for the int-only C subset
-    script.py          quod-script: textual surface → Program nodes
+        c/             libclang → Program for the int-only C subset:
+            c_helpers.py   shared utilities
+            c_layer_a.py   _LayerATranslator (verbatim C subtree)
+            c_layer_b.py   _FunctionTranslator (c.* lifted-but-still-C)
+            c_driver.py    top-level ingest_c / ingest_header
+    script/            quod-script: textual surface → Program nodes
+        tokens.py / parser.py / resolver.py
     render.py          Spans + theme-driven syntax highlighting
     completion.py      Semantic shell completion
+    lift_check.py      A↔B equivalence check (staged-lift)
+    monomorphize/      Generic-type instantiation pass
+        mangling.py / substitution.py / rewriting.py
+        discovery.py / traits.py
 examples/              Each subdir is its own [[program]] in examples/quod.toml
 tests/                 Case-driven; *.json under tests/cases/ becomes a test
     conftest.py        Auto-collects every JSON case
@@ -48,21 +79,21 @@ integrations/
 
 Architectural rule, in order of strictness:
 
-- `model.py` knows nothing about LLVM IR or SMT.
-- `proof.py` knows nothing about IR.
-- `lower.py` knows nothing about claim provenance (it sees regimes and
-  enforcements, never `Z3Justification`).
-- `analysis.py` and `proof.py` are sibling consumers of `model.py`;
-  neither imports the other.
-- `providers.py` is where they meet; it's the only place that decides
-  "this regime + mode + goal → that callable."
+- `quod.model` knows nothing about LLVM IR or SMT.
+- `quod.predicate` knows nothing about IR.
+- `quod.lower` knows nothing about claim provenance (it sees regimes
+  and enforcements, never `Z3Justification`).
+- `quod.analysis` and `quod.predicate.predicate_proof` are sibling
+  consumers of `quod.model`; neither imports the other.
+- `quod.predicate.predicate_providers` is where they meet; it's the
+  only place that decides "this regime + mode + goal → that callable."
 
 When you add code, ask: which module owns it? If the answer is "more
 than one," look harder.
 
 ## The graph is the asset
 
-Every node in `model.py` is a frozen Pydantic model. To "edit" a node,
+Every node in `quod.model` is a frozen Pydantic model. To "edit" a node,
 build a new one via `model_copy(update={...})` — never mutate in place.
 This guarantees:
 
@@ -167,7 +198,7 @@ delegates.
 
 ### Claim providers
 
-`providers.py` owns the registry. A `Provider` has:
+`quod.predicate.predicate_providers` owns the registry. A `Provider` has:
 
 - `name` — registry key.
 - `regime` — the regime it produces claims under.
@@ -179,8 +210,9 @@ Either or both. The built-in registry contains:
 
 - `lattice.literal_range` (regime=lattice, mode=derive) — wraps
   `analysis.derive_lattice_claims`.
-- `z3.qf_lia` (regime=witness, mode=prove) — wraps `proof.goal_smt_lib`
-  + `proof.run_z3_on_smt`. On `unsat` writes a `.smt2` artifact under
+- `z3.qf_lia` (regime=witness, mode=prove) — wraps
+  `predicate_proof.goal_smt_lib` + `predicate_proof.run_z3_on_smt`. On
+  `unsat` writes a `.smt2` artifact under
   `<proofs_dir>/<program-name>/`, sha256-hashes it, attaches the
   hash to the `Z3Justification`. On `sat`/`unknown` the artifact is
   still written (audit trail) but no claim is attached.
@@ -194,7 +226,7 @@ The CLI routes via `default_for(regime, mode)` (first match), or
    `model.Claim`. Keep the implementation in its own module if it has
    non-trivial deps (e.g. a SMT lib other than Z3).
 2. Construct a `Provider(...)` instance; add it to `_BUILT_IN` in
-   `providers.py`.
+   `predicate/predicate_providers.py`.
 3. `quod provider ls` should pick it up automatically — the registry
    is built from `_BUILT_IN`.
 4. `quod claim prove` and `quod claim derive` route to the first
@@ -255,9 +287,11 @@ src/quod/stdlib/<name>.json show`.
 
 ## quod-script
 
-`script.py` is a single-pass tokenizer + recursive-descent parser
-emitting model nodes directly. The grammar is documented in the
-module docstring (and re-stated in `LANGUAGE.md`). Touch points:
+`quod.script` is a single-pass tokenizer + recursive-descent parser
+emitting model nodes directly (`script/tokens.py` lexes, `script/parser.py`
+parses, `script/resolver.py` runs the phase-2 type resolver). The
+grammar is documented in `script/__init__.py` (and re-stated in
+`LANGUAGE.md`). Touch points:
 
 - `tokenize` is the lexer — keyword set, operator set, integer suffix
   handling, string/char literals, `&.dotted.name` lookahead.
@@ -269,7 +303,8 @@ module docstring (and re-stated in `LANGUAGE.md`). Touch points:
 - `_split_int_suffix` and `_int_lit_from_token` handle the `42i32`
   syntax + bare-`return`-adopts-return-type rule.
 
-When extending the grammar:
+When extending the grammar (touches `script/tokens.py` for the lexer,
+`script/parser.py` for the parser):
 
 - Add the keyword to the keyword set and the lexer's identifier-vs-keyword
   branch.
@@ -291,9 +326,10 @@ grammar doesn't model.
 
 Worked example: adding a hypothetical `quod.bitcast` expression.
 
-1. **Define the model node.** Add a `Bitcast(_Node)` class in
-   `model.py` with `kind: Literal["quod.bitcast"]` and the fields it
-   needs. Frozen, like every other node.
+1. **Define the model node.** Add a `Bitcast(_Node)` class in the
+   appropriate `model/<domain>.py` (here `model/expressions.py`) with
+   `kind: Literal["quod.bitcast"]` and the fields it needs. Frozen,
+   like every other node.
 2. **Add it to the right union(s).** For an expression: append to the
    `Expr = Annotated[Union[...], ...]`. For a statement: append to
    `Statement`. (Don't forget the discriminator picks the class by
@@ -302,20 +338,21 @@ Worked example: adding a hypothetical `quod.bitcast` expression.
    names a struct), extend the validators in `_validate_structs` /
    `_check_struct_uses_in_expr` so dangling refs are caught at load
    time, not at lowering time.
-4. **Lower it.** Add a case in `_lower_expr` (or `_lower_stmt`).
-   Follow existing examples — extract IR types from the registries
-   threaded through the call (`struct_tys`, `enum_tys`), use
-   `builder.bitcast` etc.
-5. **Schema-up.** `schema.py` is data-driven from the model classes,
+4. **Lower it.** Add a case in `lower/expr.py`'s `_lower_expr` (or
+   `lower/stmt.py`'s `_lower_stmt`). Follow existing examples —
+   extract IR types from the registries threaded through the call
+   (`struct_tys`, `enum_tys`), use `builder.bitcast` etc.
+5. **Schema-up.** `schema/` is data-driven from the model classes,
    so the new kind appears in `quod schema --category expression`
    automatically. Confirm `quod schema quod.bitcast` shows what you
    expect.
 6. **Author surface.** Decide whether the node deserves a script
-   shape; if yes, extend `script.py`. If no (rare), users construct
-   it via JSON only.
+   shape; if yes, extend `script/parser.py`. If no (rare), users
+   construct it via JSON only.
 7. **Ingest support.** If the C-ingest subset can produce this shape,
-   wire it in `ingest/c.py`. If not, it's not a regression — `c.py`
-   is intentionally narrow.
+   wire it in `ingest/c/c_layer_b.py` (and likely `c_layer_a.py` /
+   `lower/c_family.py`). If not, it's not a regression — the C
+   ingester is intentionally narrow.
 8. **Test.** Drop one or more `tests/cases/lang/<topic>/*.json`
    cases. End-to-end (compile a program that uses the node, assert
    stdout/exit) is the standard.
@@ -331,13 +368,14 @@ node. All follow the pattern above.
 
 ## Adding a CLI command
 
-`cli.py` is a Typer tree. Subcommands are `noun_app = typer.Typer(...)`,
-attached to the root with `app.add_typer(noun_app, name="noun")`.
+`quod.cli` is a Typer tree split by sub-app. Subcommands are
+`noun_app = typer.Typer(...)`, attached to the root in `cli/cli_app.py`
+via `app.add_typer(noun_app, name="noun")`.
 
 To add `quod foo bar`:
 
-1. Find or create a `foo_app = typer.Typer(...)` in `cli.py` and
-   `app.add_typer(foo_app, name="foo")`.
+1. Find or create `cli/cli_foo.py` with `foo_app = typer.Typer(...)`,
+   then add `app.add_typer(foo_app, name="foo")` in `cli/cli_app.py`.
 2. Implement `@foo_app.command("bar")` against the editor / model
    surfaces. Don't reach into LLVM directly — go through the
    `lower`/`editor` modules.
@@ -359,7 +397,9 @@ of writing prose.
 
 ## C ingest
 
-`ingest/c.py` is a libclang AST walker. The supported subset is
+`quod.ingest.c` is a libclang AST walker (Layer B in `c/c_layer_b.py`,
+Layer A in `c/c_layer_a.py`, shared utilities in `c/c_helpers.py`,
+top-level entry in `c/c_driver.py`). The supported subset is
 deliberately narrow:
 
 - int-only types, `i8*` for `char*` / `void*`,
@@ -450,9 +490,9 @@ When extending the config, keep it explicit. We don't infer; we read.
   it's outside the SMT lowering — refactor or skip, don't trust-me-bro.
 - **Frozen Pydantic models — never mutate in place.** Build new
   instances via `model_copy(update=...)`.
-- **Keep boundaries.** `model.py` knows nothing about SMT;
-  `proof.py` knows nothing about IR; `lower.py` knows nothing about
-  claim provenance.
+- **Keep boundaries.** `quod.model` knows nothing about SMT;
+  `quod.predicate` knows nothing about IR; `quod.lower` knows nothing
+  about claim provenance.
 
 ## Invariants worth checking when something breaks
 

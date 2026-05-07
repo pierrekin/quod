@@ -225,7 +225,7 @@ class Function(_Node):
     return_type: ReturnType
     # `body` widens to `Block | CScopedBlock` (smart union) to host the
     # c-family scope wrapper at layer B. Layer C is pure core, so
-    # `lower.py` refuses the wrapper at codegen time; the c-family
+    # `quod.lower` refuses the wrapper at codegen time; the c-family
     # lowering pass strips it before producing layer C. Existing
     # all-core programs are unaffected — Pydantic's smart union picks
     # `Block` for any body without the wrapper's `kind` field.

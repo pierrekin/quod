@@ -10,7 +10,7 @@ Walks a libclang AST once and emits **three parallel subtrees**:
     transcription. Mostly core nodes, with `c.*` family extensions
     where layer-B carries information the lift hasn't finished
     collapsing (e.g. C `for` becomes `CStyleFor`).
-  - Layer C (`Program.functions`): pure core, what `lower.py`
+  - Layer C (`Program.functions`): pure core, what `quod.lower`
     consumes. Produced by the c-family lowering pass
     (`lower/c_family.py`) at the end of `ingest_c`.
 
@@ -179,7 +179,7 @@ def ingest_c(
     # Layer-B Functions go into `structured_functions` (the
     # extension-bearing transcription); the canonical core form lives
     # in `Program.functions`, populated next by the c-family lowering
-    # pass. lower.py's contract is unchanged — it consumes the
+    # pass. `quod.lower`'s contract is unchanged — it consumes the
     # canonical form only.
     if layer_a_failed or not cfns:
         program = Program(

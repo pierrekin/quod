@@ -18,8 +18,8 @@ _LAYER_B_CATALOG: dict[str, dict[str, Any]] = {
             "C-style block wrapper. `block` is the inner core.Block that "
             "edges anchor on; the wrapper carries family-specific scope "
             "semantics (which decls die at the closing brace). Lowered by "
-            "c-family lowering to its inner block — `lower.py` refuses to "
-            "see this wrapper."
+            "c-family lowering to its inner block — `quod.lower` refuses "
+            "to see this wrapper."
         ),
         "example": {
             "kind": "c.scoped_block",
@@ -35,7 +35,7 @@ _LAYER_B_CATALOG: dict[str, dict[str, Any]] = {
             "transcription of `c.for` from layer A. Lowered to "
             "`Let + While + Assign` by c-family lowering, with the rule "
             "cited as `FamilyLowering(\"c.for_general\")` in the resulting "
-            "equivalence claim. `lower.py` refuses to consume this — the "
+            "equivalence claim. `quod.lower` refuses to consume this — the "
             "c-family lowering pass must run first."
         ),
         "example": {

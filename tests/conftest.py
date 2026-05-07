@@ -342,7 +342,7 @@ def _run_one_cli_step(item: CaseItem, step: dict[str, Any], toml_path: Path, ind
     from typer.testing import CliRunner
     from quod import cli as cli_mod
 
-    cli_mod._state.clear()  # cli.py caches Config across invocations; force a fresh load
+    cli_mod._state.clear()  # quod.cli caches Config across invocations; force a fresh load
     args = ["-c", str(toml_path), *[str(a) for a in step["cli"]]]
     runner = CliRunner()
     result = runner.invoke(cli_mod.app, args, input=step.get("stdin", ""))
@@ -396,9 +396,9 @@ def _resolve_program_ref(ref: Any, case_dir: Path) -> Any:
 def _normalize_block_ids(node: Any, counter: dict[str, int] | None = None) -> Any:
     """Alpha-rename opaque node IDs so program_json comparisons aren't
     sensitive to ID minting differences. Block IDs (auto-minted via uuid
-    in script.py / templates.py, sequential in the C ingester,
+    in `quod.script` / `quod.templates`, sequential in the C ingester,
     file-prefixed in test fixtures) become `@blk_norm_<n>`; Function IDs
-    (added in step 2 of the C-ingest redesign) become `@fn_norm_<n>`.
+    become `@fn_norm_<n>`.
 
     The structural-equality-up-to-renaming comparison is the right one
     until edges + equivalences pin specific IDs as load-bearing — which

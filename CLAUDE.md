@@ -50,16 +50,16 @@ costs once; the wrong one costs forever.
 
 ## Editing the code itself
 
-- The graph is the asset. Nodes (`src/quod/model.py`) are frozen
-  Pydantic models — never mutate in place; build new instances via
-  `model_copy`.
-- `model.py` knows nothing about SMT; `proof.py` knows nothing about
-  IR; `lower.py` knows nothing about claim provenance. Keep those
-  boundaries.
-- New claim sources plug in via `src/quod/providers.py` (a `Provider`
-  with `derive` and/or `prove`). The CLI routes by `(regime, mode)`.
-- C-ingest support lives in `src/quod/ingest/c.py`; the supported
-  subset is intentionally narrow (int-only, no structs / floats / for /
+- The graph is the asset. Nodes (`src/quod/model/`) are frozen Pydantic
+  models — never mutate in place; build new instances via `model_copy`.
+- `quod.model` knows nothing about SMT; `quod.predicate` knows nothing
+  about IR; `quod.lower` knows nothing about claim provenance. Keep
+  those boundaries.
+- New claim sources plug in via `src/quod/predicate/predicate_providers.py`
+  (a `Provider` with `derive` and/or `prove`). The CLI routes by
+  `(regime, mode)`.
+- C-ingest support lives in `src/quod/ingest/c/`; the supported subset
+  is intentionally narrow (int-only, no structs / floats / for /
   switch). Refusals raise `IngestError` with a source location.
 
 ## Running anything

@@ -1,7 +1,7 @@
 """Layer B — c.* extension nodes.
 
 Constructs core quod can't represent on its own. Lowered to core by
-`lower/c_family.py`. `lower.py` refuses to consume them directly —
+`lower/c_family.py`. `quod.lower` refuses to consume them directly —
 the c-family pass must run first.
 """
 
@@ -20,8 +20,8 @@ class CScopedBlock(_Node):
     """C-style block wrapper. `block` is the inner `core.Block` that
     edges anchor on; the wrapper carries family-specific scope semantics
     (which decls die at the closing brace). Lowered by c-family lowering
-    to its inner block — the wrapper is discarded by the time `lower.py`
-    sees the program.
+    to its inner block — the wrapper is discarded by the time
+    `quod.lower` sees the program.
 
     `scope_locals` records the names of locals whose scope ends with
     this block. Currently a tuple of names; richer scope metadata

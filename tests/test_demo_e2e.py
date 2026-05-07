@@ -84,7 +84,7 @@ def test_demo_flow_end_to_end(tmp_path):
     assert "axiom" not in prove.output  # no unproven claims
 
     # ---------- build ----------
-    # Compiles layer-C through lower.py → LLVM IR → object → linked
+    # Compiles layer-C through quod.lower → LLVM IR → object → linked
     # binary at build/demo/sum_demo per quod.toml's [[program.bin]].
     build = _quod(tmp_path, "build")
     assert build.exit_code == 0, build.output

@@ -52,15 +52,15 @@ def _lower_function_body(
     enum_defs: dict[str, EnumDef],
     enum_tys: dict[str, "ir.IdentifiedStructType"],
 ) -> None:
-    # lower.py operates on layer C only. Family wrappers and family-
-    # extension statements must be stripped/lowered by the c-family
-    # lowering pass first; refuse here rather than crash deep in the
-    # statement walker.
+    # `quod.lower` operates on layer C only. Family wrappers and
+    # family-extension statements must be stripped/lowered by the
+    # c-family lowering pass first; refuse here rather than crash deep
+    # in the statement walker.
     if not isinstance(fn.body, Block):
         raise ValueError(
             f"function {fn.name!r} body is wrapped in {type(fn.body).__name__!r} — "
             f"layer C must be pure core. Run the c-family lowering pass "
-            f"(lower/c_family.py) before lower.py."
+            f"(lower/c_family.py) before lower."
         )
     llvm_fn = module.globals[fn.name]
     for arg, p in zip(llvm_fn.args, fn.params):

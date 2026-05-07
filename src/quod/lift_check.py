@@ -122,10 +122,10 @@ from quod.model import (
 
 
 # Map layer-A binary-operator spelling to layer-B BinOp.op spelling.
-# Mirrors the table in src/quod/ingest/c.py — kept in sync because
+# Mirrors the table in `quod.ingest.c.c_helpers` — kept in sync because
 # the lift produces the layer-B side from the same source character.
 # C compound-assignment operator → underlying layer-B BinOp.op spelling.
-# Mirrors `_COMPOUND_ASSIGN_TABLE` in src/quod/ingest/c.py.
+# Mirrors `_COMPOUND_ASSIGN_TABLE` in `quod.ingest.c.c_helpers`.
 _COMPOUND_ASSIGN_TO_BINOP = {
     "+=":  "add",
     "-=":  "sub",

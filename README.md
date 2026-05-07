@@ -36,20 +36,20 @@ uv run quod run
 
 ```
 src/quod/
-    cli.py          Typer CLI (noun-first sub-apps)
+    cli/            Typer CLI (one file per noun-first sub-app)
     config.py       quod.toml loader
-    model.py        Pydantic node types (the Program AST)
-    schema.py       Node-shape introspection for `quod schema`
+    model/          Pydantic node types — the Program AST (split by domain)
+    schema/         Node-shape introspection for `quod schema`
     editor.py       Mutation primitives (add/replace/insert nodes)
     hashing.py      Content-addressable node hashes
     analysis.py     Call graph, data flow, lattice claim derivation
-    lower.py        Program → LLVM IR → object/binary
-    proof.py        SMT-LIB lowering for `quod claim prove`
-    providers.py    Pluggable claim providers (lattice / Z3)
+    lower/          Program → LLVM IR → object/binary (per-cluster siblings)
+    predicate/      Predicate domain: validate / canonical / proof / render
+                    / providers — everything keyed on PredicateClaim.expr
     render.py       Span/line model + theme-driven syntax highlighting
     completion.py   Semantic shell completion for the CLI
-    ingest/         Source-language importers (C via libclang)
-    stdlib.py       Import resolution + tier classification
+    ingest/c/       C source-language importer (libclang, staged-lift)
+    resolve.py      Import resolution
     stdlib/         quod-authored stdlib modules (core.* / alloc.* / std.*)
     runtime.py      Optional native runtime: compiles src/quod/runtime/*.c
                     into libquodrt-vN.a (empty by default)

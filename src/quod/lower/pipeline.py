@@ -65,8 +65,8 @@ def has_function(program: Program, name: str) -> bool:
 
 def _refuse_non_core_layer(program: Program) -> None:
     """Refuse layer-B (`c.*` extension) constructs at the build entry
-    point. lower.py and its supporting validators (validate.py,
-    monomorphize.py, …) operate on layer C — pure core quod. The
+    point. `quod.lower` and its supporting validators (`quod.validate`,
+    `quod.monomorphize`, …) operate on layer C — pure core quod. The
     c-family lowering pass strips wrappers and rewrites extension
     statements before this point; if any survive, surface a clear error
     naming the offending kind so the fix is obvious.
