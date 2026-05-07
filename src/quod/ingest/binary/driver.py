@@ -272,6 +272,8 @@ def _build_function(
     sig = raw.get("signature") or {}
     params = tuple(_build_param(p) for p in sig.get("params") or ())
 
+    decl_file = raw.get("decl_file")
+    decl_line = raw.get("decl_line")
     fn = BinFunction(
         address=_parse_int_addr(raw.get("address")),
         mangled_name=str(raw.get("name_mangled") or ""),
@@ -281,6 +283,8 @@ def _build_function(
         calling_convention=str(raw.get("calling_convention") or ""),
         basic_blocks=tuple(blocks),
         decompile_text=str(raw.get("decompile") or ""),
+        decl_file=str(decl_file) if decl_file else None,
+        decl_line=int(decl_line) if decl_line is not None else None,
     )
 
     call_edges: list[BinCallEdge] = []
@@ -429,9 +433,23 @@ def _build_unit(
 
 @dataclass(frozen=True)
 class _SourceTarget:
-    """One candidate source-side endpoint for a `bin.fn` to pair with."""
+    """One candidate source-side endpoint for a `bin.fn` to pair with.
+
+    `cunit_path` is the originating `CUnit.source_path` for Layer-A
+    (CFn) candidates, used by the matcher for DWARF basename
+    comparison; None for Layer-C (Function) candidates which don't
+    carry per-source attribution at this stage.
+    """
     fn_id: str
     name: str
+    cunit_path: str | None = None
+
+
+@dataclass(frozen=True)
+class _MatchResult:
+    """A successful pairing: which source endpoint, and what evidence
+    flavor the seeder used to find it."""
+    fn_id: str
     evidence: str  # "dwarf" | "symtab"
 
 
@@ -439,17 +457,21 @@ def seed_binary_equivalences(program: Program, *, unit: BinUnit | None = None) -
     """Walk `program.binary_units` and emit `Equivalence` + `ProvenanceEdge`
     pairs for every `bin.fn` whose name matches a known source function.
 
-    Strategy (priority order; v1 implements DWARF-omitted symtab match,
-    DWARF preferred when present):
+    Strategy (priority order):
 
-    1. DWARF line info match — not yet implemented. The export script
-       doesn't yet surface `DW_AT_decl_file`/`DW_AT_decl_line`; when it
-       does, this seeder upgrades to prefer DWARF over plain symtab.
-    2. Symtab name match — demangle `bin.fn.demangled_name`, match
-       against `Function.name` in `program.functions` and `CFn.name` in
-       any `CUnit`. Source unit found → seed.
-    3. No match — leave the bin.fn unpaired. Stripped binaries land
-       here by design (see `.scratch/ghidra/05-open-questions.md`).
+    1. **DWARF line info match.** When a `bin.fn` carries
+       `decl_file`/`decl_line` (Ghidra populated them from
+       `DW_AT_decl_file`/`DW_AT_decl_line` because the binary was built
+       with `-g`), filter source candidates by basename match against
+       `decl_file`. DWARF disambiguates `static int helper()` collisions
+       across translation units — symtab alone refuses to seed those;
+       DWARF picks the right CUnit. Emits `source_evidence="dwarf"`.
+    2. **Symtab name match.** When DWARF info isn't available (stripped
+       binary, compiler-emitted glue, the rare cases where Ghidra
+       didn't pick up source-map entries), fall back to demangled-name
+       match against `CFn.name` (Layer A) then `Function.name` (Layer C).
+       Emits `source_evidence="symtab"`.
+    3. **No match.** Leave the bin.fn unpaired.
 
     The seeder is idempotent: re-running it on a program that already
     carries a seeded equivalence (same `(a_node_id, b_node_id)`) does
@@ -466,13 +488,13 @@ def seed_binary_equivalences(program: Program, *, unit: BinUnit | None = None) -
 
     for u in units:
         for fn in u.functions:
-            target = _match_source(fn, candidates)
-            if target is None:
+            match = _match_source(fn, candidates)
+            if match is None:
                 continue
-            pair = (target.fn_id, fn.id)
+            pair = (match.fn_id, fn.id)
             if pair not in existing_pairs:
                 new_eqs.append(Equivalence(
-                    a_node_id=target.fn_id,
+                    a_node_id=match.fn_id,
                     b_node_id=fn.id,
                     regime="axiom",
                     enforcement="trust",
@@ -480,12 +502,12 @@ def seed_binary_equivalences(program: Program, *, unit: BinUnit | None = None) -
                         binary_path=u.path,
                         binary_sha256=u.sha256,
                         binary_symbol=fn.mangled_name or fn.demangled_name,
-                        source_evidence=target.evidence,  # type: ignore[arg-type]
+                        source_evidence=match.evidence,  # type: ignore[arg-type]
                     ),
                 ))
                 existing_pairs.add(pair)
             if pair not in existing_edges:
-                new_edges.append(ProvenanceEdge(source=target.fn_id, target=fn.id))
+                new_edges.append(ProvenanceEdge(source=match.fn_id, target=fn.id))
                 existing_edges.add(pair)
 
     if not new_eqs and not new_edges:
@@ -522,35 +544,82 @@ def _collect_source_candidates(program: Program) -> _SourceCandidates:
     for cunit in program.source_units:
         for cfn in cunit.functions:
             cfns.setdefault(cfn.name, []).append(
-                _SourceTarget(fn_id=cfn.id, name=cfn.name, evidence="symtab")
+                _SourceTarget(fn_id=cfn.id, name=cfn.name, cunit_path=cunit.source_path)
             )
     fns: dict[str, list[_SourceTarget]] = {}
     for fn in program.functions:
         fns.setdefault(fn.name, []).append(
-            _SourceTarget(fn_id=fn.id, name=fn.name, evidence="symtab")
+            _SourceTarget(fn_id=fn.id, name=fn.name, cunit_path=None)
         )
     return _SourceCandidates(cfns=cfns, fns=fns)
+
+
+def _path_basename(p: str | None) -> str | None:
+    """Return the basename of a path, normalized for cross-OS comparison.
+
+    Ghidra records `decl_file` as the compile-time absolute path
+    (`/tmp/build/foo.c`). The c-ingester records `CUnit.source_path` as
+    whatever was passed to `ingest_c()` — usually a relative path
+    (`foo.c`). Comparing basenames matches the common case where the
+    file moved across systems but kept its name. Same-basename-different-
+    directory collisions are rare; v1 leaves them in the "ambiguous"
+    bucket and refuses to seed.
+    """
+    if p is None:
+        return None
+    # PurePosixPath splits on '/' regardless of host OS — Ghidra reports
+    # forward-slash paths even on Windows (its DWARF reader normalizes).
+    from pathlib import PurePosixPath
+    return PurePosixPath(p).name
 
 
 def _match_source(
     bin_fn: BinFunction,
     candidates: _SourceCandidates,
-) -> _SourceTarget | None:
-    """Pair a `bin.fn` to a unique source endpoint by name. Layer A
-    (CFn) wins over Layer C (Function) when both have a single match;
-    a same-layer collision (multiple CFns or multiple Functions with
-    the same name) leaves the function unpaired."""
+) -> _MatchResult | None:
+    """Pair a `bin.fn` to a unique source endpoint, returning the
+    evidence flavor used (DWARF or symtab).
+
+    DWARF wins when present: if `bin_fn.decl_file` is populated, the
+    matcher filters CFn candidates by basename. A DWARF-filtered
+    singleton is paired with `evidence="dwarf"`; a DWARF filter that
+    produces zero or multiple survivors refuses (DWARF positively
+    disconfirms an otherwise-tempting symtab match — the binary's
+    source isn't this CUnit, even if the names happen to align).
+
+    When no DWARF info is available, the legacy symtab path runs:
+    Layer-A CFn first, falling back to Layer-C Function, refusing on
+    same-layer collisions.
+    """
+    bin_decl_basename = _path_basename(bin_fn.decl_file)
+
     for name in (bin_fn.demangled_name, bin_fn.mangled_name):
         if not name:
             continue
+
         cfn_targets = candidates.cfns.get(name) or []
+        if bin_decl_basename is not None and cfn_targets:
+            filtered = [
+                t for t in cfn_targets
+                if _path_basename(t.cunit_path) == bin_decl_basename
+            ]
+            if len(filtered) == 1:
+                return _MatchResult(fn_id=filtered[0].fn_id, evidence="dwarf")
+            # DWARF-disambiguation produced 0 or >1 — refuse this name.
+            # We don't fall back to symtab here: if Ghidra says the
+            # source is foo.c and we don't have foo.c (or have multiple
+            # foo.c's), trusting a same-named-but-different-file CFn
+            # would be silently wrong.
+            return None
+
         if len(cfn_targets) == 1:
-            return cfn_targets[0]
+            return _MatchResult(fn_id=cfn_targets[0].fn_id, evidence="symtab")
         if len(cfn_targets) > 1:
-            return None  # same-layer collision in CFns
+            return None  # same-layer collision; user disambiguates manually
+
         fn_targets = candidates.fns.get(name) or []
         if len(fn_targets) == 1:
-            return fn_targets[0]
+            return _MatchResult(fn_id=fn_targets[0].fn_id, evidence="symtab")
         if len(fn_targets) > 1:
-            return None  # same-layer collision in Functions
+            return None
     return None

@@ -203,12 +203,28 @@ class BinFunction(_Node):
     basic_blocks: tuple[BinBasicBlock, ...] = ()
     call_edges: tuple[BinCallEdge, ...] = ()
     decompile_text: str = ""
+    # DWARF source-line attribution (DW_AT_decl_file / DW_AT_decl_line),
+    # populated by Ghidra's source-file manager when the binary was
+    # built with `-g`. The seeder prefers DWARF over symtab name match
+    # — DWARF disambiguates `static int helper()` collisions across
+    # translation units, where symtab alone would refuse to seed.
+    # Both fields are None on stripped binaries and on compiler-emitted
+    # bookkeeping functions (`_init`, `frame_dummy`, etc.). `decl_file`
+    # carries Ghidra's recorded path verbatim (typically the compile-
+    # time absolute path); the seeder compares basenames so different
+    # working directories don't break attribution.
+    decl_file: str | None = None
+    decl_line: int | None = None
 
     @model_serializer(mode="wrap")
-    def _drop_empty_decompile(self, handler, info):
+    def _drop_empty_optionals(self, handler, info):
         data = handler(self)
         if not self.decompile_text:
             data.pop("decompile_text", None)
+        if self.decl_file is None:
+            data.pop("decl_file", None)
+        if self.decl_line is None:
+            data.pop("decl_line", None)
         return data
 
 

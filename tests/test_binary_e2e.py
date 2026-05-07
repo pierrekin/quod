@@ -117,7 +117,9 @@ def test_real_ghidra_ingest_produces_bin_unit(ingested_program):
 def test_real_ghidra_seeder_pairs_to_source(ingested_program):
     """v1 acceptance: ingest lib.c → ingest lib.so → at least one
     auto-seeded Equivalence with `BinaryProvenance` justification
-    pairing source `greet` to binary `greet`."""
+    pairing source `greet` to binary `greet`. The fixture builds with
+    `clang -g`, so `source_evidence` should be `dwarf` (Ghidra
+    populates `decl_file` from DW_AT_decl_file)."""
     program, _, _ = ingested_program
     seeded = [
         eq for eq in program.equivalences
@@ -127,13 +129,32 @@ def test_real_ghidra_seeder_pairs_to_source(ingested_program):
 
     eq = next(e for e in seeded if e.justification.binary_symbol == "greet")
     assert eq.regime == "axiom"
-    assert eq.justification.source_evidence == "symtab"
+    assert eq.justification.source_evidence == "dwarf"
     cfns = {cfn.id: cfn for u in program.source_units for cfn in u.functions}
     bins = {bf.id: bf for u in program.binary_units for bf in u.functions}
     assert eq.a_node_id in cfns
     assert eq.b_node_id in bins
     assert cfns[eq.a_node_id].name == "greet"
     assert bins[eq.b_node_id].demangled_name == "greet"
+
+
+def test_real_ghidra_dwarf_decl_fields_populated(ingested_program):
+    """`clang -g` emits DWARF; Ghidra's source-file manager surfaces it
+    via `getSourceMapEntries(entry_point)`. The exporter plumbs the
+    first entry's filename + line into `BinFunction.decl_file` /
+    `decl_line`. Confirm against the real `greet` function."""
+    from pathlib import PurePosixPath
+    program, src, _ = ingested_program
+    bin_fn = next(
+        f for u in program.binary_units for f in u.functions
+        if f.demangled_name == "greet"
+    )
+    assert bin_fn.decl_file is not None, (
+        "expected DWARF source-map entry on `greet`; clang -g did not emit, "
+        "or the exporter dropped the field"
+    )
+    assert PurePosixPath(bin_fn.decl_file).name == src.name
+    assert bin_fn.decl_line is not None and bin_fn.decl_line >= 1
 
 
 def test_real_ghidra_program_round_trips_through_save_load(ingested_program, tmp_path):

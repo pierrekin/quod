@@ -190,6 +190,7 @@ def _build_id(program) -> str | None:
 
 
 def _function_dump(program, function, decompiler, monitor) -> dict[str, Any]:
+    decl_file, decl_line = _decl_location(program, function)
     return {
         "address": _hex(function.getEntryPoint()),
         "name_mangled": function.getName(True),
@@ -199,7 +200,41 @@ def _function_dump(program, function, decompiler, monitor) -> dict[str, Any]:
         "decompile": _decompile(decompiler, function, monitor),
         "basic_blocks": _basic_blocks(program, function, monitor),
         "calls": _calls(program, function, monitor),
+        "decl_file": decl_file,
+        "decl_line": decl_line,
     }
+
+
+def _decl_location(program, function) -> tuple[str | None, int | None]:
+    """Extract DWARF `DW_AT_decl_file` / `DW_AT_decl_line` for a
+    function's entry point, via Ghidra's source-file manager.
+
+    `clang -g` populates a `SourceMap` for every instruction it
+    associates with a source line. The entry-point's first source-map
+    entry is the function's opening line (typically the line of the
+    `int foo(...)` signature). Stripped binaries return None for both
+    fields; compiler-emitted glue (`_init`, `frame_dummy`) likewise
+    has no source-map entry.
+
+    Returns the path as Ghidra recorded it (typically the compile-time
+    absolute path); the seeder compares basenames so different working
+    directories don't break attribution.
+    """
+    try:
+        sfm = program.getSourceFileManager()
+    except Exception:
+        return None, None
+    if sfm is None:
+        return None, None
+    try:
+        entries = list(sfm.getSourceMapEntries(function.getEntryPoint()))
+    except Exception:
+        return None, None
+    if not entries:
+        return None, None
+    entry = entries[0]
+    sf = entry.getSourceFile()
+    return str(sf.getPath()), int(entry.getLineNumber())
 
 
 def _signature(function) -> dict[str, Any]:

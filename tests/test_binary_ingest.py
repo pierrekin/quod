@@ -335,6 +335,122 @@ def test_invalid_json_raises(tmp_path):
         ingest_binary_dump(p)
 
 
+def test_seeder_uses_dwarf_to_disambiguate_same_named_helpers(tmp_path):
+    """`static int helper()` in two translation units produces two CFns
+    named `helper`. Symtab match alone refuses to seed. DWARF
+    `decl_file` resolves the ambiguity by basename match."""
+    int_t = CNamedType(name="int")
+    a = CUnit(
+        source_path="a.c",
+        functions=(
+            CFn(name="helper", return_type=int_t,
+                body=(CReturn(value=CIntLit(type=I32Type(), value=1)),)),
+        ),
+    )
+    b = CUnit(
+        source_path="b.c",
+        functions=(
+            CFn(name="helper", return_type=int_t,
+                body=(CReturn(value=CIntLit(type=I32Type(), value=2)),)),
+        ),
+    )
+
+    dump = _libdemo_dump()
+    dump["functions"][0]["name_mangled"] = "helper"
+    dump["functions"][0]["name_demangled"] = "helper"
+    dump["functions"][0]["decl_file"] = "/build/path/b.c"
+    dump["functions"][0]["decl_line"] = 7
+    dump_path = _write_dump(tmp_path, dump)
+
+    base = Program(source_units=(a, b))
+    program = ingest_binary_dump(dump_path, program=base)
+
+    assert len(program.equivalences) == 1
+    eq = program.equivalences[0]
+    assert isinstance(eq.justification, BinaryProvenance)
+    assert eq.justification.source_evidence == "dwarf"
+    cfn_b = b.functions[0]
+    assert eq.a_node_id == cfn_b.id
+
+
+def test_seeder_refuses_when_dwarf_points_at_unknown_file(tmp_path):
+    """If DWARF says the binary's source is `c.c` but the program only
+    has `a.c` and `b.c` ingested, the seeder refuses to fall back to
+    a same-named CFn from a different file — DWARF positively
+    disconfirms the symtab match."""
+    int_t = CNamedType(name="int")
+    a = CUnit(
+        source_path="a.c",
+        functions=(
+            CFn(name="helper", return_type=int_t,
+                body=(CReturn(value=CIntLit(type=I32Type(), value=1)),)),
+        ),
+    )
+
+    dump = _libdemo_dump()
+    dump["functions"][0]["name_mangled"] = "helper"
+    dump["functions"][0]["name_demangled"] = "helper"
+    dump["functions"][0]["decl_file"] = "/build/path/c.c"  # nowhere in program
+    dump["functions"][0]["decl_line"] = 1
+    dump_path = _write_dump(tmp_path, dump)
+
+    base = Program(source_units=(a,))
+    program = ingest_binary_dump(dump_path, program=base)
+
+    assert len(program.equivalences) == 0
+
+
+def test_seeder_falls_back_to_symtab_when_no_dwarf(tmp_path):
+    """Stripped binaries have no `decl_file` on their bin.fns. The
+    seeder must continue to work via symtab name match in that case."""
+    dump = _libdemo_dump()
+    # Stock fixture has no decl_file/decl_line keys (stripped shape).
+    assert "decl_file" not in dump["functions"][0]
+    dump_path = _write_dump(tmp_path, dump)
+    program = ingest_binary_dump(dump_path, program=Program(source_units=(_greet_c_unit(),)))
+
+    assert len(program.equivalences) == 1
+    eq = program.equivalences[0]
+    assert isinstance(eq.justification, BinaryProvenance)
+    assert eq.justification.source_evidence == "symtab"
+
+
+def test_bin_function_decl_fields_round_trip(tmp_path):
+    """`decl_file` / `decl_line` survive save → load through the JSON
+    contract; absent values stay absent (default-None drop)."""
+    dump = _libdemo_dump()
+    dump["functions"][0]["decl_file"] = "/build/path/greet.c"
+    dump["functions"][0]["decl_line"] = 42
+    dump_path = _write_dump(tmp_path, dump)
+    program = ingest_binary_dump(dump_path)
+
+    fn = program.binary_units[0].functions[0]
+    assert fn.decl_file == "/build/path/greet.c"
+    assert fn.decl_line == 42
+
+    out = tmp_path / "program.json"
+    save_program(program, out)
+    loaded = load_program(out)
+    fn2 = loaded.binary_units[0].functions[0]
+    assert fn2.decl_file == "/build/path/greet.c"
+    assert fn2.decl_line == 42
+
+
+def test_bin_function_drops_none_decl_fields_from_json(tmp_path):
+    """When `decl_file` and `decl_line` are None (stripped binary), they
+    don't bloat the JSON dump — same drop-None pattern as `build_id`."""
+    dump = _libdemo_dump()
+    dump_path = _write_dump(tmp_path, dump)
+    program = ingest_binary_dump(dump_path)
+
+    out = tmp_path / "program.json"
+    save_program(program, out)
+    blob = json.loads(out.read_text())
+    fn_blob = blob["binary_units"][0]["functions"][0]
+    assert "decl_file" not in fn_blob
+    assert "decl_line" not in fn_blob
+
+
 def test_merge_preserves_binary_units(tmp_path):
     """`merge_program` must not drop `binary_units` when folding two
     programs together. Regression: merging a c-ingest result into a
