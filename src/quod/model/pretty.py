@@ -287,6 +287,7 @@ def format_bin_fn(
     *,
     label: NodeLabel = _NO_LABEL,
     raw_decompile: bool = False,
+    detail: bool = False,
 ) -> str:
     """Render a layer-A `BinFunction` as a structural summary plus the
     decompile text. Used by `_format_bin_unit` for the `binary_units`
@@ -300,8 +301,12 @@ def format_bin_fn(
     blank lines for readability; pass `raw_decompile=True` to keep the
     full decompile text untouched.
 
-    P-code per basic block is summarized as opcodes-only
-    (`addr [n ops]`); the full p-code is accessible via `--json`."""
+    With `detail=False` (default), per-block pcode is summarized as
+    `addr [n ops]` — the structural skeleton without the noisy
+    opcode listing. With `detail=True`, each block also lists every
+    opcode (`addr [n ops: INT_LESS, INT_SBORROW, ...]`). The
+    structured pcode is always available via `--json` regardless of
+    this flag."""
     params = ", ".join(f"{p.type_name} {p.name}" for p in fn.params)
     head = (
         f"{label(fn)}bin.fn 0x{fn.address:x} "
@@ -312,11 +317,15 @@ def format_bin_fn(
     if fn.basic_blocks:
         lines.append("  blocks:")
         for bb in fn.basic_blocks:
-            opcodes = ", ".join(op.opcode for op in bb.pcode_ops)
-            lines.append(
+            head_bb = (
                 f"    0x{bb.start_address:x}-0x{bb.end_address:x} "
-                f"[{len(bb.pcode_ops)} ops: {opcodes}]"
+                f"[{len(bb.pcode_ops)} ops"
             )
+            if detail:
+                opcodes = ", ".join(op.opcode for op in bb.pcode_ops)
+                lines.append(f"{head_bb}: {opcodes}]")
+            else:
+                lines.append(f"{head_bb}]")
     if fn.call_edges:
         lines.append("  calls:")
         for c in fn.call_edges:

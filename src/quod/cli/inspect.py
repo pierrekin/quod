@@ -77,6 +77,18 @@ def show(
     equivalences: bool | None = typer.Option(None, "--equivalences/--no-equivalences", help=_SHOW_HELP.format(name="equivalences")),
     edges: bool | None = typer.Option(None, "--edges/--no-edges", help=_SHOW_HELP.format(name="edges")),
     bindings: bool | None = typer.Option(None, "--bindings/--no-bindings", help=_SHOW_HELP.format(name="bindings")),
+    # Per-root detail toggles. Each is a separate flag because what
+    # "detail" means is renderer-specific (binary's per-block opcode
+    # list isn't the same axis as, say, a future per-claim
+    # justification dump). New roots add their own --X-detail when
+    # there's a meaningful detail tier; absent flags are no-ops.
+    binary_detail: bool = typer.Option(
+        False, "--binary-detail/--no-binary-detail",
+        help="With --binary, append the per-block pcode opcode list "
+             "to each `bin.fn`'s blocks summary. Off by default — the "
+             "opcode lists are noisy at the program level. The full "
+             "structured pcode is always available via `--json`.",
+    ),
 ) -> None:
     """Print the program. Color follows TTY (disable with `quod --no-color`).
 
@@ -144,9 +156,18 @@ def show(
         _emit_json(program)
         return
 
+    detail: set[str] = set()
+    if binary_detail:
+        detail.add("binary_units")
+
     theme = _theme()
     typer.echo(render(
-        format_program_lines(program, force_show=force_show, hide=hide),
+        format_program_lines(
+            program,
+            force_show=force_show,
+            hide=hide,
+            detail=frozenset(detail),
+        ),
         theme=theme, mode="columnar",
     ))
 

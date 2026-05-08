@@ -788,6 +788,7 @@ def format_program_lines(
     *,
     force_show: frozenset[str] = frozenset(),
     hide: frozenset[str] = frozenset(),
+    detail: frozenset[str] = frozenset(),
 ) -> Iterator[Line]:
     """Render a Program as styled lines.
 
@@ -801,6 +802,11 @@ def format_program_lines(
     `imports`, `constants`, `structs`, `enums`, `externs`, `traits`,
     `impls`, `source_units`, `binary_units`, `structured_functions`,
     `functions`, `edges`, `equivalences`, `signature_bindings`.
+
+    `detail` is a set of section names whose renderer should produce
+    a more verbose form. Today only `binary_units` honors this —
+    with `binary_units` in the set, each block's pcode opcode list
+    is appended to the per-block summary line.
     """
     def _show(name: str, has_content: bool) -> tuple[bool, bool]:
         # Returns (render_section, render_placeholder).
@@ -912,7 +918,9 @@ def format_program_lines(
             yield _placeholder_line("binary_units")
         else:
             for unit in program.binary_units:
-                yield from _bin_unit_lines(unit, 4)
+                yield from _bin_unit_lines(
+                    unit, 4, detail="binary_units" in detail,
+                )
 
     if (show_it := _show(
         "structured_functions", bool(program.structured_functions),
@@ -989,11 +997,16 @@ def format_program_lines(
     yield Line(None, 0, (Span("}", "punct"),))
 
 
-def _bin_unit_lines(unit: BinUnit, indent: int) -> Iterator[Line]:
+def _bin_unit_lines(
+    unit: BinUnit, indent: int, *, detail: bool = False,
+) -> Iterator[Line]:
     """Render a layer-A `BinUnit` as a section with a structural summary
     plus per-function decompile blocks. Same convention as `_c_unit_lines`:
     Ghidra output is not quod source, so we drop into plain comment spans
-    rather than coloring with quod's vocabulary."""
+    rather than coloring with quod's vocabulary.
+
+    `detail` controls the per-block pcode rendering — see
+    `format_bin_fn` for the exact effect."""
     yield Line(unit, indent, (
         Span("bin_unit ", "keyword"),
         Span(repr(unit.path), "string"),
@@ -1001,7 +1014,7 @@ def _bin_unit_lines(unit: BinUnit, indent: int) -> Iterator[Line]:
         Span(" {", "punct"),
     ))
     for fn in unit.functions:
-        for raw_line in format_bin_fn(fn).splitlines():
+        for raw_line in format_bin_fn(fn, detail=detail).splitlines():
             yield Line(None, indent + 2, (Span(raw_line, "comment"),))
     yield Line(None, indent, (Span("}", "punct"),))
 

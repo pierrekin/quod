@@ -191,6 +191,39 @@ def test_show_source_and_binary_compose(tmp_path):
     assert "binary_units:" in result.output
 
 
+def test_show_binary_default_omits_pcode_opcode_list(tmp_path):
+    """Default rendering of a bin.fn block summary is `[N ops]` without
+    the per-opcode comma list — that part is noise at the program-level
+    view. The fixture's block contains a CALL + RETURN sequence; in
+    summary mode the block header shows the count `[2 ops]` only."""
+    _write_project(tmp_path)
+    result = _quod(tmp_path, "show", "--binary")
+    assert result.exit_code == 0, result.output
+    # Block summary header is there with op count.
+    assert "[2 ops]" in result.output
+    # But the opcodes themselves aren't named in the summary line.
+    assert "[2 ops: CALL" not in result.output
+
+
+def test_show_binary_detail_includes_pcode_opcode_list(tmp_path):
+    """--binary-detail brings the comma-separated opcode list back."""
+    _write_project(tmp_path)
+    result = _quod(tmp_path, "show", "--binary", "--binary-detail")
+    assert result.exit_code == 0, result.output
+    # With detail on, the opcodes are named in the block header.
+    assert "[2 ops: CALL, RETURN]" in result.output
+
+
+def test_show_binary_detail_off_explicit_matches_default(tmp_path):
+    """`--no-binary-detail` is the explicit form of the default; same
+    output as omitting the flag."""
+    _write_project(tmp_path)
+    a = _quod(tmp_path, "show", "--binary")
+    b = _quod(tmp_path, "show", "--binary", "--no-binary-detail")
+    assert a.exit_code == 0 and b.exit_code == 0
+    assert a.output == b.output
+
+
 # ----- quod fn ls --binary -----
 
 
