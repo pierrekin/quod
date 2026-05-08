@@ -288,6 +288,8 @@ def merge_program(
             jkey = ("z3", j.artifact_hash, j.body_smt_hash)
         elif j.kind == "derived":
             jkey = ("derived", j.analysis)
+        elif j.kind == "decompile_lift":
+            jkey = ("decompile_lift", j.decompile_text_sha256)
         else:
             jkey = (j.kind,)
         key = (eq.a_node_id, eq.b_node_id, eq.regime, jkey)

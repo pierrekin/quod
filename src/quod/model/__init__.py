@@ -25,6 +25,7 @@ from quod.model.base import (
 # Independent leaves.
 from quod.model.justifications import (
     BinaryProvenance,
+    DecompileLift,
     DerivedJustification,
     FamilyLowering,
     Justification,

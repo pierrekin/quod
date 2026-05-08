@@ -122,6 +122,43 @@ class BinaryProvenance(_Node):
         return data
 
 
+class DecompileLift(_Node):
+    """Justifies an Equivalence between a `BinFunction` and a Layer-A
+    `CFn` lifted from Ghidra's decompile output.
+
+    The CFn is produced by parsing `BinFunction.decompile_text` via
+    libclang and walking the resulting AST with the same translator
+    the C frontend uses for authored source. `decompile_text_sha256`
+    pins the input bytes — a re-run of the lift on the same bin.fn
+    must produce decompile_text whose hash matches, otherwise the
+    equivalence is invalidated (typically by a Ghidra version bump
+    that changed the decompile output).
+
+    Strictly weaker than the relational SMT proof
+    (`z3.bin_relational`): DecompileLift only attests "this CFn is
+    what Ghidra's decompiler said the binary was at this point in
+    time", not that Ghidra got the recovery right. The structural
+    transcription from the libclang AST to `c.*` nodes is the *same*
+    pass the source ingester runs, so that half is faithful by
+    construction (and shares its hazards). The weak link is the
+    decompiler's output itself.
+
+    A future provider can promote (axiom → witness) by proving
+    `bin.fn ~ lifted_cfn` relationally — a separate obligation that
+    consumes this equivalence as a starting point.
+    """
+    kind: Literal["decompile_lift"] = "decompile_lift"
+    decompile_text_sha256: str
+    note: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_default_metadata(self, handler, info):
+        data = handler(self)
+        if self.note is None:
+            data.pop("note", None)
+        return data
+
+
 class FamilyLowering(_Node):
     """Justifies a B→C equivalence by citing a named lowering rule
     (e.g. `c.for_general`) whose equivalence theorem was proved once,
@@ -158,6 +195,7 @@ Justification = Annotated[
         LiftEquivalence,
         FamilyLowering,
         BinaryProvenance,
+        DecompileLift,
     ],
     Field(discriminator="kind"),
 ]
