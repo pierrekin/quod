@@ -269,6 +269,118 @@ def test_real_ghidra_type_refs_bounded_by_signatures(ingested_program):
     assert len(unit.type_refs) < 50
 
 
+# --------------------------------------------------------------------
+# Relational POC: lift_v2.signature_binding + z3.bin_relational
+#
+# The very first end-to-end relational proof of bin↔src equivalence —
+# small int-arithmetic functions whose binary form (built with
+# `clang -O1`) stays in registers, so the v0 prover (no memory model,
+# no branches) can encode them and z3 can close the proof. See the
+# module docstring of `quod.predicate.binary_relational` for the v0
+# universe.
+# --------------------------------------------------------------------
+
+_RELATIONAL_POC_SOURCE = """\
+int ident(int x) { return x; }
+int add(int a, int b) { return a + b; }
+int affine(int x) { return 3 * x + 5; }
+"""
+
+
+@pytest.fixture(scope="module")
+def relational_poc_program(tmp_path_factory):
+    """Build the POC fixture at `-O1` (registers stay in registers,
+    no stack spills) and ingest both the C source and the resulting
+    `.so`. Run lift_v2.signature_binding so the program carries
+    explicit varnode↔param bindings.
+
+    `-O1` is intentional: at `-O0` clang emits a store-to-stack /
+    load-from-stack round-trip even for `return x;`, which the v0
+    prover doesn't model (memory is out of universe). `-O1` keeps
+    everything in registers and stays under the prover's whitelist.
+    """
+    from quod.ingest.binary import ingest_binary
+    from quod.predicate.binary_lift import derive_signature_bindings
+    clang = _need_clang()
+    work = tmp_path_factory.mktemp("rel_poc")
+    src = work / "poc.c"
+    src.write_text(_RELATIONAL_POC_SOURCE)
+    so = work / "libpoc.so"
+    subprocess.run(
+        [clang, "-O1", "-g", "-shared", "-fPIC", "-o", str(so), str(src)],
+        check=True, capture_output=True, text=True,
+    )
+    c_program = ingest_c(src)
+    program, _ = merge_program(Program(), c_program)
+    program = ingest_binary(so, program=program)
+
+    bindings = derive_signature_bindings(program)
+    program = program.model_copy(update={"signature_bindings": bindings})
+    return program
+
+
+def test_relational_poc_signature_bindings_emitted(relational_poc_program):
+    """lift_v2.signature_binding produces one binding per int-only
+    function in the POC. The 3 demo functions all qualify."""
+    program = relational_poc_program
+    names = {
+        f.name for f in program.functions if f.name in ("ident", "add", "affine")
+    }
+    assert names == {"ident", "add", "affine"}
+
+    sig_by_src_name: dict[str, object] = {}
+    for sb in program.signature_bindings:
+        src_fn = next(f for f in program.functions if f.id == sb.src_fn_id)
+        sig_by_src_name[src_fn.name] = sb
+    for name in ("ident", "add", "affine"):
+        assert name in sig_by_src_name, (
+            f"lift_v2 missed {name!r}; bindings: {sorted(sig_by_src_name)}"
+        )
+
+    # ABI-derived varnodes should mirror SysV: first int param at RDI
+    # (register-space offset 0x38), second at RSI (0x30), return at
+    # RAX (0x00).
+    add_sb = sig_by_src_name["add"]
+    assert add_sb.abi == "x86_64-sysv"
+    assert add_sb.param_bindings[0].varnode.offset == 0x38
+    assert add_sb.param_bindings[1].varnode.offset == 0x30
+    assert add_sb.return_binding.offset == 0x00
+
+
+def test_relational_poc_prover_proves_all_three(relational_poc_program, tmp_path):
+    """The end-to-end relational result: each (bin.fn, src.fn) pair
+    in the POC fixture is proven equivalent by z3.
+
+    If this test starts failing because `clang -O1` decided to use a
+    pcode op the v0 encoder doesn't handle (e.g. `lea` lowering
+    surfaces an `INT_LEFT` for the `*3` step that's already encodable,
+    or perhaps a SUBPIECE pattern that's beyond v0), the right fix is
+    to teach the encoder another opcode — not to dilute this test."""
+    if shutil_which := __import__("shutil").which("z3"):
+        pass
+    else:
+        pytest.skip("z3 binary not on PATH; needed to close the proof")
+
+    from quod.predicate.binary_relational import prove_all_bin_relational
+
+    program = relational_poc_program
+    results = prove_all_bin_relational(program, proofs_dir=tmp_path)
+    by_src_name: dict[str, object] = {}
+    for r in results:
+        src_fn = next(f for f in program.functions if f.id == r.src_fn_id)
+        by_src_name[src_fn.name] = r
+
+    failures = []
+    for name in ("ident", "add", "affine"):
+        r = by_src_name.get(name)
+        if r is None:
+            failures.append(f"{name}: no result")
+            continue
+        if r.status != "proven":
+            failures.append(f"{name}: status={r.status}, detail={r.detail}")
+    assert not failures, "\n".join(failures)
+
+
 def test_real_ghidra_multi_ingest_in_one_process(tmp_path_factory):
     """Regression for the JVM-multi-load issue (P0 in 06-polish.md).
 
