@@ -160,31 +160,35 @@ def test_show_default_includes_binary_units(tmp_path):
     assert "libdemo.so" in result.output
 
 
-def test_show_binary_filters_to_binary_units(tmp_path):
-    """--binary → other function-ish sections hidden, binary_units shown."""
+def test_show_binary_force_renders_section(tmp_path):
+    """`--binary` forces the section to render — non-empty case prints
+    contents (libdemo.so name shows up); empty case would print
+    `(none)` placeholder. Other sections still render per their
+    default rules."""
     _write_project(tmp_path)
     result = _quod(tmp_path, "show", "--binary")
     assert result.exit_code == 0, result.output
     assert "binary_units:" in result.output
     assert "libdemo.so" in result.output
-    # source_units hidden under --binary
-    assert "source_units:" not in result.output
 
 
-def test_show_source_hides_binary_units(tmp_path):
-    """--source → binary_units hidden too (parallel to functions)."""
+def test_show_no_binary_suppresses_binary_units(tmp_path):
+    """--no-binary explicitly hides the section even when populated."""
     _write_project(tmp_path)
-    result = _quod(tmp_path, "show", "--source")
+    result = _quod(tmp_path, "show", "--no-binary")
     assert result.exit_code == 0, result.output
-    assert "source_units:" in result.output
     assert "binary_units:" not in result.output
+    # other sections still render.
+    assert "source_units:" in result.output
 
 
-def test_show_source_and_binary_mutually_exclusive(tmp_path):
+def test_show_source_and_binary_compose(tmp_path):
+    """Pre-redesign mutex; now both render side by side."""
     _write_project(tmp_path)
     result = _quod(tmp_path, "show", "--source", "--binary")
-    assert result.exit_code == 2
-    assert "mutually exclusive" in result.output
+    assert result.exit_code == 0, result.output
+    assert "source_units:" in result.output
+    assert "binary_units:" in result.output
 
 
 # ----- quod fn ls --binary -----

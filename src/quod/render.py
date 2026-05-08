@@ -783,77 +783,208 @@ def _import_spans(imp) -> tuple:
     return tuple(spans)
 
 
-def format_program_lines(program: Program) -> Iterator[Line]:
+def format_program_lines(
+    program: Program,
+    *,
+    force_show: frozenset[str] = frozenset(),
+    hide: frozenset[str] = frozenset(),
+) -> Iterator[Line]:
+    """Render a Program as styled lines.
+
+    `force_show` is the set of section names the caller wants rendered
+    even when empty (rendered as `<section>: (none)`). `hide` is the
+    set the caller wants suppressed regardless of contents. A section
+    name not in either set follows the default rule: render iff
+    non-empty.
+
+    Section names match the Program field names: `wirables`,
+    `imports`, `constants`, `structs`, `enums`, `externs`, `traits`,
+    `impls`, `source_units`, `binary_units`, `structured_functions`,
+    `functions`, `edges`, `equivalences`, `signature_bindings`.
+    """
+    def _show(name: str, has_content: bool) -> tuple[bool, bool]:
+        # Returns (render_section, render_placeholder).
+        if name in hide:
+            return False, False
+        if name in force_show:
+            return True, not has_content
+        return has_content, False
+
+    def _placeholder_line(label: str) -> Line:
+        return Line(None, 4, (Span("(none)", "comment"),))
+
     yield Line(program, 0, (Span("program", "keyword"), Span(" {", "punct")))
-    if program.wirables:
+    rendered_any = False
+
+    if (show_it := _show("wirables", bool(program.wirables)))[0]:
+        rendered_any = True
         yield Line(None, 2, (Span("wirables:", "section"),))
-        for w in program.wirables:
-            label = f"{w.name}: {w.bound}" if w.bound else w.name
-            yield Line(None, 4, (Span(label, "type"),))
-    if program.imports:
+        if show_it[1]:
+            yield _placeholder_line("wirables")
+        else:
+            for w in program.wirables:
+                label = f"{w.name}: {w.bound}" if w.bound else w.name
+                yield Line(None, 4, (Span(label, "type"),))
+
+    if (show_it := _show("imports", bool(program.imports)))[0]:
+        rendered_any = True
         yield Line(None, 2, (Span("imports:", "section"),))
-        for imp in program.imports:
-            yield Line(None, 4, _import_spans(imp))
-    if program.constants:
+        if show_it[1]:
+            yield _placeholder_line("imports")
+        else:
+            for imp in program.imports:
+                yield Line(None, 4, _import_spans(imp))
+
+    if (show_it := _show("constants", bool(program.constants)))[0]:
+        rendered_any = True
         yield Line(None, 2, (Span("constants:", "section"),))
-        for c in program.constants:
-            yield _constant_line(c, 4)
-    if program.structs:
+        if show_it[1]:
+            yield _placeholder_line("constants")
+        else:
+            for c in program.constants:
+                yield _constant_line(c, 4)
+
+    if (show_it := _show("structs", bool(program.structs)))[0]:
+        rendered_any = True
         yield Line(None, 2, (Span("structs:", "section"),))
-        for sd in program.structs:
-            yield _struct_def_line(sd, 4)
-    if program.enums:
+        if show_it[1]:
+            yield _placeholder_line("structs")
+        else:
+            for sd in program.structs:
+                yield _struct_def_line(sd, 4)
+
+    if (show_it := _show("enums", bool(program.enums)))[0]:
+        rendered_any = True
         yield Line(None, 2, (Span("enums:", "section"),))
-        for ed in program.enums:
-            yield from _enum_def_lines(ed, 4)
-    if program.externs:
+        if show_it[1]:
+            yield _placeholder_line("enums")
+        else:
+            for ed in program.enums:
+                yield from _enum_def_lines(ed, 4)
+
+    if (show_it := _show("traits", bool(program.traits)))[0]:
+        rendered_any = True
+        yield Line(None, 2, (Span("traits:", "section"),))
+        if show_it[1]:
+            yield _placeholder_line("traits")
+        else:
+            for t in program.traits:
+                yield Line(t, 4, (
+                    Span("trait ", "keyword"), Span(t.name, "type"),
+                ))
+
+    if (show_it := _show("impls", bool(program.impls)))[0]:
+        rendered_any = True
+        yield Line(None, 2, (Span("impls:", "section"),))
+        if show_it[1]:
+            yield _placeholder_line("impls")
+        else:
+            for im in program.impls:
+                yield Line(im, 4, (
+                    Span("impl ", "keyword"),
+                    Span(im.trait, "type"),
+                    Span(" for ", "keyword"),
+                    Span(_format_type_short(im.for_type), "type"),
+                ))
+
+    if (show_it := _show("externs", bool(program.externs)))[0]:
+        rendered_any = True
         yield Line(None, 2, (Span("externs:", "section"),))
-        for ext in program.externs:
-            yield _extern_line(ext, 4)
-    if program.source_units:
+        if show_it[1]:
+            yield _placeholder_line("externs")
+        else:
+            for ext in program.externs:
+                yield _extern_line(ext, 4)
+
+    if (show_it := _show("source_units", bool(program.source_units)))[0]:
+        rendered_any = True
         yield Line(None, 2, (Span("source_units:", "section"),))
-        for unit in program.source_units:
-            yield from _c_unit_lines(unit, 4)
-    if program.binary_units:
+        if show_it[1]:
+            yield _placeholder_line("source_units")
+        else:
+            for unit in program.source_units:
+                yield from _c_unit_lines(unit, 4)
+
+    if (show_it := _show("binary_units", bool(program.binary_units)))[0]:
+        rendered_any = True
         yield Line(None, 2, (Span("binary_units:", "section"),))
-        for unit in program.binary_units:
-            yield from _bin_unit_lines(unit, 4)
-    if program.structured_functions:
+        if show_it[1]:
+            yield _placeholder_line("binary_units")
+        else:
+            for unit in program.binary_units:
+                yield from _bin_unit_lines(unit, 4)
+
+    if (show_it := _show(
+        "structured_functions", bool(program.structured_functions),
+    ))[0]:
+        rendered_any = True
         yield Line(None, 2, (Span("structured_functions:", "section"),))
-        for fn in program.structured_functions:
-            yield from format_function_lines(fn, indent=4)
-    if program.functions:
+        if show_it[1]:
+            yield _placeholder_line("structured_functions")
+        else:
+            for fn in program.structured_functions:
+                yield from format_function_lines(fn, indent=4)
+
+    if (show_it := _show("functions", bool(program.functions)))[0]:
+        rendered_any = True
         yield Line(None, 2, (Span("functions:", "section"),))
-        for fn in program.functions:
-            yield from format_function_lines(fn, indent=4)
-    if program.edges:
+        if show_it[1]:
+            yield _placeholder_line("functions")
+        else:
+            for fn in program.functions:
+                yield from format_function_lines(fn, indent=4)
+
+    if (show_it := _show("edges", bool(program.edges)))[0]:
+        rendered_any = True
         yield Line(None, 2, (Span("edges:", "section"),))
-        for e in program.edges:
-            yield Line(e, 4, (
-                Span(e.source, "local"),
-                Span(" -> ", "op"),
-                Span(e.target, "local"),
-            ))
-    if program.equivalences:
+        if show_it[1]:
+            yield _placeholder_line("edges")
+        else:
+            for e in program.edges:
+                yield Line(e, 4, (
+                    Span(e.source, "local"),
+                    Span(" -> ", "op"),
+                    Span(e.target, "local"),
+                ))
+
+    if (show_it := _show("equivalences", bool(program.equivalences)))[0]:
+        rendered_any = True
         yield Line(None, 2, (Span("equivalences:", "section"),))
-        for eq in program.equivalences:
-            spans: list[Span] = [
-                Span(eq.a_node_id, "local"),
-                Span(" ~ ", "op"),
-                Span(eq.b_node_id, "local"),
-            ]
-            meta = format_equivalence_metadata(eq)
-            if meta:
-                spans.append(Span(meta, "comment"))
-            yield Line(eq, 4, tuple(spans))
-    if (
-        not program.constants and not program.functions
-        and not program.externs and not program.structs
-        and not program.enums and not program.imports
-        and not program.source_units and not program.binary_units
-        and not program.structured_functions
-        and not program.edges and not program.equivalences
-    ):
+        if show_it[1]:
+            yield _placeholder_line("equivalences")
+        else:
+            for eq in program.equivalences:
+                spans: list[Span] = [
+                    Span(eq.a_node_id, "local"),
+                    Span(" ~ ", "op"),
+                    Span(eq.b_node_id, "local"),
+                ]
+                meta = format_equivalence_metadata(eq)
+                if meta:
+                    spans.append(Span(meta, "comment"))
+                yield Line(eq, 4, tuple(spans))
+
+    if (show_it := _show(
+        "signature_bindings", bool(program.signature_bindings),
+    ))[0]:
+        rendered_any = True
+        yield Line(None, 2, (Span("signature_bindings:", "section"),))
+        if show_it[1]:
+            yield _placeholder_line("signature_bindings")
+        else:
+            for sb in program.signature_bindings:
+                params_str = ", ".join(
+                    f"{pb.param_name}@(reg+0x{pb.varnode.offset:x})"
+                    for pb in sb.param_bindings
+                )
+                yield Line(sb, 4, (
+                    Span(sb.src_fn_id, "local"),
+                    Span(" -> ", "op"),
+                    Span(sb.bin_fn_id, "local"),
+                    Span(f" [{sb.abi}: {params_str}]", "comment"),
+                ))
+
+    if not rendered_any:
         yield Line(None, 2, (Span("(empty)", "comment"),))
     yield Line(None, 0, (Span("}", "punct"),))
 
