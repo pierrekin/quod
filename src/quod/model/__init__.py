@@ -245,6 +245,8 @@ from quod.model.traits import (
 # Composition + cross-layer relations — depends on types, claims,
 # justifications.
 from quod.model.relations import (
+    BinSrcParamBinding,
+    BinSrcSignatureBinding,
     Equivalence,
     Import,
     ProvenanceEdge,

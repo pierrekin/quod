@@ -5,6 +5,12 @@ glue together imported modules); `ProvenanceEdge` and `Equivalence`
 describe cross-layer relations (how nodes from layer A, B, C relate to
 each other). Both are program-level metadata and stay together because
 they share the same "asserts something between two parties" shape.
+
+`BinSrcSignatureBinding` describes the structural binding between a
+binary function and a source function — which p-code varnode holds
+which source parameter, which holds the return. It's the smallest
+useful slice of "decompile lift" — pure ABI-driven, no decompile-text
+re-parse — and feeds the relational SMT prover (`z3.bin_relational`).
 """
 
 from __future__ import annotations
@@ -16,6 +22,7 @@ from pydantic import Field, field_validator, model_serializer
 from quod.model.base import _Node
 from quod.model.claims import Enforcement, Regime
 from quod.model.justifications import Justification
+from quod.model.layer_a_bin import BinVarnode
 from quod.model.types import Type
 
 
@@ -121,3 +128,49 @@ class Equivalence(_Node):
         if self.domain is None:
             data.pop("domain", None)
         return data
+
+
+class BinSrcParamBinding(_Node):
+    """Pairs one binary p-code varnode with one source-function parameter.
+
+    The varnode is whatever the ABI says: x86-64 SysV puts the first int
+    param in EDI/RDI, the second in ESI/RSI, and so on; the mapper
+    consults the source-side parameter type to pick a width (4 bytes for
+    i32, 8 for i64). `param_name` is the source-side `Param.name` —
+    callers resolve it against the paired source `Function`.
+
+    No `kind` discriminator: this is a value type embedded in
+    `BinSrcSignatureBinding.param_bindings`, not a graph leaf addressed
+    by id.
+    """
+    varnode: BinVarnode
+    param_name: str
+
+
+class BinSrcSignatureBinding(_Node):
+    """Structural binding between a `BinFunction` and a `Function`.
+
+    Records which p-code varnode holds each source parameter (under the
+    target ABI) and which holds the return value. Derived purely from
+    the ABI rules + source signature — no decompile-text re-parse, no
+    type recovery, no body inspection. The narrowest useful slice of
+    "decompile lift": enough structure for a relational SMT prover to
+    encode `(bin.fn, src.fn)` as one query, no more.
+
+    `abi` names the calling convention (today: `"x86_64-sysv"`); future
+    targets add their own. `param_bindings` and `return_binding` use
+    the same `BinVarnode` triple shape as elsewhere in `layer_a_bin`,
+    so the binding can be matched against actual p-code operands.
+
+    A signature binding is *axiomatic* in the same sense as
+    `BinaryProvenance` — it asserts the ABI lowering matches what the
+    binary actually does at the call boundary. The relational prover
+    then upgrades pairs (bin.fn, src.fn) to witness equivalence under
+    that binding.
+    """
+    kind: Literal["bin.signature_binding"] = "bin.signature_binding"
+    bin_fn_id: str
+    src_fn_id: str
+    abi: str
+    param_bindings: tuple[BinSrcParamBinding, ...] = ()
+    return_binding: BinVarnode

@@ -259,6 +259,16 @@ def merge_program(
             edges.append(e)
             edges_seen.add(key)
 
+    # Signature bindings dedup by (bin_fn_id, src_fn_id, abi). Re-running
+    # lift_v2.signature_binding on the same program is idempotent.
+    sig_seen: set = set()
+    signature_bindings = []
+    for sb in (*existing.signature_bindings, *new.signature_bindings):
+        key = (sb.bin_fn_id, sb.src_fn_id, sb.abi)
+        if key not in sig_seen:
+            signature_bindings.append(sb)
+            sig_seen.add(key)
+
     eq_seen: set = set()
     equivalences = []
     for eq in (*existing.equivalences, *new.equivalences):
@@ -297,6 +307,7 @@ def merge_program(
         binary_units=tuple(binary_units.values()),
         edges=tuple(edges),
         equivalences=tuple(equivalences),
+        signature_bindings=tuple(signature_bindings),
     )
     return merged, tuple(warnings)
 

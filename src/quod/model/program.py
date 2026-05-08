@@ -17,7 +17,12 @@ from quod.model.base import _Node
 from quod.model.expressions import StringConstant
 from quod.model.layer_a import CUnit
 from quod.model.layer_a_bin import BinUnit
-from quod.model.relations import Equivalence, Import, ProvenanceEdge
+from quod.model.relations import (
+    BinSrcSignatureBinding,
+    Equivalence,
+    Import,
+    ProvenanceEdge,
+)
 from quod.model.top_level import (
     EnumDef,
     ExternFunction,
@@ -47,6 +52,13 @@ class _ProgramBase(_Node):
     # programs that don't yet carry provenance round-trip unchanged.
     edges: tuple[ProvenanceEdge, ...] = ()
     equivalences: tuple[Equivalence, ...] = ()
+    # Structural bindings between binary and source functions. Each
+    # entry pairs a `BinFunction` with a `Function` and records the
+    # ABI-derived varnode↔param mapping; produced by
+    # `lift_v2.signature_binding`, consumed by `z3.bin_relational`.
+    # Empty for programs with no binary side or where lift_v2 hasn't
+    # been run yet.
+    signature_bindings: tuple[BinSrcSignatureBinding, ...] = ()
     # Layer-A subtree: original source-language programs preserved as
     # quod nodes (one CUnit per ingested file). Inert — no validation,
     # no codegen — but addressable by stable IDs so cross-layer
@@ -107,6 +119,8 @@ class _ProgramBase(_Node):
             data.pop("edges", None)
         if not self.equivalences:
             data.pop("equivalences", None)
+        if not self.signature_bindings:
+            data.pop("signature_bindings", None)
         if not self.source_units:
             data.pop("source_units", None)
         if not self.binary_units:
