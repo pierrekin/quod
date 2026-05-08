@@ -37,6 +37,7 @@ from quod.model.expressions import (
 )
 from quod.model.justifications import (
     BinaryProvenance,
+    DecompileLift,
     DerivedJustification,
     FamilyLowering,
     Justification,
@@ -544,6 +545,8 @@ def _format_justification(j: Justification) -> str:
             return f"family_lowering({r}{tail})"
         case BinaryProvenance(binary_symbol=sym, source_evidence=ev, binary_sha256=h):
             return f"binary_provenance({sym}, evidence={ev}, sha256={h[:12]})"
+        case DecompileLift(decompile_text_sha256=h):
+            return f"decompile_lift(sha256={h[:12]})"
     raise ValueError(f"unhandled justification: {j!r}")
 
 
