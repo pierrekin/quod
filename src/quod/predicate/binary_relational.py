@@ -66,9 +66,11 @@ from quod.model import (
     I16Type,
     I32Type,
     I64Type,
+    If,
     IntLit,
     IsizeType,
     IntType,
+    Not,
     ParamRef,
     Program,
     ReturnExpr,
@@ -122,26 +124,42 @@ _HANDLED_OPCODES = frozenset({
     "INT_NEGATE", "INT_2COMP",
     "INT_AND", "INT_OR", "INT_XOR",
     "INT_SEXT", "INT_ZEXT", "SUBPIECE", "CAST",
+    # Comparison ops produce a 1-bit BV `#b1` / `#b0`. Promoted from
+    # silently-skipped (v0) to handled (v0.1) because branch
+    # conditions consume their output. EFLAGS-only-use cases are
+    # still benign: the bound 1-bit BV just doesn't appear in the
+    # return path.
+    "INT_EQUAL", "INT_NOTEQUAL",
+    "INT_LESS", "INT_SLESS",
+    "INT_LESSEQUAL", "INT_SLESSEQUAL",
+    # Boolean ops. Inputs and outputs are guaranteed to be 0 or 1 in
+    # the declared width (Ghidra's pcode semantics). Bitwise BV ops
+    # give the correct logical answer on {0, 1} operands.
+    "BOOL_NEGATE", "BOOL_AND", "BOOL_OR", "BOOL_XOR",
 })
-_TERMINATOR_OPCODES = frozenset({"RETURN"})
+# Block terminators. A block ending in any of these has its
+# successor-edge graph followed by the path-walker.
+_TERMINATOR_OPCODES = frozenset({"RETURN", "BRANCH", "CBRANCH"})
 _SILENTLY_SKIPPED_OPCODES = frozenset({
     "LOAD", "STORE", "INDIRECT", "PIECE",
-    # x86 EFLAGS tracking. Ghidra synthesizes carry/overflow bits and
-    # comparison results to keep the flag varnodes in lockstep with
-    # the native instruction's effects, but for the v0 universe
-    # (straight-line arithmetic, no branching) the flags don't feed
-    # the return path. Silently skip means: don't write any cell. If
-    # a later op *does* read a flag-output varnode, the cell map
-    # lazy-declares a fresh symbolic, which makes the relational goal
-    # depend on an unknown — z3 returns "unknown" rather than a
-    # silently-wrong proof. So the silent skip is sound: it can never
-    # turn a real disagreement into a false proof, only into "unknown".
+    # x86 EFLAGS tracking. Ghidra synthesizes carry/overflow bits to
+    # keep the flag varnodes in lockstep with the native
+    # instruction's effects. They don't feed the value-path in our
+    # v0.1 universe; silent skip means: don't write any cell. If a
+    # later op *does* read a flag-output varnode, the cell map
+    # lazy-declares a fresh symbolic, making the goal depend on an
+    # unknown — z3 returns "unknown" rather than a silently-wrong
+    # proof. The skip is sound: it can never turn a real
+    # disagreement into a false proof, only into "unknown".
     "INT_CARRY", "INT_SCARRY", "INT_SBORROW",
-    "INT_EQUAL", "INT_NOTEQUAL",
-    "INT_LESS", "INT_SLESS", "INT_LESSEQUAL", "INT_SLESSEQUAL",
     # POPCOUNT is x86's parity-flag input (PF = parity of low 8 bits
-    # of the result). Same flag-tracking story as the comparisons above.
+    # of the result). Same flag-tracking story.
     "POPCOUNT",
+})
+# Out-of-universe ops we know about by name — bail loud rather than
+# silently treating as "unhandled."
+_REFUSED_OPCODES = frozenset({
+    "BRANCHIND", "CALL", "CALLIND", "CALLOTHER",
 })
 
 
@@ -263,21 +281,85 @@ def _src_return_term_for(fn: Function, state: _SrcState) -> str:
     if not isinstance(body, Block):
         raise _UnsupportedConstruct(
             f"function {fn.name!r} body is not a Block "
-            f"(got {type(body).__name__}); v0 source universe is "
-            f"single-statement Block(ReturnExpr(...))"
+            f"(got {type(body).__name__})"
         )
-    if len(body.stmts) != 1:
+    return _src_stmts_to_return_term(body.stmts, fn, state)
+
+
+def _src_stmts_to_return_term(stmts, fn: Function, state: _SrcState) -> str:
+    """Walk a stmt list and return the SMT term for the function's
+    eventual return value.
+
+    Two patterns supported in v0.1:
+      - `ReturnExpr(expr)` directly returns the encoded expression.
+      - `If(cond, then_body, else_body)` produces an ITE; either or
+        both branches may be empty (early-return idiom — clang's
+        usual output for `if (c) return x; return y;`). When a
+        branch is empty, the post-If fallthrough provides that arm's
+        return term.
+
+    Anything else (Let, Assign, While, For, ExprStmt with unknown
+    side effects, …) bails with `_UnsupportedConstruct`."""
+    if not stmts:
         raise _UnsupportedConstruct(
-            f"function {fn.name!r} body has {len(body.stmts)} statements; "
-            f"v0 only encodes a single ReturnExpr"
+            f"function {fn.name!r}: stmt sequence has no terminating return"
         )
-    only = body.stmts[0]
-    if not isinstance(only, ReturnExpr):
-        raise _UnsupportedConstruct(
-            f"function {fn.name!r} body's only statement is "
-            f"{type(only).__name__}; v0 needs ReturnExpr"
-        )
-    return _src_expr_to_smt(only.value, fn, state)
+    head, *rest = stmts
+    if isinstance(head, ReturnExpr):
+        return _src_expr_to_smt(head.value, fn, state)
+    if isinstance(head, If):
+        cond_term = _src_predicate_to_smt(head.cond, fn, state)
+        then_stmts = list(head.then_body.stmts)
+        else_stmts = list(head.else_body.stmts)
+        # The post-If tail acts as the fall-through arm when one of
+        # the If's branches is empty. We compute it lazily; if both
+        # branches terminate, we never look at it.
+        def tail_term() -> str:
+            return _src_stmts_to_return_term(rest, fn, state)
+        if then_stmts and else_stmts:
+            then_t = _src_stmts_to_return_term(then_stmts, fn, state)
+            else_t = _src_stmts_to_return_term(else_stmts, fn, state)
+            return f"(ite {cond_term} {then_t} {else_t})"
+        if then_stmts and not else_stmts:
+            then_t = _src_stmts_to_return_term(then_stmts, fn, state)
+            return f"(ite {cond_term} {then_t} {tail_term()})"
+        if else_stmts and not then_stmts:
+            else_t = _src_stmts_to_return_term(else_stmts, fn, state)
+            return f"(ite {cond_term} {tail_term()} {else_t})"
+        # Both branches empty — degenerate If, skip and continue.
+        return tail_term()
+    raise _UnsupportedConstruct(
+        f"function {fn.name!r}: unsupported stmt {type(head).__name__} "
+        f"in v0.1 universe (Let/Assign/loops not yet handled)"
+    )
+
+
+# Source comparison BinOps and their bitvector-comparison SMT names.
+_SRC_CMP_OP: dict[str, str] = {
+    "slt": "bvslt", "sle": "bvsle", "sgt": "bvsgt", "sge": "bvsge",
+    "ult": "bvult", "ule": "bvule", "ugt": "bvugt", "uge": "bvuge",
+    "eq":  "=",     "ne":  "distinct",
+}
+
+
+def _src_predicate_to_smt(expr, fn: Function, state: _SrcState) -> str:
+    """Encode an i1-typed source expression as a Bool SMT term (for
+    use as the condition in an `(ite ...)` or as a path condition).
+
+    Branch conditions can also be raw arithmetic expressions whose
+    truth is "non-zero," but the C ingester always wraps comparison
+    BinOps as the cond; this implementation handles only those.
+    Other shapes raise `_UnsupportedConstruct`."""
+    if isinstance(expr, BinOp) and expr.op in _SRC_CMP_OP:
+        smt_op = _SRC_CMP_OP[expr.op]
+        l = _src_expr_to_smt(expr.lhs, fn, state)
+        r = _src_expr_to_smt(expr.rhs, fn, state)
+        return f"({smt_op} {l} {r})"
+    raise _UnsupportedConstruct(
+        f"can't encode predicate {type(expr).__name__} "
+        f"(op={getattr(expr, 'op', None)!r}) for v0.1; "
+        f"branches must use comparison BinOps as their condition"
+    )
 
 
 def _src_expr_to_smt(expr, fn: Function, state: _SrcState) -> str:
@@ -297,8 +379,12 @@ def _src_expr_to_smt(expr, fn: Function, state: _SrcState) -> str:
             rs = _src_expr_to_smt(r, fn, state)
             smt_op = {"add": "bvadd", "sub": "bvsub", "mul": "bvmul"}[op]
             return f"({smt_op} {ls} {rs})"
+        case Not(operand=op):
+            # `!x` on i1: lift to BV by asserting the inner is zero.
+            inner_bool = _src_predicate_to_smt(op, fn, state)
+            return f"(ite {inner_bool} (_ bv0 1) (_ bv1 1))"
     raise _UnsupportedConstruct(
-        f"can't encode source expression {type(expr).__name__} for v0"
+        f"can't encode source expression {type(expr).__name__} for v0.1"
     )
 
 
@@ -406,6 +492,49 @@ def _encode_op_body(op: BinPCodeOp, state: _BinState) -> str:
             lo = offset_bytes * 8
             hi = lo + out_bits - 1
             return f"((_ extract {hi} {lo}) {value})"
+        case "INT_EQUAL":
+            # Comparison ops produce a boolean varnode whose width is
+            # whatever Ghidra declared (typically 1 byte = 8 bits on
+            # x86-64). The result is 0 or 1 in that width — same value,
+            # zero-extended from the logical 1-bit truth.
+            return (
+                f"(ite (= {inputs[0]} {inputs[1]}) "
+                f"(_ bv1 {out_bits}) (_ bv0 {out_bits}))"
+            )
+        case "INT_NOTEQUAL":
+            return (
+                f"(ite (distinct {inputs[0]} {inputs[1]}) "
+                f"(_ bv1 {out_bits}) (_ bv0 {out_bits}))"
+            )
+        case "INT_LESS":
+            return (
+                f"(ite (bvult {inputs[0]} {inputs[1]}) "
+                f"(_ bv1 {out_bits}) (_ bv0 {out_bits}))"
+            )
+        case "INT_LESSEQUAL":
+            return (
+                f"(ite (bvule {inputs[0]} {inputs[1]}) "
+                f"(_ bv1 {out_bits}) (_ bv0 {out_bits}))"
+            )
+        case "INT_SLESS":
+            return (
+                f"(ite (bvslt {inputs[0]} {inputs[1]}) "
+                f"(_ bv1 {out_bits}) (_ bv0 {out_bits}))"
+            )
+        case "INT_SLESSEQUAL":
+            return (
+                f"(ite (bvsle {inputs[0]} {inputs[1]}) "
+                f"(_ bv1 {out_bits}) (_ bv0 {out_bits}))"
+            )
+        case "BOOL_NEGATE":
+            (a,) = inputs
+            return f"(bvxor {a} (_ bv1 {out_bits}))"
+        case "BOOL_AND":
+            return f"(bvand {inputs[0]} {inputs[1]})"
+        case "BOOL_OR":
+            return f"(bvor {inputs[0]} {inputs[1]})"
+        case "BOOL_XOR":
+            return f"(bvxor {inputs[0]} {inputs[1]})"
     raise _UnsupportedConstruct(f"unhandled opcode {op.opcode!r}")
 
 
@@ -413,6 +542,198 @@ class _UnsupportedConstruct(Exception):
     """Raised by encoders when they encounter something outside the v0
     universe. The caller catches and converts to status='unknown' with
     the exception's message as the detail."""
+
+
+# ---------- Path-walker (multi-block, branch-aware) ----------
+
+def _walk_bin_paths(
+    bin_fn: BinFunction,
+    binding: BinSrcSignatureBinding,
+    state: _BinState,
+) -> list[tuple[str, str]]:
+    """DFS over the binary function's CFG, collecting one
+    `(path_condition, return_term)` per execution path that reaches
+    `RETURN`.
+
+    Position-aware: a "position" is `(bb_id, op_index)`, so a CBRANCH
+    whose target is within the SAME basic block (clang -O1's
+    common shape on x86-64) is handled the same way as one that
+    crosses to a sibling block. Successors-based traversal only
+    kicks in when a block exhausts its ops.
+
+    Per-path state isolation: cell-map snapshots are taken before
+    branching and restored when the recursion unwinds. The shared
+    `decls`/`asserts` lists accumulate across all paths because every
+    fresh SMT name is unique (the next_id counter is shared).
+
+    Loop detection: each (bb_id, op_index) may be visited at most
+    once per path. The visited set is passed by value (frozenset)
+    so siblings don't see each other's history.
+    """
+    bb_by_id = {bb.id: bb for bb in bin_fn.basic_blocks}
+
+    # Map each pcode op's source address to its (bb_id, op_index) so
+    # branch targets in `ram` space resolve to walker positions.
+    # Multiple ops can share a source_address (Ghidra emits several
+    # pcode ops per native instruction); the FIRST op at that
+    # address is the natural jump target.
+    address_to_pos: dict[int, tuple[str, int]] = {}
+    for bb in bin_fn.basic_blocks:
+        for i, op in enumerate(bb.pcode_ops):
+            address_to_pos.setdefault(op.source_address, (bb.id, i))
+
+    results: list[tuple[str, str]] = []
+
+    def lookup_target(vn: BinVarnode) -> tuple[str, int] | None:
+        """Resolve a CBRANCH/BRANCH target varnode to a walker
+        position. Today only `ram` and `const` jumps are supported;
+        register-indirect and stack jumps surface as None."""
+        if vn.space not in ("ram", "const"):
+            return None
+        return address_to_pos.get(vn.offset)
+
+    def visit(
+        bb_id: str, op_index: int,
+        path_cond: str, visited: frozenset[tuple[str, int]],
+    ) -> None:
+        pos = (bb_id, op_index)
+        if pos in visited:
+            raise _UnsupportedConstruct(
+                f"loop detected: re-entered position {bb_id}@{op_index} "
+                f"along the same path"
+            )
+        visited = visited | {pos}
+
+        bb = bb_by_id[bb_id]
+        ops = bb.pcode_ops
+        i = op_index
+        while i < len(ops):
+            op = ops[i]
+            if op.opcode in _REFUSED_OPCODES:
+                raise _UnsupportedConstruct(
+                    f"opcode {op.opcode!r} not in v0.1 universe "
+                    f"(at 0x{op.source_address:x})"
+                )
+            if op.opcode == "RETURN":
+                ret_term = state.read(binding.return_binding)
+                results.append((path_cond, ret_term))
+                return
+            if op.opcode == "BRANCH":
+                target = lookup_target(op.inputs[0]) if op.inputs else None
+                if target is None:
+                    raise _UnsupportedConstruct(
+                        f"BRANCH at 0x{op.source_address:x} has "
+                        f"unresolved target"
+                    )
+                visit(target[0], target[1], path_cond, visited)
+                return
+            if op.opcode == "CBRANCH":
+                if len(op.inputs) < 2:
+                    raise _UnsupportedConstruct(
+                        f"CBRANCH at 0x{op.source_address:x} has "
+                        f"{len(op.inputs)} inputs (expected 2)"
+                    )
+                cond_vn = op.inputs[1]
+                cond_bv = _input_term(cond_vn, state)
+                cond_bool = f"(distinct {cond_bv} (_ bv0 {cond_vn.size * 8}))"
+
+                target = lookup_target(op.inputs[0])
+                if target is None:
+                    raise _UnsupportedConstruct(
+                        f"CBRANCH at 0x{op.source_address:x} target "
+                        f"{op.inputs[0].space}:0x{op.inputs[0].offset:x} "
+                        f"resolves to no walker position"
+                    )
+
+                # False arm starts at the position physically after
+                # the CBRANCH: another op in the same block if there
+                # is one (clang -O1's intra-block branching shape),
+                # OR a sibling block reached via a "false" /
+                # "fallthrough" edge (the synthetic / clean
+                # inter-block shape).
+                if i + 1 < len(ops):
+                    false_pos: tuple[str, int] | None = (bb_id, i + 1)
+                else:
+                    false_edge = next(
+                        (e for e in bb.successors
+                         if e.edge_kind in ("false", "fallthrough")),
+                        None,
+                    )
+                    if false_edge is None or false_edge.successor_id not in bb_by_id:
+                        raise _UnsupportedConstruct(
+                            f"CBRANCH at 0x{op.source_address:x} has no "
+                            f"reachable false-arm position"
+                        )
+                    false_pos = (false_edge.successor_id, 0)
+
+                # Snapshot cell map; walk true arm first, restore,
+                # walk false arm.
+                snap = (dict(state.cell_term), dict(state.cell_bits))
+                visit(
+                    target[0], target[1],
+                    _conj(path_cond, cond_bool),
+                    visited,
+                )
+                state.cell_term, state.cell_bits = (
+                    dict(snap[0]), dict(snap[1]),
+                )
+                visit(
+                    false_pos[0], false_pos[1],
+                    _conj(path_cond, f"(not {cond_bool})"),
+                    visited,
+                )
+                state.cell_term, state.cell_bits = snap[0], snap[1]
+                return
+
+            _emit_op_assert(state, op)
+            i += 1
+
+        # Ops exhausted without a terminator. Try a single fallthrough
+        # successor.
+        fallthrough = [
+            e for e in bb.successors
+            if e.edge_kind in ("fallthrough", "unconditional", "call_return")
+        ]
+        if len(fallthrough) == 1:
+            target_id = fallthrough[0].successor_id
+            if target_id not in bb_by_id:
+                raise _UnsupportedConstruct(
+                    f"fallthrough target {target_id} not in this function"
+                )
+            visit(target_id, 0, path_cond, visited)
+            return
+        raise _UnsupportedConstruct(
+            f"block at 0x{bb.start_address:x} exhausted without a "
+            f"terminator and {len(fallthrough)} fallthrough successors"
+        )
+
+    visit(bin_fn.basic_blocks[0].id, 0, "true", frozenset())
+    return results
+
+
+def _conj(a: str, b: str) -> str:
+    """Bool conjunction with simple identity simplification — `(and
+    true x)` collapses to `x`, etc. Keeps the generated SMT readable."""
+    if a == "true":
+        return b
+    if b == "true":
+        return a
+    if a == "false" or b == "false":
+        return "false"
+    return f"(and {a} {b})"
+
+
+def _fold_paths_to_ite(paths: list[tuple[str, str]]) -> str:
+    """Fold a list of `(path_cond, return_term)` tuples into a
+    nested ITE chain. The last path becomes the unconditional default
+    — this is sound when the path conditions are mutually exclusive
+    and exhaustive (the guarantee that follows from a well-formed CFG
+    walked via `_walk_bin_paths`)."""
+    if len(paths) == 1:
+        return paths[0][1]
+    head_cond, head_ret = paths[0]
+    rest = _fold_paths_to_ite(paths[1:])
+    return f"(ite {head_cond} {head_ret} {rest})"
 
 
 # ---------- Top-level: encode one binding, run z3 ----------
@@ -479,37 +800,20 @@ def _encode_binding(
         bin_state.cell_term[cell] = full
         bin_state.cell_bits[cell] = reg_bits
 
-    # Walk pcode in declaration order. For v0, accept any number of
-    # blocks but stop at the first RETURN (multi-return functions
-    # would need path encoding — out of scope here).
+    # Multi-path walk from entry block. Each (path_cond, return_term)
+    # tuple captures one execution path's final RETURN. Mutually-
+    # exclusive path conditions guarantee well-defined ITE folding
+    # at the end.
     if not bin_fn.basic_blocks:
         raise _UnsupportedConstruct(
             f"binary function {bin_fn.demangled_name!r} has no basic blocks"
         )
-    saw_return = False
-    for bb in bin_fn.basic_blocks:
-        for op in bb.pcode_ops:
-            if op.opcode in _TERMINATOR_OPCODES:
-                saw_return = True
-                break
-            _emit_op_assert(bin_state, op)
-        if saw_return:
-            break
-    if not saw_return:
+    paths = _walk_bin_paths(bin_fn, binding, bin_state)
+    if not paths:
         raise _UnsupportedConstruct(
-            f"binary function {bin_fn.demangled_name!r} pcode never reaches a RETURN"
+            f"binary function {bin_fn.demangled_name!r} has no return paths"
         )
-
-    # Look up the binary's return value at function exit. We read
-    # through the cell map, which handles register aliasing — if the
-    # binary wrote RAX:8 but the source returns int (32 bits), we
-    # extract the low 32 bits at the return-binding width.
-    try:
-        bin_return_term = bin_state.read(binding.return_binding)
-    except _UnsupportedConstruct as e:
-        raise _UnsupportedConstruct(
-            f"return-binding read failed: {e}"
-        )
+    bin_return_term = _fold_paths_to_ite(paths)
 
     lines: list[str] = []
     lines.append(

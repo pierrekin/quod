@@ -284,6 +284,7 @@ _RELATIONAL_POC_SOURCE = """\
 int ident(int x) { return x; }
 int add(int a, int b) { return a + b; }
 int affine(int x) { return 3 * x + 5; }
+int clamp_low(int x) { if (x < 0) return 0; return x; }
 """
 
 
@@ -411,6 +412,37 @@ def test_relational_poc_prover_proves_all_three(relational_poc_program, tmp_path
         if r.status != "proven":
             failures.append(f"{name}: status={r.status}, detail={r.detail}")
     assert not failures, "\n".join(failures)
+
+
+def test_relational_poc_prover_proves_branched_clamp_low(relational_poc_program, tmp_path):
+    """v0.1 branch encoder. `clamp_low` has a single `if (x < 0)
+    return 0;` early-return; clang -O1 lowers to `cmp + cmov` or
+    `cmp + jge` depending on the precise rewrite. The pcode walker
+    handles both variants (the cmov path is straight-line + a
+    select-shaped INT_SLESS-driven COPY; the jge path is a real
+    CBRANCH). Either way, z3 should close the proof.
+
+    If this test fails because clang chose a pcode-op shape the
+    encoder doesn't yet handle (e.g. CMOV → conditional COPY with a
+    flag input we don't track), the right fix is to teach the
+    encoder another shape — not to dilute the test."""
+    if not __import__("shutil").which("z3"):
+        pytest.skip("z3 binary not on PATH; needed to close the proof")
+
+    from quod.predicate.binary_relational import prove_all_bin_relational
+
+    program = relational_poc_program
+    results = prove_all_bin_relational(program, proofs_dir=tmp_path)
+    by_src_name: dict[str, object] = {}
+    for r in results:
+        src_fn = next(f for f in program.functions if f.id == r.src_fn_id)
+        by_src_name[src_fn.name] = r
+
+    r = by_src_name.get("clamp_low")
+    assert r is not None, "no relational result for clamp_low"
+    assert r.status == "proven", (
+        f"clamp_low: status={r.status}, detail={r.detail}"
+    )
 
 
 def test_binary_only_ingest_produces_compilable_layer_c_function(tmp_path):

@@ -366,3 +366,255 @@ def test_two_pairs_each_proven_independently(tmp_path):
     results = prove_all_bin_relational(prog, proofs_dir=tmp_path)
     assert len(results) == 2
     assert {r.status for r in results} == {"proven"}
+
+
+# ---------- Branch encoding (v0.1) ----------
+
+# Helpers for branched functions: we model `if (x < 0) return -x; return x;`
+# as three basic blocks: entry (compare + CBRANCH), then-arm
+# (negate + RETURN), and else-arm (RETURN). Successor edges tag the
+# CBRANCH's two arms.
+
+from quod.model import BinBlockEdge, If
+
+
+def _bb_with_succ(
+    *ops: BinPCodeOp,
+    addr: int = 0x401000,
+    successors: tuple[BinBlockEdge, ...] = (),
+    bb_id: str | None = None,
+) -> BinBasicBlock:
+    bb = BinBasicBlock(
+        start_address=addr,
+        end_address=addr + len(ops) * 4,
+        pcode_ops=tuple(ops),
+        successors=successors,
+    )
+    if bb_id is not None:
+        bb = bb.model_copy(update={"id": bb_id})
+    return bb
+
+
+def test_branch_function_proves_under_explicit_else(tmp_path):
+    """`int sign_only(int x) { if (x < 0) return -1; else return 1; }`.
+    Both arms terminate explicitly; the source encoder produces an
+    ITE directly; the binary side has a single CBRANCH between two
+    return blocks."""
+    src = Function(
+        name="sign_only",
+        params=(Param(name="x", type=I32Type()),),
+        return_type=I32Type(),
+        body=Block(stmts=(If(
+            cond=BinOp(op="slt", lhs=ParamRef(name="x"),
+                       rhs=IntLit(type=I32Type(), value=0)),
+            then_body=Block(stmts=(ReturnExpr(value=IntLit(
+                type=I32Type(), value=-1,
+            )),)),
+            else_body=Block(stmts=(ReturnExpr(value=IntLit(
+                type=I32Type(), value=1,
+            )),)),
+        ),)),
+    )
+
+    # Synthetic pcode: entry block does INT_SLESS into a 1-bit
+    # cond, then CBRANCH to "then" if true; else fallthrough to
+    # "else". Both arms write a constant to RAX and RETURN.
+    cond_var = BinVarnode(space="unique", offset=0x100, size=1)
+    entry = _bb_with_succ(
+        BinPCodeOp(
+            opcode="INT_SLESS",
+            inputs=(_rdi(), _const(0)),
+            output=cond_var,
+            source_address=0x401000,
+        ),
+        BinPCodeOp(
+            opcode="CBRANCH",
+            inputs=(_const(0x401020, size=8), cond_var),
+            output=None,
+            source_address=0x401004,
+        ),
+        addr=0x401000,
+        bb_id="@bb_entry",
+    )
+    then_bb = _bb_with_succ(
+        BinPCodeOp(
+            opcode="COPY",
+            inputs=(_const(-1),),
+            output=_rax(),
+            source_address=0x401020,
+        ),
+        BinPCodeOp(opcode="RETURN", inputs=(), output=None,
+                   source_address=0x401024),
+        addr=0x401020,
+        bb_id="@bb_then",
+    )
+    else_bb = _bb_with_succ(
+        BinPCodeOp(
+            opcode="COPY",
+            inputs=(_const(1),),
+            output=_rax(),
+            source_address=0x401010,
+        ),
+        BinPCodeOp(opcode="RETURN", inputs=(), output=None,
+                   source_address=0x401014),
+        addr=0x401010,
+        bb_id="@bb_else",
+    )
+    entry = entry.model_copy(update={"successors": (
+        BinBlockEdge(successor_id="@bb_then", edge_kind="true"),
+        BinBlockEdge(successor_id="@bb_else", edge_kind="false"),
+    )})
+    bin_fn = _bin_fn("sign_only", 1, entry, then_bb, else_bb)
+
+    prog = _program(src, bin_fn)
+    [r] = prove_all_bin_relational(prog, proofs_dir=tmp_path)
+    assert r.status == "proven", r.detail
+
+
+def test_branch_function_proves_under_early_return(tmp_path):
+    """`int sign_only(int x) { if (x < 0) return -1; return 1; }`.
+    The source has Block(stmts=(If(..., empty), ReturnExpr)) — early
+    return idiom. The encoder treats post-If as the else arm."""
+    src = Function(
+        name="sign_only",
+        params=(Param(name="x", type=I32Type()),),
+        return_type=I32Type(),
+        body=Block(stmts=(
+            If(
+                cond=BinOp(op="slt", lhs=ParamRef(name="x"),
+                           rhs=IntLit(type=I32Type(), value=0)),
+                then_body=Block(stmts=(ReturnExpr(value=IntLit(
+                    type=I32Type(), value=-1,
+                )),)),
+                else_body=Block(stmts=()),
+            ),
+            ReturnExpr(value=IntLit(type=I32Type(), value=1)),
+        )),
+    )
+
+    cond_var = BinVarnode(space="unique", offset=0x100, size=1)
+    entry = _bb_with_succ(
+        BinPCodeOp(opcode="INT_SLESS",
+                   inputs=(_rdi(), _const(0)),
+                   output=cond_var, source_address=0x401000),
+        BinPCodeOp(opcode="CBRANCH",
+                   inputs=(_const(0x401020, size=8), cond_var),
+                   output=None, source_address=0x401004),
+        addr=0x401000, bb_id="@bb_entry",
+    )
+    then_bb = _bb_with_succ(
+        BinPCodeOp(opcode="COPY", inputs=(_const(-1),),
+                   output=_rax(), source_address=0x401020),
+        BinPCodeOp(opcode="RETURN", inputs=(), output=None,
+                   source_address=0x401024),
+        addr=0x401020, bb_id="@bb_then",
+    )
+    else_bb = _bb_with_succ(
+        BinPCodeOp(opcode="COPY", inputs=(_const(1),),
+                   output=_rax(), source_address=0x401010),
+        BinPCodeOp(opcode="RETURN", inputs=(), output=None,
+                   source_address=0x401014),
+        addr=0x401010, bb_id="@bb_else",
+    )
+    entry = entry.model_copy(update={"successors": (
+        BinBlockEdge(successor_id="@bb_then", edge_kind="true"),
+        BinBlockEdge(successor_id="@bb_else", edge_kind="false"),
+    )})
+    bin_fn = _bin_fn("sign_only", 1, entry, then_bb, else_bb)
+
+    prog = _program(src, bin_fn)
+    [r] = prove_all_bin_relational(prog, proofs_dir=tmp_path)
+    assert r.status == "proven", r.detail
+
+
+def test_branch_function_refuted_when_then_arm_disagrees(tmp_path):
+    """Source returns -1 in the then-arm, binary returns 0. z3 must
+    refute, because for any x < 0 the two disagree."""
+    src = Function(
+        name="sign_only",
+        params=(Param(name="x", type=I32Type()),),
+        return_type=I32Type(),
+        body=Block(stmts=(If(
+            cond=BinOp(op="slt", lhs=ParamRef(name="x"),
+                       rhs=IntLit(type=I32Type(), value=0)),
+            then_body=Block(stmts=(ReturnExpr(value=IntLit(
+                type=I32Type(), value=-1,
+            )),)),
+            else_body=Block(stmts=(ReturnExpr(value=IntLit(
+                type=I32Type(), value=1,
+            )),)),
+        ),)),
+    )
+
+    # Binary has 0 in the then-arm, not -1.
+    cond_var = BinVarnode(space="unique", offset=0x100, size=1)
+    entry = _bb_with_succ(
+        BinPCodeOp(opcode="INT_SLESS",
+                   inputs=(_rdi(), _const(0)),
+                   output=cond_var, source_address=0x401000),
+        BinPCodeOp(opcode="CBRANCH",
+                   inputs=(_const(0x401020, size=8), cond_var),
+                   output=None, source_address=0x401004),
+        addr=0x401000, bb_id="@bb_entry",
+    )
+    then_bb = _bb_with_succ(
+        BinPCodeOp(opcode="COPY", inputs=(_const(0),),  # WRONG — should be -1
+                   output=_rax(), source_address=0x401020),
+        BinPCodeOp(opcode="RETURN", inputs=(), output=None,
+                   source_address=0x401024),
+        addr=0x401020, bb_id="@bb_then",
+    )
+    else_bb = _bb_with_succ(
+        BinPCodeOp(opcode="COPY", inputs=(_const(1),),
+                   output=_rax(), source_address=0x401010),
+        BinPCodeOp(opcode="RETURN", inputs=(), output=None,
+                   source_address=0x401014),
+        addr=0x401010, bb_id="@bb_else",
+    )
+    entry = entry.model_copy(update={"successors": (
+        BinBlockEdge(successor_id="@bb_then", edge_kind="true"),
+        BinBlockEdge(successor_id="@bb_else", edge_kind="false"),
+    )})
+    bin_fn = _bin_fn("sign_only", 1, entry, then_bb, else_bb)
+
+    prog = _program(src, bin_fn)
+    [r] = prove_all_bin_relational(prog, proofs_dir=tmp_path)
+    assert r.status == "refuted", r.detail
+
+
+def test_loop_back_edge_yields_unknown(tmp_path):
+    """Two blocks looping back at each other — the path-walker
+    detects the back-edge and bails with status='unknown'."""
+    src = Function(
+        name="ident",
+        params=(Param(name="x", type=I32Type()),),
+        return_type=I32Type(),
+        body=_src_return_expr(ParamRef(name="x")),
+    )
+    # entry → loop → entry → ... (no RETURN reachable).
+    loop_a = _bb_with_succ(
+        BinPCodeOp(opcode="COPY", inputs=(_rdi(),),
+                   output=_rax(), source_address=0x401000),
+        BinPCodeOp(opcode="BRANCH",
+                   inputs=(_const(0x401010, size=8),),
+                   output=None, source_address=0x401004),
+        addr=0x401000, bb_id="@bb_a",
+    )
+    loop_b = _bb_with_succ(
+        BinPCodeOp(opcode="BRANCH",
+                   inputs=(_const(0x401000, size=8),),
+                   output=None, source_address=0x401010),
+        addr=0x401010, bb_id="@bb_b",
+    )
+    loop_a = loop_a.model_copy(update={"successors": (
+        BinBlockEdge(successor_id="@bb_b", edge_kind="unconditional"),
+    )})
+    loop_b = loop_b.model_copy(update={"successors": (
+        BinBlockEdge(successor_id="@bb_a", edge_kind="unconditional"),
+    )})
+    bin_fn = _bin_fn("ident", 1, loop_a, loop_b)
+
+    prog = _program(src, bin_fn)
+    [r] = prove_all_bin_relational(prog, proofs_dir=tmp_path)
+    assert r.status == "unknown"
+    assert "loop" in r.detail.lower()
