@@ -106,7 +106,12 @@ def equiv_prove(
             typer.echo(f"error: lift check failed: {e}", err=True)
             raise typer.Exit(1)
 
-        # Second --bump pass: z3.bin_relational over signature_bindings.
+        # Second --bump pass: tree-walk over (src_cfn, lifted_cfn) pairs.
+        program = _bump_decompile_lift(
+            program, cfg, theme, write_proofs=write_proofs,
+        )
+
+        # Third --bump pass: z3.bin_relational over signature_bindings.
         program = _bump_bin_relational(
             program, cfg, theme, write_proofs=write_proofs,
         )
@@ -153,6 +158,57 @@ def equiv_prove(
 
     if failures:
         raise typer.Exit(1)
+
+
+def _bump_decompile_lift(
+    program: Program, cfg, theme, *, write_proofs: bool,
+) -> Program:
+    """Run the CFn↔CFn tree-walk over every (source CFn, lifted CFn)
+    pair the equivalence chain induces, fold proven results into the
+    program as `LiftEquivalence`-witnessed equivalences, and report
+    refutations on stderr.
+
+    Refuted pairs (the walker raised `LiftCheckError`) leave no
+    equivalence on the program; they're a structural-diff signal —
+    Ghidra recovered something that doesn't match the source —
+    surfaced for the user to inspect. Refusal-to-prove is
+    information, not a hard error: the bin-relational pass that
+    follows can still try the harder semantic question.
+    """
+    from quod.predicate.binary_decompile_walk import (
+        prove_decompile_lifts,
+    )
+
+    proofs_dir = cfg.resolve(cfg.proofs_dir) / "decompile_lift"
+    rel_prefix = (
+        f"{cfg.proofs_dir}/decompile_lift"
+        if not Path(str(cfg.proofs_dir)).is_absolute()
+        else "proofs/decompile_lift"
+    )
+    program, results = prove_decompile_lifts(
+        program, write_dir=proofs_dir, rel_prefix=rel_prefix,
+        write=write_proofs,
+    )
+
+    for r in results:
+        head = f"{r.src_cfn_id} ~ {r.lifted_cfn_id}"
+        if r.status == "proven":
+            badge = Span("ok  ", "ok")
+        elif r.status == "current":
+            badge = Span("ok  ", "ok")
+        elif r.status == "refuted":
+            badge = Span("REFUTED", "warn")
+        else:
+            badge = Span("?", "ws")
+        typer.echo(paint((
+            badge, Span("  ", "ws"),
+            Span(head, "fn_name"),
+            Span("  [decompile-lift]", "punct"),
+        ), theme))
+        if r.detail:
+            typer.echo(f"      {r.detail}")
+
+    return program
 
 
 def _bump_bin_relational(
@@ -342,17 +398,31 @@ def _classify_equivalence(
     # tree and confirm the bytes still hash to the pinned value.
     # Catches "someone hand-edited the program but forgot to re-run
     # `equiv prove --bump`" — verify alone misses this when the
-    # artifact file on disk is unchanged.
+    # artifact file on disk is unchanged. There are two cases:
+    #
+    #   1. Layer-A → Layer-B (CFn ↔ Function): existing path,
+    #      uses `lift_check_hash`. a-side is in source_units,
+    #      b-side is in structured_functions.
+    #   2. Source-CFn ↔ lifted-CFn (Layer-A ↔ Layer-A): new path,
+    #      uses `decompile_lift_check_hash`. a-side is in
+    #      source_units, b-side is in binary_units.lifted_cfns.
     if isinstance(eq.justification, LiftEquivalence):
-        from quod.lift_check import lift_check_hash
-        cfn = next(
-            (c for u in program.source_units for c in u.functions if c.id == eq.a_node_id),
+        src_cfn = next(
+            (c for u in program.source_units for c in u.functions
+             if c.id == eq.a_node_id),
             None,
         )
-        fn = next((f for f in program.structured_functions if f.id == eq.b_node_id), None)
-        if cfn is not None and fn is not None:
+        lifted_cfn = next(
+            (c for u in program.binary_units for c in u.lifted_cfns
+             if c.id == eq.b_node_id),
+            None,
+        )
+        if src_cfn is not None and lifted_cfn is not None:
+            from quod.predicate.binary_decompile_walk import (
+                decompile_lift_check_hash,
+            )
             try:
-                live_hash = lift_check_hash(cfn, fn)
+                live_hash = decompile_lift_check_hash(src_cfn, lifted_cfn)
             except Exception as e:
                 return "witnessed-stale", f"in-memory walk failed: {e}"
             if live_hash != eq.justification.artifact_hash:
@@ -361,6 +431,29 @@ def _classify_equivalence(
                     f"pinned is {eq.justification.artifact_hash[:12]} — "
                     f"run `quod equiv prove --bump` to re-pin"
                 )
+        else:
+            from quod.lift_check import lift_check_hash
+            cfn = next(
+                (c for u in program.source_units for c in u.functions
+                 if c.id == eq.a_node_id),
+                None,
+            )
+            fn = next(
+                (f for f in program.structured_functions
+                 if f.id == eq.b_node_id),
+                None,
+            )
+            if cfn is not None and fn is not None:
+                try:
+                    live_hash = lift_check_hash(cfn, fn)
+                except Exception as e:
+                    return "witnessed-stale", f"in-memory walk failed: {e}"
+                if live_hash != eq.justification.artifact_hash:
+                    return "witnessed-stale", (
+                        f"in-memory walk would hash to {live_hash[:12]}, "
+                        f"pinned is {eq.justification.artifact_hash[:12]} — "
+                        f"run `quod equiv prove --bump` to re-pin"
+                    )
 
     return "witnessed-current", ""
 

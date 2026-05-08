@@ -47,11 +47,20 @@ for _tool in _NEED_TOOLS:
 # Source kept simple — the v0 prover only handles straight-line int
 # arithmetic, and `-O1` keeps params in registers (no stack spills
 # the encoder doesn't model).
+#
+# Two functions: `add` (Ghidra preserves operand order, so the
+# strict tree-walk passes cleanly — useful for the witness-emission
+# tests) and `affine` (Ghidra reorders `3 * x` to `x * 3` during
+# decompile, so the strict walk refuses — useful for refutation
+# tests AND to demonstrate that "Ghidra recovered something
+# structurally different" surfaces clearly).
 _C_SOURCE = """\
+int add(int a, int b) { return a + b; }
 int affine(int x) { return 3 * x + 5; }
 """
 
 _C_SOURCE_MUTATED = """\
+int add(int a, int b) { return a + b; }
 int affine(int x) { return 3 * x + 6; }
 """
 
@@ -144,6 +153,65 @@ def test_ingest_binary_emits_signature_bindings_and_decompile_lifts(tmp_path):
     assert len(decompile_eqs) == 1
     j = decompile_eqs[0]["justification"]
     assert len(j["decompile_text_sha256"]) == 64
+
+
+def test_equiv_prove_bump_emits_decompile_lift_witness(tmp_path):
+    """`equiv prove --bump` walks (src_cfn, lifted_cfn) pairs and
+    emits a `LiftEquivalence`-witnessed equivalence on a match.
+
+    Tested on `add` because Ghidra preserves `a + b` operand order
+    when decompiling — the strict tree-walk succeeds. (`affine` is
+    `3 * x + 5` in source but `x * 3 + 5` in Ghidra's decompile,
+    so the strict walk for that function REFUSES — see the next
+    test.)"""
+    _ingest_into(tmp_path)
+
+    bumped = _quod(tmp_path, "equiv", "prove", "--bump")
+    assert bumped.exit_code == 0, bumped.output
+    assert "[decompile-lift]" in bumped.output
+
+    program = json.loads((tmp_path / "program.json").read_text())
+    bin_units = program["binary_units"]
+    add_lifted_id = next(
+        c["id"] for u in bin_units for c in u.get("lifted_cfns", [])
+        if c["name"] == "add"
+    )
+    add_src_id = next(
+        c["id"] for u in program["source_units"]
+        for c in u["functions"]
+        if c["name"] == "add"
+    )
+    matches = [
+        e for e in program["equivalences"]
+        if e.get("justification", {}).get("kind") == "lift_equivalence"
+        and e["a_node_id"] == add_src_id
+        and e["b_node_id"] == add_lifted_id
+    ]
+    assert len(matches) == 1
+    eq = matches[0]
+    assert eq["regime"] == "witness"
+    artifact_path = tmp_path / eq["justification"]["artifact_path"]
+    assert artifact_path.exists()
+    blob = json.loads(artifact_path.read_text())
+    assert blob["rule"] == "c.cfn_correspondence"
+
+
+def test_equiv_prove_bump_decompile_lift_refutes_on_structural_drift(tmp_path):
+    """`affine` source is `3 * x + 5` but Ghidra decompiles as
+    `x * 3 + 5` (operand-order swap). The strict tree-walk refuses
+    on this structural difference — REFUTED with a path locating
+    where the kinds first diverge. This is the deliverable: "Ghidra
+    recovered something structurally different from the source."
+    """
+    _ingest_into(tmp_path)
+
+    bumped = _quod(tmp_path, "equiv", "prove", "--bump")
+    assert bumped.exit_code == 0, bumped.output
+    assert "REFUTED" in bumped.output
+    assert "[decompile-lift]" in bumped.output
+    # The path fingerprints the body location AND names the kind
+    # of divergence (kind / literal / var-ref / etc.).
+    assert "fn[affine].body" in bumped.output
 
 
 def test_equiv_prove_reports_axiom_for_unproven_bin_eqs(tmp_path):
