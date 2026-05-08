@@ -25,6 +25,7 @@ from typing import Literal
 from pydantic import Field, model_serializer
 
 from quod.model.base import _Node, _mint_node_id
+from quod.model.layer_a import CFn
 
 
 # ---------- Embedded value types (no kind, addressed by composition) ----------
@@ -358,6 +359,16 @@ class BinUnit(_Node):
     data_items: tuple[BinDataItem, ...] = ()
     extern_refs: tuple[BinExternRef, ...] = ()
     type_refs: tuple[BinTypeRef, ...] = ()
+    # Layer-A `c.*` CFns reconstructed from each `BinFunction`'s
+    # `decompile_text` by `binary_decompile_lift`. Empty until the
+    # lift pass runs. Kept nested under the binary they came from
+    # (rather than mixed into `Program.source_units`) so authored C
+    # and decompiler-recovered C stay clearly separated — the lifted
+    # CFns are *evidence* of what Ghidra recovered, not source the
+    # user wrote. Pairings to the originating `BinFunction` are
+    # carried by `Equivalence` claims at program level, justified
+    # with `DecompileLift`.
+    lifted_cfns: tuple[CFn, ...] = ()
 
     @model_serializer(mode="wrap")
     def _drop_empty_collections(self, handler, info):
@@ -372,4 +383,6 @@ class BinUnit(_Node):
             data.pop("extern_refs", None)
         if not self.type_refs:
             data.pop("type_refs", None)
+        if not self.lifted_cfns:
+            data.pop("lifted_cfns", None)
         return data
