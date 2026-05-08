@@ -347,6 +347,52 @@ def test_relational_poc_signature_bindings_emitted(relational_poc_program):
     assert add_sb.return_binding.offset == 0x00
 
 
+def test_relational_poc_decompile_lift_emits_cfn_for_each(relational_poc_program):
+    """Real Ghidra → real decompile_text → libclang → Layer-A CFn.
+
+    For our v0 universe (clang -O1 int arithmetic), Ghidra's decompile
+    output is clean enough C that libclang parses it. The lift then
+    walks the AST through the same translator the source ingester uses,
+    so the lifted CFn has the same `c.*` shape as a hand-authored one.
+
+    This is the second axis of "lift v2" (sibling to
+    lift_v2.signature_binding) — structural recovery, not just
+    register-mapping. With both, downstream provers can pair source
+    and binary by *structure*, not just final return value.
+    """
+    from quod.predicate.binary_decompile_lift import derive_decompile_lifts
+
+    program = relational_poc_program
+    new_prog, lifts = derive_decompile_lifts(program)
+    by_name = {lift.cfn.name: lift for lift in lifts}
+    for name in ("ident", "add", "affine"):
+        assert name in by_name, (
+            f"decompile_lift didn't produce a CFn for {name!r}; "
+            f"got {sorted(by_name)}"
+        )
+
+    # Each lifted CFn nests under the BinUnit it came from.
+    [u] = new_prog.binary_units
+    lifted_names = {c.name for c in u.lifted_cfns}
+    assert {"ident", "add", "affine"}.issubset(lifted_names)
+
+    # Each lift gets an Equivalence with DecompileLift justification.
+    bin_fns_by_name = {f.demangled_name: f.id for f in u.functions}
+    decompile_eqs = [
+        e for e in new_prog.equivalences
+        if e.justification is not None
+        and e.justification.kind == "decompile_lift"
+    ]
+    assert len(decompile_eqs) >= 3
+    for name in ("ident", "add", "affine"):
+        eq = next(
+            (e for e in decompile_eqs if e.b_node_id == bin_fns_by_name[name]),
+            None,
+        )
+        assert eq is not None, f"no decompile_lift equivalence for {name!r}"
+        assert eq.justification.decompile_text_sha256, "missing decompile hash"
+
+
 def test_relational_poc_prover_proves_all_three(relational_poc_program, tmp_path):
     """The end-to-end relational result: each (bin.fn, src.fn) pair
     in the POC fixture is proven equivalent by z3.
