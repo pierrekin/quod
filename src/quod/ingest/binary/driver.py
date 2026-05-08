@@ -167,7 +167,47 @@ def _ingest_parsed(
     new_units = base.binary_units + (unit,)
     extended = base.model_copy(update={"binary_units": new_units})
 
-    return seed_binary_equivalences(extended, unit=unit)
+    seeded = seed_binary_equivalences(extended, unit=unit)
+    # Run the structural lifts inline. Both are deterministic and
+    # cheap (signature_binding is pure-Python ABI lookup;
+    # decompile_lift parses Ghidra's decompile_text via libclang).
+    # Mirroring the C ingester's "Layer-A→B lift happens during
+    # ingest" contract — a freshly-ingested binary already carries
+    # signature_bindings + lifted_cfns + DecompileLift-justified
+    # axiom equivalences, ready for `quod equiv prove --bump` to
+    # upgrade via z3.bin_relational.
+    return _run_structural_lifts(seeded)
+
+
+def _run_structural_lifts(program: Program) -> Program:
+    """Populate `signature_bindings` and `lifted_cfns` on a freshly-
+    ingested program. Idempotent: deferred to each lift's own
+    dedup logic — re-running on a program that already carries the
+    same bindings/lifts is a no-op."""
+    # Local imports keep `quod.predicate.binary_*` out of the import
+    # graph for code paths that only ingest binaries without using
+    # the lifts (e.g. the JSON-dump-only `ingest_binary_dump` call
+    # path, or tests that build BinUnits directly).
+    from quod.predicate.binary_decompile_lift import derive_decompile_lifts
+    from quod.predicate.binary_lift import derive_signature_bindings
+
+    sigs = derive_signature_bindings(program)
+    if sigs:
+        existing_keys = {
+            (sb.bin_fn_id, sb.src_fn_id, sb.abi)
+            for sb in program.signature_bindings
+        }
+        fresh = tuple(
+            sb for sb in sigs
+            if (sb.bin_fn_id, sb.src_fn_id, sb.abi) not in existing_keys
+        )
+        if fresh:
+            program = program.model_copy(update={
+                "signature_bindings": program.signature_bindings + fresh,
+            })
+
+    program, _ = derive_decompile_lifts(program)
+    return program
 
 
 def _parse_int_addr(s: str | int | None) -> int:

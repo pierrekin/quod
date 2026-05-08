@@ -291,8 +291,10 @@ int affine(int x) { return 3 * x + 5; }
 def relational_poc_program(tmp_path_factory):
     """Build the POC fixture at `-O1` (registers stay in registers,
     no stack spills) and ingest both the C source and the resulting
-    `.so`. Run lift_v2.signature_binding so the program carries
-    explicit varnode↔param bindings.
+    `.so`. The binary ingester runs the structural lifts inline —
+    `lift_v2.signature_binding` and `decompile_lift` — so the
+    returned program already carries `signature_bindings` and
+    `lifted_cfns` without explicit calls.
 
     `-O1` is intentional: at `-O0` clang emits a store-to-stack /
     load-from-stack round-trip even for `return x;`, which the v0
@@ -300,7 +302,6 @@ def relational_poc_program(tmp_path_factory):
     everything in registers and stays under the prover's whitelist.
     """
     from quod.ingest.binary import ingest_binary
-    from quod.predicate.binary_lift import derive_signature_bindings
     clang = _need_clang()
     work = tmp_path_factory.mktemp("rel_poc")
     src = work / "poc.c"
@@ -313,9 +314,6 @@ def relational_poc_program(tmp_path_factory):
     c_program = ingest_c(src)
     program, _ = merge_program(Program(), c_program)
     program = ingest_binary(so, program=program)
-
-    bindings = derive_signature_bindings(program)
-    program = program.model_copy(update={"signature_bindings": bindings})
     return program
 
 
@@ -351,35 +349,23 @@ def test_relational_poc_decompile_lift_emits_cfn_for_each(relational_poc_program
     """Real Ghidra → real decompile_text → libclang → Layer-A CFn.
 
     For our v0 universe (clang -O1 int arithmetic), Ghidra's decompile
-    output is clean enough C that libclang parses it. The lift then
-    walks the AST through the same translator the source ingester uses,
-    so the lifted CFn has the same `c.*` shape as a hand-authored one.
-
-    This is the second axis of "lift v2" (sibling to
-    lift_v2.signature_binding) — structural recovery, not just
-    register-mapping. With both, downstream provers can pair source
-    and binary by *structure*, not just final return value.
+    output is clean enough C that libclang parses it. The lift runs
+    automatically inside `ingest_binary`, so this test reads from the
+    program directly — there's no separate lift command, the same way
+    there's no separate `quod c lift` between `quod ingest c` and
+    `quod equiv prove`.
     """
-    from quod.predicate.binary_decompile_lift import derive_decompile_lifts
-
     program = relational_poc_program
-    new_prog, lifts = derive_decompile_lifts(program)
-    by_name = {lift.cfn.name: lift for lift in lifts}
-    for name in ("ident", "add", "affine"):
-        assert name in by_name, (
-            f"decompile_lift didn't produce a CFn for {name!r}; "
-            f"got {sorted(by_name)}"
-        )
 
     # Each lifted CFn nests under the BinUnit it came from.
-    [u] = new_prog.binary_units
+    [u] = program.binary_units
     lifted_names = {c.name for c in u.lifted_cfns}
     assert {"ident", "add", "affine"}.issubset(lifted_names)
 
     # Each lift gets an Equivalence with DecompileLift justification.
     bin_fns_by_name = {f.demangled_name: f.id for f in u.functions}
     decompile_eqs = [
-        e for e in new_prog.equivalences
+        e for e in program.equivalences
         if e.justification is not None
         and e.justification.kind == "decompile_lift"
     ]
