@@ -230,6 +230,44 @@ def test_equiv_prove_bump_refutes_when_source_disagrees(tmp_path):
     assert z3_eqs == []
 
 
+def test_equiv_prove_bump_invalidates_stale_witness_on_source_drift(tmp_path):
+    """A common workflow: build the binary, prove bin~src, then edit
+    the source so it no longer matches. The next `--bump` must
+    re-run z3 (don't blindly skip on existing witness), detect the
+    refutation, and remove the stale Z3 witness from the program.
+    """
+    # Build .so from the original source (3*x + 5) and prove bin~src.
+    _write_project(tmp_path, _C_SOURCE)
+    so = _build_so(tmp_path)
+    assert _quod(tmp_path, "ingest", "c", str(tmp_path / "poc.c")).exit_code == 0
+    assert _quod(tmp_path, "ingest", "binary", str(so)).exit_code == 0
+    assert _quod(tmp_path, "equiv", "prove", "--bump").exit_code == 0
+    program = json.loads((tmp_path / "program.json").read_text())
+    assert any(
+        e.get("justification", {}).get("kind") == "z3"
+        for e in program["equivalences"]
+    ), "first --bump should land a Z3 witness"
+
+    # Mutate the source so it disagrees with the binary; re-ingest C.
+    (tmp_path / "poc.c").write_text(_C_SOURCE_MUTATED)
+    assert _quod(tmp_path, "ingest", "c", str(tmp_path / "poc.c")).exit_code == 0
+
+    bumped = _quod(tmp_path, "equiv", "prove", "--bump")
+    assert bumped.exit_code == 0
+    assert "REFUTED" in bumped.output, bumped.output
+
+    # The stale Z3 witness must be gone.
+    program = json.loads((tmp_path / "program.json").read_text())
+    z3_eqs = [
+        e for e in program["equivalences"]
+        if e.get("justification", {}).get("kind") == "z3"
+        and "affine" in e["a_node_id"]
+    ]
+    assert z3_eqs == [], (
+        f"stale Z3 witness was not removed; saw {z3_eqs}"
+    )
+
+
 def test_equiv_verify_passes_on_z3_witnessed_bin_eq(tmp_path):
     """`equiv verify` re-runs z3 against the persisted .smt2; should
     pass on the freshly-bumped equivalence."""

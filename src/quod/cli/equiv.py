@@ -161,13 +161,25 @@ def _bump_bin_relational(
     """Run `z3.bin_relational` over every `BinSrcSignatureBinding` and
     fold proven results into the program as Z3-witnessed equivalences.
 
-    Refuted (z3 sat — source/binary disagree) and unknown results are
-    reported on stderr; the program is not modified for those.
-    Idempotent: a binding whose `(src.id, bin.id)` already has a
-    Z3Justification-witnessed equivalence is skipped.
+    Always re-proves, even when an existing Z3 witness exists for the
+    same `(src.fn, bin.fn)` pair — `--bump` is the "refresh all
+    proofs" command, and the source body or binary may have changed
+    underneath an old witness. Specifically:
 
-    With `write_proofs=False`, the SMT artifact is computed but not
-    persisted — useful for dry-run / tests.
+      - **proven** with the same artifact_hash as the existing witness
+        → no-op (witness is still current, no replacement needed).
+      - **proven** with a different artifact_hash → existing witness
+        replaced (the old artifact pinned a stale source/binary; the
+        new one pins the current state).
+      - **refuted** → existing witness is removed (source and binary
+        now disagree — the old "proven" claim is no longer true).
+      - **unknown** → existing witness is left alone (re-encoding
+        bailed, but the previous proof may still be valid; user can
+        re-bump after fixing the encoder if needed).
+
+    Refuted and unknown results print a per-line report so the user
+    sees what happened. With `write_proofs=False`, the SMT artifact
+    is computed but not persisted.
     """
     if not program.signature_bindings:
         return program
@@ -183,19 +195,23 @@ def _bump_bin_relational(
         else "proofs/bin_relational"
     )
 
-    existing_z3_keys: set[tuple[str, str]] = {
-        (eq.a_node_id, eq.b_node_id)
+    # Map (a, b) → existing Z3-witnessed equivalence so we can replace
+    # in place (rather than appending duplicates) when the prover
+    # confirms the witness is still current at a new hash.
+    existing_z3: dict[tuple[str, str], Equivalence] = {
+        (eq.a_node_id, eq.b_node_id): eq
         for eq in program.equivalences
         if eq.regime == "witness"
         and eq.justification is not None
         and eq.justification.kind == "z3"
     }
+    pairs_to_drop: set[tuple[str, str]] = set()
+    pairs_to_replace: dict[tuple[str, str], Equivalence] = {}
+    pairs_to_add: list[Equivalence] = []
 
-    new_eqs: list[Equivalence] = []
     for binding in program.signature_bindings:
         key = (binding.src_fn_id, binding.bin_fn_id)
-        if key in existing_z3_keys:
-            continue
+        existing = existing_z3.get(key)
 
         result = prove_bin_relational_pair(
             program, binding, proofs_dir=proofs_dir,
@@ -203,12 +219,7 @@ def _bump_bin_relational(
 
         head = f"{binding.src_fn_id} ~ {binding.bin_fn_id}"
         if result.status == "proven":
-            badge = Span("ok  ", "ok")
-            detail = result.detail
             assert result.equivalence is not None
-            # Rewrite artifact_path to be relative to resolve_root so
-            # `equiv verify` can find it later. The prover writes to
-            # `proofs_dir`; we patch the stored path.
             eq = result.equivalence
             j = eq.justification
             assert j is not None and j.kind == "z3"
@@ -217,15 +228,34 @@ def _bump_bin_relational(
                 new_j = j.model_copy(update={"artifact_path": rel_path})
                 eq = eq.model_copy(update={"justification": new_j})
             elif not write_proofs:
-                # Hashed but not persisted — drop the artifact_path so
-                # `equiv verify` doesn't go looking for a missing file.
-                # The hash still pins the SMT bytes.
                 if result.artifact_path is not None:
                     result.artifact_path.unlink(missing_ok=True)
-            new_eqs.append(eq)
+
+            # Compare against existing witness (if any) by artifact_hash
+            # — that pins the SMT bytes, so a hash match means "same
+            # problem statement, same proof; nothing changed."
+            if (
+                existing is not None
+                and existing.justification is not None
+                and existing.justification.kind == "z3"
+                and existing.justification.artifact_hash == j.artifact_hash
+            ):
+                badge = Span("ok  ", "ok")
+                detail = "current — no change"
+            elif existing is not None:
+                pairs_to_replace[key] = eq
+                badge = Span("ok  ", "ok")
+                detail = f"re-pinned ({result.detail})"
+            else:
+                pairs_to_add.append(eq)
+                badge = Span("ok  ", "ok")
+                detail = result.detail
         elif result.status == "refuted":
             badge = Span("REFUTED", "warn")
             detail = result.detail
+            if existing is not None:
+                pairs_to_drop.add(key)
+                detail = f"witness invalidated; was {existing.justification.artifact_hash[:12]}\n      {detail}"
         elif result.status == "unknown":
             badge = Span("?", "ws")
             detail = result.detail
@@ -241,11 +271,27 @@ def _bump_bin_relational(
         if detail:
             typer.echo(f"      {detail}")
 
-    if not new_eqs:
+    if not pairs_to_drop and not pairs_to_replace and not pairs_to_add:
         return program
 
+    new_equivalences: list[Equivalence] = []
+    for eq in program.equivalences:
+        key = (eq.a_node_id, eq.b_node_id)
+        if (
+            eq.regime == "witness"
+            and eq.justification is not None
+            and eq.justification.kind == "z3"
+        ):
+            if key in pairs_to_drop:
+                continue
+            if key in pairs_to_replace:
+                new_equivalences.append(pairs_to_replace[key])
+                continue
+        new_equivalences.append(eq)
+    new_equivalences.extend(pairs_to_add)
+
     return program.model_copy(update={
-        "equivalences": program.equivalences + tuple(new_eqs),
+        "equivalences": tuple(new_equivalences),
     })
 
 
