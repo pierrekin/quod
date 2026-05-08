@@ -413,6 +413,124 @@ def test_relational_poc_prover_proves_all_three(relational_poc_program, tmp_path
     assert not failures, "\n".join(failures)
 
 
+def test_binary_only_ingest_produces_compilable_layer_c_function(tmp_path):
+    """Round-trip: source.c → libpoc.so → ingest_binary → Layer-A CFn
+    → Layer-B Function (via decompile_lift) → Layer-C lowered Function
+    (via lower_c_family). After this chain, the program has a regular
+    `Function` named `affine` in `Program.functions` — visible to
+    `quod fn ls`, lowerable by `quod build`, runnable by `quod run`.
+
+    This is the load-bearing demo for "lift a compiled binary back
+    into quod for simple cases": the lifted side participates in the
+    full pipeline, not just the analysis pipeline.
+    """
+    from quod.ingest.binary import ingest_binary
+    from quod.lower import compile_program
+
+    clang = _need_clang()
+    work = tmp_path
+    src = work / "poc.c"
+    src.write_text("int affine(int x) { return 3 * x + 5; }\n")
+    so = work / "libpoc.so"
+    subprocess.run(
+        [clang, "-O1", "-g", "-shared", "-fPIC", "-o", str(so), str(src)],
+        check=True, capture_output=True, text=True,
+    )
+
+    # Ingest ONLY the binary — no source ingest.
+    program = ingest_binary(so, program=Program())
+
+    # Layer-C surface: `affine` is now a regular Function.
+    fn_names = {f.name for f in program.functions}
+    assert "affine" in fn_names, (
+        f"expected affine in Program.functions; got {sorted(fn_names)}"
+    )
+    affine = next(f for f in program.functions if f.name == "affine")
+    assert len(affine.params) == 1
+    assert affine.params[0].name == "x"
+
+    # Layer-B surface: `affine` is also a structured_function.
+    sf_names = {f.name for f in program.structured_functions}
+    assert "affine" in sf_names
+
+    # CRT/linker bookkeeping symbols (e.g. `_fini`) are still in
+    # `BinUnit.lifted_cfns` but are NOT promoted to Layer-B/C because
+    # they collide with crti.o on link.
+    assert "_fini" not in fn_names
+    assert "_fini" not in sf_names
+
+    # Compile the Layer-C function. Confirm an object file is
+    # produced and the IR contains the expected arithmetic.
+    build_dir = work / "build"
+    result = compile_program(
+        program,
+        build_dir=build_dir,
+        bins=(("affine", "affine"),),
+        profile=2,
+        link=True,
+    )
+    binary = result.bins[0].binary
+    assert binary is not None and binary.exists()
+
+    # Run the round-tripped binary and confirm it computes 3*x+5.
+    # quod's bin entry harness passes argv[1] as int, returns the
+    # function's return value as the exit code.
+    for x_in, expected in ((7, 26), (0, 5), (10, 35)):
+        proc = subprocess.run(
+            [str(binary), str(x_in)],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        assert proc.returncode == expected, (
+            f"affine({x_in}) returned {proc.returncode}, expected {expected}; "
+            f"stdout={proc.stdout!r} stderr={proc.stderr!r}"
+        )
+
+
+def test_binary_lift_skips_layer_b_when_source_present(tmp_path):
+    """Source-side wins: when the same name exists in source and
+    binary, the binary lift produces only a Layer-A CFn (under
+    `BinUnit.lifted_cfns`); it does NOT shadow the source-side
+    Function in `structured_functions` / `functions`."""
+    from quod.ingest.binary import ingest_binary
+
+    clang = _need_clang()
+    work = tmp_path
+    src = work / "poc.c"
+    src.write_text("int affine(int x) { return 3 * x + 5; }\n")
+    so = work / "libpoc.so"
+    subprocess.run(
+        [clang, "-O1", "-g", "-shared", "-fPIC", "-o", str(so), str(src)],
+        check=True, capture_output=True, text=True,
+    )
+
+    c_program = ingest_c(src)
+    program, _ = merge_program(Program(), c_program)
+    src_fn_id = next(f.id for f in program.functions if f.name == "affine")
+    src_struct_id = next(
+        f.id for f in program.structured_functions if f.name == "affine"
+    )
+
+    program = ingest_binary(so, program=program)
+
+    # Same source-side Function is still there with its original ID
+    # (no @fn_lifted_* twin).
+    affine_fns = [f for f in program.functions if f.name == "affine"]
+    assert len(affine_fns) == 1
+    assert affine_fns[0].id == src_fn_id
+
+    affine_structs = [
+        f for f in program.structured_functions if f.name == "affine"
+    ]
+    assert len(affine_structs) == 1
+    assert affine_structs[0].id == src_struct_id
+
+    # The Layer-A lifted CFn for `affine`'s bin.fn IS still produced
+    # — it lives under BinUnit.lifted_cfns as evidence.
+    [u] = program.binary_units
+    lifted_names = {c.name for c in u.lifted_cfns}
+    assert "affine" in lifted_names
+
+
 def test_real_ghidra_multi_ingest_in_one_process(tmp_path_factory):
     """Regression for the JVM-multi-load issue (P0 in 06-polish.md).
 
