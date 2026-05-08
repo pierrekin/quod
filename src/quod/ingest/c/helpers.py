@@ -278,6 +278,31 @@ def _fenv_call_refusal(name: str) -> str:
     )
 
 
+def _sizeof_quod_type(t: Type) -> int:
+    """Byte size of a scalar quod type, as used for byte-stride pointer
+    arithmetic on typed pointers. `int *p + n` becomes
+    `PtrOffset(p, n * 4)`; this helper supplies the multiplier.
+
+    Char-width types (i8/u8) return 1 — the multiplication folds to
+    the offset itself, matching the existing char-stride fast path.
+    """
+    canon_kind = getattr(t, "kind", None)
+    # IntType ladder: i8/u8 → 1, i16/u16 → 2, i32/u32 → 4, i64/u64 → 8.
+    # FloatType: f32 → 4, f64 → 8.
+    if isinstance(t, (I8Type, U8Type)):
+        return 1
+    if isinstance(t, (I16Type, U16Type)):
+        return 2
+    if isinstance(t, (I32Type, U32Type, F32Type)):
+        return 4
+    if isinstance(t, (I64Type, U64Type, F64Type)):
+        return 8
+    raise ValueError(
+        f"_sizeof_quod_type: no byte size for {canon_kind!r} "
+        f"(only scalar int/float types are supported)"
+    )
+
+
 def _local_type(cursor: cx.Cursor, t: cx.Type) -> Type:
     """Map a clang scalar type to a quod Type. Accepts every signed and
     unsigned integer width (char/short/int/long/long_long, plus their

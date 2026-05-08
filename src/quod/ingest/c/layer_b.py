@@ -39,6 +39,7 @@ from quod.ingest.c.helpers import (
     _parse_c_int_literal_text,
     _parse_switch_groups,
     _refuse,
+    _sizeof_quod_type,
     _split_for_children,
     _unwrap,
 )
@@ -62,6 +63,7 @@ from quod.model import (
     IntLit,
     LibcLinkage,
     Let,
+    Load,
     LocalRef,
     Param,
     ParamRef,
@@ -71,6 +73,7 @@ from quod.model import (
     ShortCircuitAnd,
     ShortCircuitOr,
     Statement,
+    Store,
     StringConstant,
     StringRef,
     Type,
@@ -497,6 +500,28 @@ class _FunctionTranslator:
                 return BinOp(op="sub", lhs=IntLit(type=zero_qty, value=0), rhs=inner_expr)
             if op == "+":
                 return inner_expr
+            if op == "*":
+                # `*p` rvalue — typed pointer dereference. The
+                # cursor's type is the pointee (already the loaded
+                # value's type). Refuse `void *` (no width to load)
+                # and pointers whose pointee can't be expressed as a
+                # scalar quod type.
+                pointee_canon = children[0].type.get_canonical()
+                if pointee_canon.kind != cx.TypeKind.POINTER:
+                    raise _refuse(
+                        c,
+                        f"`*` operator on non-pointer type "
+                        f"{children[0].type.spelling!r}",
+                    )
+                pointee = pointee_canon.get_pointee()
+                if pointee.kind == cx.TypeKind.VOID:
+                    raise _refuse(
+                        c,
+                        "`*p` on void* has no value type to load — "
+                        "cast to a typed pointer first",
+                    )
+                load_qty = _local_type(c, c.type)
+                return Load(ptr=inner_expr, type=load_qty)
             if op == "!":
                 # C's logical-not is i1-typed (`!x` == 1 iff x == 0). Lower
                 # to `eq(x, 0)` so the result type matches its uses
@@ -578,6 +603,25 @@ class _FunctionTranslator:
             self._state.record_extern(c, callee.spelling, callee.referenced)
             args = tuple(self.expr(a) for a in children[1:])
             return Call(function=callee.spelling, args=args)
+
+        if k == cx.CursorKind.ARRAY_SUBSCRIPT_EXPR:
+            # `arr[k]` rvalue — load at a byte-strided offset.
+            # `&arr[k]` is handled separately in the UNARY `&` arm
+            # before reaching here. The cursor's type is the element
+            # type (already the loaded value's type).
+            children = list(c.get_children())
+            if len(children) != 2:
+                raise _refuse(c, f"array subscript with {len(children)} children")
+            arr_c, idx_c = _unwrap(children[0]), _unwrap(children[1])
+            elem_size = self._pointer_element_size(c, arr_c)
+            elem_qty = _local_type(c, c.type)
+            return Load(
+                ptr=PtrOffset(
+                    base=self.expr(arr_c),
+                    offset=self._byte_stride_offset(idx_c, elem_size),
+                ),
+                type=elem_qty,
+            )
 
         if k == cx.CursorKind.CONDITIONAL_OPERATOR:
             # `cond ? a : b` lifts to layer-B IfExpr. The condition's
@@ -732,11 +776,57 @@ class _FunctionTranslator:
             return tuple(lets)
 
         if k == cx.CursorKind.BINARY_OPERATOR:
-            # Bare assignment as a statement: `x = expr;`
+            # Bare assignment as a statement: `x = expr;`,
+            # `*p = expr;`, or `arr[k] = expr;`.
             tokens = [t.spelling for t in c.get_tokens()]
             if "=" in tokens and "==" not in tokens:
                 children = list(c.get_children())
                 lhs = _unwrap(children[0])
+                # Pointer-deref store: `*p = v;`
+                if lhs.kind == cx.CursorKind.UNARY_OPERATOR:
+                    lhs_tokens = [t.spelling for t in lhs.get_tokens()]
+                    if lhs_tokens and lhs_tokens[0] == "*":
+                        deref_children = list(lhs.get_children())
+                        if len(deref_children) != 1:
+                            raise _refuse(lhs, "deref-store with non-1 deref children")
+                        # Validate the pointee type up front; reuse the
+                        # rvalue path's refusal messages by routing
+                        # through Load and discarding (cheap, and keeps
+                        # error reporting uniform).
+                        pointee_canon = deref_children[0].type.get_canonical()
+                        if pointee_canon.kind != cx.TypeKind.POINTER:
+                            raise _refuse(
+                                lhs,
+                                f"`*` operator on non-pointer type "
+                                f"{deref_children[0].type.spelling!r}",
+                            )
+                        if pointee_canon.get_pointee().kind == cx.TypeKind.VOID:
+                            raise _refuse(
+                                lhs,
+                                "`*p = …` on void* has no value type to "
+                                "store — cast to a typed pointer first",
+                            )
+                        ptr_expr = self.expr(deref_children[0])
+                        value = self.expr(children[1])
+                        return (Store(ptr=ptr_expr, value=value),)
+                # Subscript store: `arr[k] = v;`
+                if lhs.kind == cx.CursorKind.ARRAY_SUBSCRIPT_EXPR:
+                    sub_children = list(lhs.get_children())
+                    if len(sub_children) != 2:
+                        raise _refuse(
+                            lhs,
+                            f"subscript-store with {len(sub_children)} children",
+                        )
+                    arr_c, idx_c = _unwrap(sub_children[0]), _unwrap(sub_children[1])
+                    elem_size = self._pointer_element_size(lhs, arr_c)
+                    value = self.expr(children[1])
+                    return (Store(
+                        ptr=PtrOffset(
+                            base=self.expr(arr_c),
+                            offset=self._byte_stride_offset(idx_c, elem_size),
+                        ),
+                        value=value,
+                    ),)
                 if lhs.kind != cx.CursorKind.DECL_REF_EXPR:
                     raise _refuse(lhs, "only simple `name = expr` assignment supported")
                 if lhs.spelling not in self._locals:
@@ -867,14 +957,20 @@ class _FunctionTranslator:
     def _maybe_pointer_add(
         self, c: cx.Cursor, children: list[cx.Cursor],
     ) -> Expr | None:
-        """Recognize `p + n` as pointer arithmetic when `p` is char-pointer-typed.
+        """Recognize `p + n` as pointer arithmetic.
 
-        Returns a `quod.ptr_offset` Expr when one operand is a char* (or char
-        array, which decays to char*) and the other is an integer offset; None
-        otherwise (caller falls back to the integer-arithmetic path).
+        Returns a `quod.ptr_offset` Expr when one operand is pointer-
+        typed (or a char array, which decays to char*) and the other
+        is an integer offset; None otherwise (caller falls back to
+        the integer-arithmetic path).
 
-        Refuses unsupported pointer arithmetic outright (non-char pointee,
-        pointer minus pointer) so we never silently miscompile the byte stride.
+        Element stride: `char *p + n` uses byte stride (multiplier=1,
+        the existing fast path). `int *p + n` uses element stride
+        (multiplier = sizeof(int) = 4): the layer-B side becomes
+        `PtrOffset(p, mul(widen64(n), 4))`. Refuses pointer-minus-
+        pointer (not a valid C expression) and pointer pointee types
+        we can't compute a quod sizeof for (function pointers,
+        struct pointers in Stage A).
         """
         lhs_c, rhs_c = _unwrap(children[0]), _unwrap(children[1])
         lhs_is_ptr = _is_pointer(lhs_c) or _is_char_array(lhs_c)
@@ -890,35 +986,79 @@ class _FunctionTranslator:
         else:
             ptr_c, off_c = rhs_c, lhs_c
 
-        if not (_is_char_pointer(ptr_c) or _is_char_array(ptr_c)):
-            raise _refuse(
-                c,
-                f"pointer arithmetic on {ptr_c.type.spelling!r}: only char* "
-                f"(byte stride) is supported. Cast to (char*) or compute "
-                f"the byte offset explicitly."
-            )
-
+        elem_size = self._pointer_element_size(c, ptr_c)
         return PtrOffset(
             base=self.expr(ptr_c),
-            offset=self._i64_offset(off_c),
+            offset=self._byte_stride_offset(off_c, elem_size),
         )
 
     def _array_address_of(self, outer: cx.Cursor, sub: cx.Cursor) -> Expr:
         """Translate `&arr[k]` (UNARY `&` of ARRAY_SUBSCRIPT_EXPR) into
-        `quod.ptr_offset(arr, k)`. Same pointee restriction as `_maybe_pointer_add`."""
+        `quod.ptr_offset(arr, k * sizeof(elem))`. Char-stride bases
+        keep the byte-offset shortcut; wider element types route
+        through the byte-stride multiplication."""
         children = list(sub.get_children())
         if len(children) != 2:
             raise _refuse(sub, f"array subscript with {len(children)} children")
         arr_c, idx_c = _unwrap(children[0]), _unwrap(children[1])
-        if not (_is_char_pointer(arr_c) or _is_char_array(arr_c)):
-            raise _refuse(
-                outer,
-                f"&{arr_c.spelling}[…]: only char arrays / char* bases are "
-                f"supported (got {arr_c.type.spelling!r})"
-            )
+        elem_size = self._pointer_element_size(outer, arr_c)
         return PtrOffset(
             base=self.expr(arr_c),
-            offset=self._i64_offset(idx_c),
+            offset=self._byte_stride_offset(idx_c, elem_size),
+        )
+
+    def _pointer_element_size(
+        self, refusal_cursor: cx.Cursor, ptr_cursor: cx.Cursor,
+    ) -> int:
+        """Byte size of the element pointed to by `ptr_cursor`'s C
+        pointer/array type. Drives byte-stride pointer arithmetic.
+        Refuses pointer/array types whose pointee/element isn't a
+        scalar quod type (struct, function, void)."""
+        canon = ptr_cursor.type.get_canonical()
+        if canon.kind == cx.TypeKind.POINTER:
+            pointee = canon.get_pointee()
+        elif canon.kind in (cx.TypeKind.CONSTANTARRAY, cx.TypeKind.INCOMPLETEARRAY):
+            pointee = canon.element_type
+        else:
+            raise _refuse(
+                refusal_cursor,
+                f"pointer arithmetic on non-pointer type {ptr_cursor.type.spelling!r}",
+            )
+        try:
+            elem_qty = _local_type(refusal_cursor, pointee)
+        except IngestError:
+            raise _refuse(
+                refusal_cursor,
+                f"pointer arithmetic on {ptr_cursor.type.spelling!r}: "
+                f"unsupported element type {pointee.spelling!r}",
+            )
+        try:
+            return _sizeof_quod_type(elem_qty)
+        except ValueError:
+            raise _refuse(
+                refusal_cursor,
+                f"pointer arithmetic on {ptr_cursor.type.spelling!r}: "
+                f"no byte size for element type {pointee.spelling!r}",
+            )
+
+    def _byte_stride_offset(
+        self, off_cursor: cx.Cursor, elem_size: int,
+    ) -> Expr:
+        """Compute the byte offset for a typed pointer add:
+        `index * sizeof(element)`. For `elem_size == 1` (char), this
+        folds to the plain `_i64_offset` (existing char-stride
+        behavior). For larger sizes, multiplies the i64-typed offset
+        by the element size as an i64 literal."""
+        if elem_size == 1:
+            return self._i64_offset(off_cursor)
+        idx_i64 = self._i64_offset(off_cursor)
+        if isinstance(idx_i64, IntLit):
+            # Constant-fold: `&buf[3]` on int* becomes IntLit(I64, 12).
+            return IntLit(type=_I64, value=idx_i64.value * elem_size)
+        return BinOp(
+            op="mul",
+            lhs=idx_i64,
+            rhs=IntLit(type=_I64, value=elem_size),
         )
 
     def _i64_offset(self, cursor: cx.Cursor) -> Expr:

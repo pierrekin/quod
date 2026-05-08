@@ -51,7 +51,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from quod.lift_check import LiftCheckError
+from quod.lift_check import LiftCheckError, _format_c_type_str
 from quod.model import (
     BinaryProvenance,
     CAddressOf,
@@ -63,6 +63,8 @@ from quod.model import (
     CCast,
     CCompoundAssign,
     CContinue,
+    CDeref,
+    CDerefStore,
     CDoWhile,
     CEnumConstRef,
     CExprStmt,
@@ -79,6 +81,7 @@ from quod.model import (
     CPointerType,
     CReturn,
     CStringLit,
+    CSubscriptStore,
     CSwitch,
     CSwitchCase,
     CTernary,
@@ -379,6 +382,33 @@ def _check_stmt(s, l, *, path: str) -> dict[str, Any]:
             "value": _check_expr(s.value, l.value, path=f"{path}.value"),
         }
 
+    if isinstance(s, CDerefStore):
+        if _format_c_type_str(s.store_type) != _format_c_type_str(l.store_type):
+            raise LiftCheckError(
+                f"{path}.store_type: {_format_c_type_str(s.store_type)!r} "
+                f"vs {_format_c_type_str(l.store_type)!r}"
+            )
+        return {
+            "kind": "c.deref_store",
+            "operand": _check_expr(s.operand, l.operand, path=f"{path}.operand"),
+            "value": _check_expr(s.value, l.value, path=f"{path}.value"),
+            "store_type": _format_c_type_str(s.store_type),
+        }
+
+    if isinstance(s, CSubscriptStore):
+        if _format_c_type_str(s.elem_type) != _format_c_type_str(l.elem_type):
+            raise LiftCheckError(
+                f"{path}.elem_type: {_format_c_type_str(s.elem_type)!r} "
+                f"vs {_format_c_type_str(l.elem_type)!r}"
+            )
+        return {
+            "kind": "c.subscript_store",
+            "base": _check_expr(s.base, l.base, path=f"{path}.base"),
+            "index": _check_expr(s.index, l.index, path=f"{path}.index"),
+            "value": _check_expr(s.value, l.value, path=f"{path}.value"),
+            "elem_type": _format_c_type_str(s.elem_type),
+        }
+
     if isinstance(s, CBreak):
         return {"kind": "c.break"}
 
@@ -555,10 +585,29 @@ def _check_expr(s, l, *, path: str) -> dict[str, Any]:
         }
 
     if isinstance(s, CArraySubscript):
+        # Both must agree on whether elem_type is set (i.e., on
+        # whether this is an rvalue-load subscript or an
+        # &-wrapped pointer-arithmetic subscript). Strict
+        # structural compare per the walker contract.
+        if (s.elem_type is None) != (l.elem_type is None):
+            raise LiftCheckError(
+                f"{path}: subscript elem_type mismatch — source "
+                f"{'has' if s.elem_type else 'no'} elem_type, "
+                f"lifted {'has' if l.elem_type else 'no'} elem_type"
+            )
+        if s.elem_type is not None and l.elem_type is not None:
+            if _format_c_type_str(s.elem_type) != _format_c_type_str(l.elem_type):
+                raise LiftCheckError(
+                    f"{path}.elem_type: {_format_c_type_str(s.elem_type)!r} "
+                    f"vs {_format_c_type_str(l.elem_type)!r}"
+                )
         return {
             "kind": "c.array_subscript",
             "base": _check_expr(s.base, l.base, path=f"{path}.base"),
             "index": _check_expr(s.index, l.index, path=f"{path}.index"),
+            "elem_type": (
+                _format_c_type_str(s.elem_type) if s.elem_type else None
+            ),
         }
 
     if isinstance(s, CAddressOf):
@@ -567,6 +616,18 @@ def _check_expr(s, l, *, path: str) -> dict[str, Any]:
             "target": _check_expr(
                 s.target, l.target, path=f"{path}.target",
             ),
+        }
+
+    if isinstance(s, CDeref):
+        if _format_c_type_str(s.load_type) != _format_c_type_str(l.load_type):
+            raise LiftCheckError(
+                f"{path}.load_type: {_format_c_type_str(s.load_type)!r} "
+                f"vs {_format_c_type_str(l.load_type)!r}"
+            )
+        return {
+            "kind": "c.deref",
+            "operand": _check_expr(s.operand, l.operand, path=f"{path}.operand"),
+            "load_type": _format_c_type_str(s.load_type),
         }
 
     raise LiftCheckError(

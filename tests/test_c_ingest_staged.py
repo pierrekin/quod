@@ -1048,3 +1048,81 @@ def test_every_c_corpus_example_emits_layer_a():
             continue
         p = ingest_c(c_files[0])
         assert p.source_units, f"{example_dir.name}: expected layer-A subtree"
+
+
+LOADS_STORES_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/loads_stores/loads_stores.c"
+
+
+def test_loads_stores_example_lifts_three_layers():
+    """Stage A typed-pointer loads/stores: `*p`, `arr[k]`, `*p = v`,
+    `arr[k] = v`, and `*(p + n)` ingest as Layer-A `c.deref` /
+    `c.array_subscript` (with elem_type set) / `c.deref_store` /
+    `c.subscript_store`, and lift to Layer-B `Load`/`Store` over
+    byte-stride `PtrOffset`."""
+    from quod.model import (
+        CDeref, CDerefStore, CSubscriptStore, CArraySubscript,
+        Load, Store, PtrOffset, BinOp,
+    )
+    p = ingest_c(LOADS_STORES_C)
+
+    names = {fn.name for fn in p.functions}
+    assert names == {"deref", "index_at", "set", "set_at", "read_after", "swap"}
+
+    cfns = {cfn.name: cfn for cfn in p.source_units[0].functions}
+    fns = {fn.name: fn for fn in p.structured_functions}
+
+    # `int deref(int *p) { return *p; }` — Layer A: CReturn(CDeref(p, int));
+    # Layer B: ReturnExpr(Load(p, i32)).
+    cret = cfns["deref"].body[0]
+    assert isinstance(cret.value, CDeref)
+    bret = fns["deref"].body.stmts[0]
+    assert isinstance(bret.value, Load)
+
+    # `int index_at(int *p, int k) { return p[k]; }` — Layer A:
+    # CArraySubscript with elem_type set; Layer B:
+    # Load(PtrOffset(p, mul(widen64(k), 4)), i32).
+    cret = cfns["index_at"].body[0]
+    assert isinstance(cret.value, CArraySubscript)
+    assert cret.value.elem_type is not None
+    bret = fns["index_at"].body.stmts[0]
+    assert isinstance(bret.value, Load)
+    assert isinstance(bret.value.ptr, PtrOffset)
+    # Element-stride multiplication: BinOp(mul, Cast(k, i64), IntLit(4)).
+    assert isinstance(bret.value.ptr.offset, BinOp)
+    assert bret.value.ptr.offset.op == "mul"
+
+    # `void set(int *p, int v) { *p = v; }` — Layer A: CDerefStore;
+    # Layer B: Store(p, v).
+    cstmt = cfns["set"].body[0]
+    assert isinstance(cstmt, CDerefStore)
+    bstmt = fns["set"].body.stmts[0]
+    assert isinstance(bstmt, Store)
+
+    # `void set_at(int *p, int k, int v) { p[k] = v; }` — Layer A:
+    # CSubscriptStore; Layer B: Store(PtrOffset(...), v).
+    cstmt = cfns["set_at"].body[0]
+    assert isinstance(cstmt, CSubscriptStore)
+    bstmt = fns["set_at"].body.stmts[0]
+    assert isinstance(bstmt, Store)
+    assert isinstance(bstmt.ptr, PtrOffset)
+
+
+def test_loads_stores_example_passes_lift_check():
+    """Every Layer-A node in the loads/stores example pairs against
+    its Layer-B counterpart through walk_lift cleanly."""
+    from quod.lift_check import walk_lift
+    p = ingest_c(LOADS_STORES_C)
+    cfns = {cfn.name: cfn for cfn in p.source_units[0].functions}
+    fns = {fn.name: fn for fn in p.structured_functions}
+    for name, cfn in cfns.items():
+        walk_lift(cfn, fns[name], program=p)
+
+
+def test_loads_stores_example_validates():
+    """The lifted Layer-C program passes the validator — Load and
+    Store of i32 over a byte-stride PtrOffset on i8* is well-typed."""
+    from quod.validate import validate
+    p = ingest_c(LOADS_STORES_C)
+    errs = validate(p)
+    assert not errs, f"validation errors: {errs}"
+

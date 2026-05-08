@@ -73,6 +73,8 @@ from quod.model import (
     CCompoundAssign,
     CContinue,
     CCast,
+    CDeref,
+    CDerefStore,
     CDoWhile,
     CEnumConstRef,
     Continue,
@@ -92,6 +94,7 @@ from quod.model import (
     CScopedBlock,
     CStringLit,
     CStyleFor,
+    CSubscriptStore,
     CSwitch,
     CSwitchCase,
     CTernary,
@@ -108,6 +111,7 @@ from quod.model import (
     IfExpr,
     IntLit,
     Let,
+    Load,
     LocalRef,
     Param,
     Cast,
@@ -118,6 +122,7 @@ from quod.model import (
     PtrOffset,
     Return,
     ReturnExpr,
+    Store,
     StringConstant,
     StringRef,
     VoidType,
@@ -868,6 +873,40 @@ def _check_stmt(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
             "value": _check_expr(a.value, b.value, path=f"{path}.value", ctx=ctx),
         }
 
+    if isinstance(a, CDerefStore):
+        # `*p = v;` ↔ `Store(p', v')`.
+        if not isinstance(b, Store):
+            raise LiftCheckError(
+                f"{path}: layer-A CDerefStore vs layer-B {type(b).__name__}"
+            )
+        return {
+            "kind": "*p = v ↔ store",
+            "a_id": a.id,
+            "operand": _check_expr(a.operand, b.ptr, path=f"{path}.operand", ctx=ctx),
+            "value": _check_expr(a.value, b.value, path=f"{path}.value", ctx=ctx),
+            "store_type": _format_c_type_str(a.store_type),
+        }
+
+    if isinstance(a, CSubscriptStore):
+        # `arr[k] = v;` ↔ `Store(PtrOffset(base, off), v)`.
+        if not isinstance(b, Store):
+            raise LiftCheckError(
+                f"{path}: layer-A CSubscriptStore vs layer-B {type(b).__name__}"
+            )
+        if not isinstance(b.ptr, PtrOffset):
+            raise LiftCheckError(
+                f"{path}: layer-A CSubscriptStore expects layer-B "
+                f"Store(PtrOffset(...), _); got Store({type(b.ptr).__name__}, _)"
+            )
+        return {
+            "kind": "arr[k] = v ↔ store(ptr_offset, v)",
+            "a_id": a.id,
+            "base": _check_expr(a.base, b.ptr.base, path=f"{path}.base", ctx=ctx),
+            "offset": _check_offset_expr(a.index, b.ptr.offset, path=f"{path}.index", ctx=ctx),
+            "value": _check_expr(a.value, b.value, path=f"{path}.value", ctx=ctx),
+            "elem_type": _format_c_type_str(a.elem_type),
+        }
+
     if isinstance(a, CBreak):
         if not isinstance(b, Break):
             raise LiftCheckError(f"{path}: layer-A CBreak vs layer-B {type(b).__name__}")
@@ -1205,9 +1244,10 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
 
     if isinstance(a, CAddressOf):
         # `&p[k]` is C's pointer-arithmetic spelling — equivalent to
-        # `p + k` for char* (and any pointer type, modulo the byte
-        # vs element-size scaling that's currently limited to char-stride).
-        # The layer-B side is always `PtrOffset(base, offset)`.
+        # `p + k`. The layer-B side is always `PtrOffset(base, offset)`.
+        # For typed pointers (`int *p`), the layer-B offset is
+        # `mul(widen64(k), sizeof(T))`; `_check_offset_expr` handles
+        # both the char-stride and typed-stride shapes.
         if not isinstance(b, PtrOffset):
             raise LiftCheckError(
                 f"{path}: layer-A CAddressOf vs layer-B {type(b).__name__}"
@@ -1223,6 +1263,49 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
             "a_id": a.id,
             "base": _check_expr(sub.base, b.base, path=f"{path}.target.base", ctx=ctx),
             "offset": _check_offset_expr(sub.index, b.offset, path=f"{path}.target.index", ctx=ctx),
+        }
+
+    if isinstance(a, CArraySubscript):
+        # Standalone `arr[k]` rvalue ↔ `Load(PtrOffset(base, off), T)`.
+        # The CArraySubscript inside CAddressOf is consumed above; if
+        # we reach here, it's used as an rvalue and `elem_type` must
+        # be set.
+        if a.elem_type is None:
+            raise LiftCheckError(
+                f"{path}: layer-A CArraySubscript used as rvalue but "
+                f"elem_type is None"
+            )
+        if not isinstance(b, Load):
+            raise LiftCheckError(
+                f"{path}: layer-A CArraySubscript (rvalue) vs layer-B "
+                f"{type(b).__name__}"
+            )
+        if not isinstance(b.ptr, PtrOffset):
+            raise LiftCheckError(
+                f"{path}: layer-A CArraySubscript expects layer-B "
+                f"Load(PtrOffset(...), _); got Load({type(b.ptr).__name__}, _)"
+            )
+        _check_value_type(a.elem_type, b.type, path=f"{path}.elem_type")
+        return {
+            "kind": "arr[k] ↔ load(ptr_offset)",
+            "a_id": a.id,
+            "base": _check_expr(a.base, b.ptr.base, path=f"{path}.base", ctx=ctx),
+            "offset": _check_offset_expr(a.index, b.ptr.offset, path=f"{path}.index", ctx=ctx),
+            "elem_type": _format_c_type_str(a.elem_type),
+        }
+
+    if isinstance(a, CDeref):
+        # `*p` rvalue ↔ `Load(p', load_type')`.
+        if not isinstance(b, Load):
+            raise LiftCheckError(
+                f"{path}: layer-A CDeref vs layer-B {type(b).__name__}"
+            )
+        _check_value_type(a.load_type, b.type, path=f"{path}.load_type")
+        return {
+            "kind": "*p ↔ load",
+            "a_id": a.id,
+            "operand": _check_expr(a.operand, b.ptr, path=f"{path}.operand", ctx=ctx),
+            "load_type": _format_c_type_str(a.load_type),
         }
 
     raise LiftCheckError(
@@ -1255,13 +1338,19 @@ def _check_pointer_arith(
 
 
 def _check_offset_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
-    """Layer-B pointer offsets are i64-typed: a literal becomes
-    `IntLit(I64, N)`; a non-literal gets wrapped in `Cast(value,
-    target_type=I64Type)`. Both shapes correspond to a single layer-A
-    `CExpr`.
+    """Layer-B pointer offsets are i64-typed and take three shapes:
 
-    Literal: `CIntLit(N) ↔ IntLit(I64, N)`.
-    Variable: `expr ↔ Cast(expr', target_type=I64Type)`.
+      - Literal char-stride / element-stride: `IntLit(I64, N)` —
+        either the raw index for byte-stride, or a constant-folded
+        `index * sizeof(T)` for typed pointers. Either way, the
+        layer-A side is `CIntLit(K)`; the lift-check accepts any
+        `b.value` that's a non-negative multiple of `K` (i.e.
+        `b.value == K * stride` for some stride ≥ 1).
+      - Variable char-stride: `Cast(value, target_type=I64Type)` —
+        the index widened to i64 for byte-stride pointers.
+      - Variable typed-stride: `BinOp("mul", widen64(idx),
+        IntLit(I64, S))` — the index times the element size in
+        bytes, for `T *p + n` with `sizeof(T) > 1`.
     """
     if isinstance(b, IntLit):
         if not isinstance(b.type, I64Type):
@@ -1273,11 +1362,26 @@ def _check_offset_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
                 f"{path}: layer-A {type(a).__name__} vs layer-B literal offset "
                 f"({b.value}); expected CIntLit"
             )
-        if a.value != b.value:
-            raise LiftCheckError(
-                f"{path}: offset value {a.value} vs {b.value}"
-            )
-        return {"kind": "offset_lit", "value": a.value}
+        # Accept either an exact match (char-stride: b.value == a.value)
+        # or a typed-stride constant fold (b.value == a.value * S for
+        # some integer stride S). The structural walk doesn't know S
+        # without re-parsing the source; we just verify divisibility
+        # and same sign.
+        if a.value == b.value:
+            return {"kind": "offset_lit", "value": a.value}
+        if a.value != 0 and b.value % a.value == 0 and (
+            (a.value > 0) == (b.value > 0)
+        ):
+            return {
+                "kind": "offset_lit (typed-stride fold)",
+                "index": a.value,
+                "byte_offset": b.value,
+                "stride": b.value // a.value,
+            }
+        raise LiftCheckError(
+            f"{path}: offset value {a.value} vs {b.value} "
+            f"(neither equal nor a typed-stride multiple)"
+        )
     if isinstance(b, Cast):
         if not isinstance(b.target_type, I64Type):
             raise LiftCheckError(
@@ -1288,8 +1392,22 @@ def _check_offset_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
             "kind": "offset ↔ cast(i64)",
             "value": _check_expr(a, b.value, path=path, ctx=ctx),
         }
+    if isinstance(b, BinOp) and b.op == "mul":
+        # Typed-stride: `mul(widen64(index), IntLit(I64, sizeof(T)))`.
+        # The layer-A side is the un-multiplied index expression.
+        if not (isinstance(b.rhs, IntLit) and isinstance(b.rhs.type, I64Type)):
+            raise LiftCheckError(
+                f"{path}: layer-B offset BinOp(mul) RHS is "
+                f"{type(b.rhs).__name__}; expected IntLit(i64)"
+            )
+        return {
+            "kind": "offset ↔ mul(widen64(index), sizeof)",
+            "stride": b.rhs.value,
+            "value": _check_offset_expr(a, b.lhs, path=path, ctx=ctx),
+        }
     raise LiftCheckError(
-        f"{path}: layer-B offset is {type(b).__name__}; expected IntLit(i64) or Cast"
+        f"{path}: layer-B offset is {type(b).__name__}; expected "
+        f"IntLit(i64), Cast(_, i64), or BinOp(mul, _, IntLit(i64))"
     )
 
 

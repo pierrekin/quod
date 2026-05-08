@@ -43,6 +43,8 @@ from quod.model import (
     CCompoundAssign,
     CContinue,
     CCast,
+    CDeref,
+    CDerefStore,
     CDoWhile,
     CEnumConstRef,
     CExpr,
@@ -61,6 +63,7 @@ from quod.model import (
     CReturn,
     CStmt,
     CStringLit,
+    CSubscriptStore,
     CSwitch,
     CSwitchCase,
     CTernary,
@@ -240,6 +243,15 @@ class _LayerATranslator:
                 # is a known minor infraction; preserving it would need
                 # CUnary("+") which has no observable effect).
                 return inner
+            if op == "*":
+                # `*p` rvalue — layer A preserves the deref with the
+                # pointee type carried for the lift-check.
+                load_ctype = _c_source_type(c, c.type)
+                return CDeref(
+                    id=self._mint("cderef"),
+                    operand=inner,
+                    load_type=load_ctype,
+                )
             if op in ("++", "--"):
                 raise _refuse(
                     c,
@@ -247,6 +259,21 @@ class _LayerATranslator:
                     f"(only bare-statement and for-loop inc positions are supported)"
                 )
             raise _refuse(c, f"layer A: unsupported unary operator {op!r}")
+        if k == cx.CursorKind.ARRAY_SUBSCRIPT_EXPR:
+            # `arr[k]` standalone rvalue — layer A preserves the
+            # subscript with `elem_type` set (the lift-check pairs
+            # this against layer-B `Load(PtrOffset(...), T)`).
+            children = list(c.get_children())
+            if len(children) != 2:
+                raise _refuse(c, f"layer A: array subscript with {len(children)} children")
+            base, index = children
+            elem_ctype = _c_source_type(c, c.type)
+            return CArraySubscript(
+                id=self._mint("carrsub"),
+                base=self.expr(base),
+                index=self.expr(index),
+                elem_type=elem_ctype,
+            )
         if k == cx.CursorKind.CONDITIONAL_OPERATOR:
             children = list(c.get_children())
             if len(children) != 3:
@@ -299,11 +326,43 @@ class _LayerATranslator:
             return CMultiVarDecl(id=self._mint("cmultivardecl"), decls=tuple(sub_decls))
 
         if k == cx.CursorKind.BINARY_OPERATOR:
-            # Bare assignment as a statement: `x = expr;`.
+            # Bare assignment as a statement: `x = expr;`,
+            # `*p = expr;`, or `arr[k] = expr;`.
             tokens = [t.spelling for t in c.get_tokens()]
             if "=" in tokens and "==" not in tokens:
                 children = list(c.get_children())
                 lhs = _unwrap(children[0])
+                # Pointer-deref store
+                if lhs.kind == cx.CursorKind.UNARY_OPERATOR:
+                    lhs_tokens = [t.spelling for t in lhs.get_tokens()]
+                    if lhs_tokens and lhs_tokens[0] == "*":
+                        deref_children = list(lhs.get_children())
+                        if len(deref_children) != 1:
+                            raise _refuse(lhs, "layer A: deref-store with non-1 deref children")
+                        store_ctype = _c_source_type(lhs, lhs.type)
+                        return CDerefStore(
+                            id=self._mint("cderefstore"),
+                            operand=self.expr(deref_children[0]),
+                            value=self.expr(children[1]),
+                            store_type=store_ctype,
+                        )
+                # Subscript store
+                if lhs.kind == cx.CursorKind.ARRAY_SUBSCRIPT_EXPR:
+                    sub_children = list(lhs.get_children())
+                    if len(sub_children) != 2:
+                        raise _refuse(
+                            lhs,
+                            f"layer A: subscript-store with {len(sub_children)} children",
+                        )
+                    base, index = sub_children
+                    elem_ctype = _c_source_type(lhs, lhs.type)
+                    return CSubscriptStore(
+                        id=self._mint("csubscriptstore"),
+                        base=self.expr(base),
+                        index=self.expr(index),
+                        value=self.expr(children[1]),
+                        elem_type=elem_ctype,
+                    )
                 if lhs.kind != cx.CursorKind.DECL_REF_EXPR:
                     raise _refuse(lhs, "layer A: only simple `name = expr` assignment supported")
                 return CAssign(

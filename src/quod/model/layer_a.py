@@ -194,16 +194,32 @@ class CCall(_Node):
 
 
 class CArraySubscript(_Node):
-    """`base[index]` — array subscript. Only emitted inside a
-    `CAddressOf` (the lifter recognizes `&p[k]` as pointer arithmetic
-    and produces a `PtrOffset` at layer B). Bare `arr[k]` reads —
-    e.g. for an `int arr[]` value — aren't yet supported by the
-    layer-A or layer-B translators.
+    """`base[index]` — array subscript. Two roles:
+
+    1. Inside a `CAddressOf` (`&p[k]`): the lifter recognizes the
+       composed shape as pointer arithmetic and produces a
+       `PtrOffset` at layer B. `elem_type` is `None` here (the
+       result is a pointer, not a loaded value).
+    2. Standalone in expression position (`arr[k]` rvalue): a typed
+       load. `elem_type` is the element type and the layer-B side
+       is `Load(PtrOffset(base, mul(widen64(index), sizeof(T))), T)`.
     """
     kind: Literal["c.array_subscript"] = "c.array_subscript"
     id: str = Field(default_factory=lambda: _mint_node_id("carrsub"))
     base: "CExpr"
     index: "CExpr"
+    elem_type: "CType | None" = None
+
+
+class CDeref(_Node):
+    """`*p` — pointer dereference (rvalue load). The pointee value's
+    quod type is carried as `load_type`, taken from libclang's
+    cursor.type at the deref cursor (which already reflects the
+    pointee). The layer-B side is `Load(p', load_type')`."""
+    kind: Literal["c.deref"] = "c.deref"
+    id: str = Field(default_factory=lambda: _mint_node_id("cderef"))
+    operand: "CExpr"
+    load_type: "CType"
 
 
 class CAddressOf(_Node):
@@ -268,7 +284,7 @@ class CUnary(_Node):
 
 CExpr = Annotated[
     Union[CIntLit, CFloatLit, CVarRef, CEnumConstRef, CBinOp, CStringLit, CCall,
-          CArraySubscript, CAddressOf, CUnary, CTernary, CCast],
+          CArraySubscript, CAddressOf, CDeref, CUnary, CTernary, CCast],
     Field(discriminator="kind"),
 ]
 
@@ -384,6 +400,32 @@ class CExprStmt(_Node):
     value: CExpr
 
 
+class CDerefStore(_Node):
+    """`*p = v;` — store via pointer dereference. The value's quod
+    type is carried as `store_type`, taken from libclang's
+    cursor.type at the deref-LHS cursor. The layer-B side is
+    `Store(p', v')`."""
+    kind: Literal["c.deref_store"] = "c.deref_store"
+    id: str = Field(default_factory=lambda: _mint_node_id("cderefstore"))
+    operand: CExpr
+    value: CExpr
+    store_type: CType
+
+
+class CSubscriptStore(_Node):
+    """`arr[k] = v;` — store at a subscripted location. The
+    element's quod type is carried as `elem_type`, taken from
+    libclang's cursor.type at the subscript-LHS cursor. The layer-B
+    side is `Store(PtrOffset(base, mul(widen64(index), sizeof(T))),
+    value)`."""
+    kind: Literal["c.subscript_store"] = "c.subscript_store"
+    id: str = Field(default_factory=lambda: _mint_node_id("csubscriptstore"))
+    base: CExpr
+    index: CExpr
+    value: CExpr
+    elem_type: CType
+
+
 # CForInit is the union of statements that may appear in a C for-loop's
 # init or inc slot — a declaration or an assignment. Distinct from CStmt
 # because for-init permits a declaration even outside a block scope; the
@@ -452,8 +494,8 @@ class CMultiVarDecl(_Node):
 
 CStmt = Annotated[
     Union[CVarDecl, CMultiVarDecl, CAssign, CCompoundAssign, CIncrementStmt,
-          CReturn, CFor, CIf, CWhile, CDoWhile, CExprStmt, CBreak, CContinue,
-          CSwitch],
+          CReturn, CFor, CIf, CWhile, CDoWhile, CExprStmt, CDerefStore,
+          CSubscriptStore, CBreak, CContinue, CSwitch],
     Field(discriminator="kind"),
 ]
 

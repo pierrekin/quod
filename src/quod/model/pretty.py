@@ -51,6 +51,8 @@ from quod.model.layer_a import (
     CAssign,
     CBinOp,
     CCall,
+    CDeref,
+    CDerefStore,
     CEnumConstRef,
     CExprStmt,
     CFn,
@@ -63,6 +65,7 @@ from quod.model.layer_a import (
     CPointerType,
     CReturn,
     CStringLit,
+    CSubscriptStore,
     CUnit,
     CVarDecl,
     CVarRef,
@@ -387,6 +390,10 @@ def _format_c_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
             return f"{head}\n{body_lines}\n{pad}}}"
         case CExprStmt(value=v):
             return f"{pad}{prefix}{_format_c_expr(v)};"
+        case CDerefStore(operand=op, value=v):
+            return f"{pad}{prefix}*{_format_c_expr(op)} = {_format_c_expr(v)};"
+        case CSubscriptStore(base=b, index=i, value=v):
+            return f"{pad}{prefix}{_format_c_expr(b)}[{_format_c_expr(i)}] = {_format_c_expr(v)};"
     raise ValueError(f"unhandled c.* statement: {stmt!r}")
 
 
@@ -424,6 +431,8 @@ def _format_c_expr(e) -> str:
             return f"{_format_c_expr(b)}[{_format_c_expr(i)}]"
         case CAddressOf(target=t):
             return f"&{_format_c_expr(t)}"
+        case CDeref(operand=op):
+            return f"*{_format_c_expr(op)}"
         case CCast(target_type=t, value=v):
             return f"({_format_c_type(t)}){_format_c_expr(v)}"
     raise ValueError(f"unhandled c.* expression: {e!r}")

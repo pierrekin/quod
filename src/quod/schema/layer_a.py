@@ -19,6 +19,8 @@ from quod.model import (
     CCast,
     CCompoundAssign,
     CContinue,
+    CDeref,
+    CDerefStore,
     CDoWhile,
     CEnumConstRef,
     CExprStmt,
@@ -33,6 +35,7 @@ from quod.model import (
     CPointerType,
     CReturn,
     CStringLit,
+    CSubscriptStore,
     CSwitch,
     CSwitchCase,
     CTernary,
@@ -166,13 +169,60 @@ _LAYER_A_CATALOG: dict[str, dict[str, Any]] = {
     "c.array_subscript": {
         "class": CArraySubscript,
         "summary": (
-            "`base[index]` — array subscript. Only emitted inside a "
-            "`c.addr_of`; bare reads aren't yet supported."
+            "`base[index]` — array subscript. Two roles: inside a "
+            "`c.addr_of` (pointer arithmetic, `elem_type=null`); "
+            "standalone in expression position (typed load, "
+            "`elem_type` set to the element's quod type)."
         ),
         "example": {
             "kind": "c.array_subscript",
-            "base": {"kind": "c.var_ref", "name": "buf"},
-            "index": {"kind": "c.lit_int", "value": 7},
+            "base": {"kind": "c.var_ref", "name": "p"},
+            "index": {"kind": "c.var_ref", "name": "k"},
+            "elem_type": {"kind": "c.type", "name": "int"},
+        },
+    },
+
+    "c.deref": {
+        "class": CDeref,
+        "summary": (
+            "`*p` — pointer dereference (rvalue load). The pointee "
+            "value's quod type is carried on the node and pairs with "
+            "a layer-B `Load(p', load_type')`."
+        ),
+        "example": {
+            "kind": "c.deref",
+            "operand": {"kind": "c.var_ref", "name": "p"},
+            "load_type": {"kind": "c.type", "name": "int"},
+        },
+    },
+
+    "c.deref_store": {
+        "class": CDerefStore,
+        "summary": (
+            "`*p = v;` — store via pointer dereference. Pairs with "
+            "a layer-B `Store(p', v')`."
+        ),
+        "example": {
+            "kind": "c.deref_store",
+            "operand": {"kind": "c.var_ref", "name": "p"},
+            "value": {"kind": "c.lit_int", "value": 0},
+            "store_type": {"kind": "c.type", "name": "int"},
+        },
+    },
+
+    "c.subscript_store": {
+        "class": CSubscriptStore,
+        "summary": (
+            "`arr[k] = v;` — store at a subscripted location. Pairs "
+            "with a layer-B `Store(PtrOffset(base, mul(widen64(k), "
+            "sizeof(T))), v)`."
+        ),
+        "example": {
+            "kind": "c.subscript_store",
+            "base": {"kind": "c.var_ref", "name": "p"},
+            "index": {"kind": "c.var_ref", "name": "k"},
+            "value": {"kind": "c.lit_int", "value": 0},
+            "elem_type": {"kind": "c.type", "name": "int"},
         },
     },
 
