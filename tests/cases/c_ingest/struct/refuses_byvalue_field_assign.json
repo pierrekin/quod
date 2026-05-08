@@ -1,0 +1,6 @@
+{
+  "c_file": "refuses_byvalue_field_assign.c",
+  "expect": {
+    "ingest_error": "by-value struct field assignment"
+  }
+}

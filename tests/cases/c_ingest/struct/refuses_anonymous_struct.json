@@ -1,0 +1,6 @@
+{
+  "c_file": "refuses_anonymous_struct.c",
+  "expect": {
+    "ingest_error": "anonymous structs not yet supported"
+  }
+}

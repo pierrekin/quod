@@ -7,6 +7,8 @@ translation. Leaf module: imports only from `clang.cindex` and
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import clang.cindex as cx
 
 from quod.model import (
@@ -278,6 +280,43 @@ def _fenv_call_refusal(name: str) -> str:
     )
 
 
+class _StructInfo:
+    """One struct's collected metadata, populated during the
+    pre-function pass over the TU. Used by `_local_type` (to
+    recognise `struct Foo` references) and by `_FunctionTranslator`
+    (to resolve field names during MEMBER_REF dispatch and to
+    pair struct-init list elements with field names)."""
+    __slots__ = ("name", "fields", "field_names", "field_types", "cursor")
+
+    def __init__(
+        self, name: str, fields: tuple[tuple[str, Type], ...],
+        cursor: cx.Cursor,
+    ) -> None:
+        self.name = name
+        self.fields = fields
+        self.field_names = tuple(n for n, _ in fields)
+        self.field_types = {n: t for n, t in fields}
+        self.cursor = cursor
+
+
+class _StructRegistry:
+    """Per-translation-unit catalog of struct definitions. Built in
+    pass 1 of the driver before any function bodies are visited."""
+    __slots__ = ("by_name",)
+
+    def __init__(self, by_name: dict[str, _StructInfo]) -> None:
+        self.by_name = by_name
+
+    def get(self, name: str) -> _StructInfo | None:
+        return self.by_name.get(name)
+
+    def __contains__(self, name: str) -> bool:
+        return name in self.by_name
+
+
+_EMPTY_STRUCT_REGISTRY = _StructRegistry({})
+
+
 def _sizeof_quod_type(t: Type) -> int:
     """Byte size of a scalar quod type, as used for byte-stride pointer
     arithmetic on typed pointers. `int *p + n` becomes
@@ -303,13 +342,20 @@ def _sizeof_quod_type(t: Type) -> int:
     )
 
 
-def _local_type(cursor: cx.Cursor, t: cx.Type) -> Type:
+def _local_type(
+    cursor: cx.Cursor, t: cx.Type, *,
+    structs: _StructRegistry | None = None,
+) -> Type:
     """Map a clang scalar type to a quod Type. Accepts every signed and
     unsigned integer width (char/short/int/long/long_long, plus their
     typedef'd standards `size_t`, `int8_t`–`int64_t`, etc., resolved via
     clang's canonical-type lookup), `enum` (always `int`-typed), any
     pointer (modeled as i8_ptr), and `float` / `double`. `long double`,
     `__int128`, and bit-fields refused.
+
+    When `structs` is set and the type resolves to `RECORD`, returns
+    a layer-B `StructType(name)` if the struct is in the registry;
+    otherwise refuses (use-before-decl).
 
     Used for params, locals, return types, and Cast targets.
     """
@@ -327,7 +373,77 @@ def _local_type(cursor: cx.Cursor, t: cx.Type) -> Type:
         return _F64
     if canon.kind == cx.TypeKind.LONGDOUBLE:
         raise _refuse(cursor, _LONG_DOUBLE_REFUSAL)
+    if canon.kind == cx.TypeKind.RECORD and structs is not None:
+        struct_name = _struct_name_from_record_type(canon)
+        if struct_name is not None and struct_name in structs:
+            from quod.model import StructType
+            return StructType(name=struct_name)
+        raise _refuse(
+            cursor,
+            f"unknown struct type {t.spelling!r} (declare it with "
+            f"`struct {struct_name or 'X'} {{ ... }};` at file scope before use)",
+        )
     raise _refuse(cursor, f"unsupported local-var type {t.spelling!r}")
+
+
+def _struct_name_from_record_type(canon_t: cx.Type) -> str | None:
+    """Extract the struct's canonical name from a libclang RECORD
+    `cx.Type`. The declaration cursor's `spelling` is the
+    `struct Foo` form's `Foo` (without the `struct` prefix)."""
+    decl = canon_t.get_declaration()
+    if decl is None or decl.kind != cx.CursorKind.STRUCT_DECL:
+        return None
+    name = decl.spelling
+    if not name:
+        return None
+    return name
+
+
+def _build_struct_registry(
+    tu: cx.TranslationUnit, source_path: Path,
+) -> "_StructRegistry":
+    """Walk the TU's top-level cursors, find every `struct Foo
+    { ... };` definition in `source_path`, and build a registry.
+    Refuses anonymous structs, unions, bit-fields. Forward
+    declarations (`struct Foo;` without a body) are skipped.
+    """
+    by_name: dict[str, _StructInfo] = {}
+    for cursor in tu.cursor.get_children():
+        loc_file = cursor.location.file
+        if loc_file is None or Path(loc_file.name).resolve() != source_path:
+            continue
+        if cursor.kind == cx.CursorKind.UNION_DECL:
+            raise _refuse(cursor, "unions not yet supported")
+        if cursor.kind != cx.CursorKind.STRUCT_DECL:
+            continue
+        if not cursor.is_definition():
+            continue
+        if cursor.is_anonymous():
+            raise _refuse(cursor, "anonymous structs not yet supported")
+        name = cursor.spelling
+        if not name:
+            raise _refuse(cursor, "anonymous structs not yet supported")
+        fields: list[tuple[str, Type]] = []
+        for child in cursor.get_children():
+            if child.kind != cx.CursorKind.FIELD_DECL:
+                # FIELD_DECL is the only thing we expect; struct/union
+                # decls nested inside are refused.
+                if child.kind in (cx.CursorKind.STRUCT_DECL, cx.CursorKind.UNION_DECL):
+                    raise _refuse(child, "nested struct/union decls not yet supported")
+                continue
+            if child.is_bitfield():
+                raise _refuse(child, "bit-fields not yet supported")
+            field_name = child.spelling
+            if not field_name:
+                raise _refuse(child, "anonymous struct fields not yet supported")
+            field_qty = _local_type(child, child.type)
+            fields.append((field_name, field_qty))
+        if not fields:
+            raise _refuse(cursor, f"struct {name!r} has no fields")
+        by_name[name] = _StructInfo(
+            name=name, fields=tuple(fields), cursor=cursor,
+        )
+    return _StructRegistry(by_name)
 
 
 def _unwrap(cursor: cx.Cursor) -> cx.Cursor:

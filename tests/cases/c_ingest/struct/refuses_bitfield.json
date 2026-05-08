@@ -1,0 +1,6 @@
+{
+  "c_file": "refuses_bitfield.c",
+  "expect": {
+    "ingest_error": "bit-fields not yet supported"
+  }
+}

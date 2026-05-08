@@ -1126,3 +1126,80 @@ def test_loads_stores_example_validates():
     errs = validate(p)
     assert not errs, f"validation errors: {errs}"
 
+
+
+STRUCTS_C = Path(__file__).resolve().parents[1] / "examples/c_ingest/structs/structs.c"
+
+
+def test_structs_example_lifts_three_layers():
+    """Stage B struct support: `struct Foo {...};`, `(struct Foo){a, b}`,
+    `p.x`, `p->x`, `p->x = v;` ingest as Layer-A struct nodes and
+    lift to Layer-B `StructDef`/`StructInit`/`FieldRead`/`LoadField`/
+    `StoreField`."""
+    from quod.model import (
+        CFieldArrow, CFieldArrowStore, CFieldRead, CStructDef, CStructInit,
+        FieldRead, LoadField, StoreField, StructDef, StructInit,
+    )
+    p = ingest_c(STRUCTS_C)
+
+    # Struct decls land at the top of Program.structs.
+    assert {s.name for s in p.structs} == {"Point", "Span"}
+
+    names = {fn.name for fn in p.functions}
+    assert names == {
+        "sum_xy", "sum_via_ptr", "set_x", "set_xy",
+        "build_and_sum", "span_sum",
+    }
+
+    # Layer-A source_units carry CStructDef alongside CFns.
+    [unit] = p.source_units
+    assert {sd.name for sd in unit.struct_defs} == {"Point", "Span"}
+    cfns = {cfn.name: cfn for cfn in unit.functions}
+    fns = {fn.name: fn for fn in p.structured_functions}
+
+    # `int sum_xy(struct Point p) { return p.x + p.y; }`
+    # — Layer A: CFieldRead(p, x) + CFieldRead(p, y); Layer B:
+    # FieldRead(p, x) + FieldRead(p, y).
+    cret = cfns["sum_xy"].body[0]
+    assert isinstance(cret.value.lhs, CFieldRead)
+    bret = fns["sum_xy"].body.stmts[0]
+    assert isinstance(bret.value.lhs, FieldRead)
+
+    # `p->x` ↔ LoadField, `p->x = v;` ↔ StoreField.
+    cret_via_ptr = cfns["sum_via_ptr"].body[0]
+    assert isinstance(cret_via_ptr.value.lhs, CFieldArrow)
+    bret_via_ptr = fns["sum_via_ptr"].body.stmts[0]
+    assert isinstance(bret_via_ptr.value.lhs, LoadField)
+
+    cstmt_set_x = cfns["set_x"].body[0]
+    assert isinstance(cstmt_set_x, CFieldArrowStore)
+    bstmt_set_x = fns["set_x"].body.stmts[0]
+    assert isinstance(bstmt_set_x, StoreField)
+
+    # `struct Point p = {a, b};` — Layer A: CStructInit; Layer B:
+    # StructInit.
+    cdecl = cfns["build_and_sum"].body[0]
+    assert isinstance(cdecl, type(cdecl)) and cdecl.kind == "c.var_decl"
+    assert isinstance(cdecl.init, CStructInit)
+    bdecl = fns["build_and_sum"].body.stmts[0]
+    assert isinstance(bdecl.init, StructInit)
+
+
+def test_structs_example_passes_lift_check():
+    """Every Layer-A struct node pairs against its Layer-B counterpart
+    through walk_lift cleanly."""
+    from quod.lift_check import walk_lift
+    p = ingest_c(STRUCTS_C)
+    cfns = {cfn.name: cfn for cfn in p.source_units[0].functions}
+    fns = {fn.name: fn for fn in p.structured_functions}
+    for name, cfn in cfns.items():
+        walk_lift(cfn, fns[name], program=p)
+
+
+def test_structs_example_validates():
+    """The lifted Layer-C program with StructDef + Load/StoreField +
+    FieldRead/StructInit nodes passes the validator."""
+    from quod.validate import validate
+    p = ingest_c(STRUCTS_C)
+    errs = validate(p)
+    assert not errs, f"validation errors: {errs}"

@@ -1,0 +1,6 @@
+{
+  "c_file": "refuses_union.c",
+  "expect": {
+    "ingest_error": "unions not yet supported"
+  }
+}

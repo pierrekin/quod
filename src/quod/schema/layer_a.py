@@ -24,6 +24,11 @@ from quod.model import (
     CDoWhile,
     CEnumConstRef,
     CExprStmt,
+    CField,
+    CFieldArrow,
+    CFieldArrowStore,
+    CFieldInit,
+    CFieldRead,
     CFloatLit,
     CFn,
     CFor,
@@ -35,6 +40,9 @@ from quod.model import (
     CPointerType,
     CReturn,
     CStringLit,
+    CStructDef,
+    CStructInit,
+    CStructType,
     CSubscriptStore,
     CSwitch,
     CSwitchCase,
@@ -223,6 +231,115 @@ _LAYER_A_CATALOG: dict[str, dict[str, Any]] = {
             "index": {"kind": "c.var_ref", "name": "k"},
             "value": {"kind": "c.lit_int", "value": 0},
             "elem_type": {"kind": "c.type", "name": "int"},
+        },
+    },
+
+    "c.type.struct": {
+        "class": CStructType,
+        "summary": (
+            "A named struct type reference: `struct Foo`. Pairs with "
+            "layer-B `StructType(name='Foo')`."
+        ),
+        "example": {"kind": "c.type.struct", "name": "Point"},
+    },
+
+    "c.struct_def": {
+        "class": CStructDef,
+        "summary": (
+            "`struct Foo { int x; int y; };` — file-scope struct "
+            "definition. Pairs with layer-B `StructDef`."
+        ),
+        "example": {
+            "kind": "c.struct_def", "name": "Point",
+            "fields": [
+                {"kind": "c.field_decl", "name": "x", "type": {"kind": "c.type", "name": "int"}},
+                {"kind": "c.field_decl", "name": "y", "type": {"kind": "c.type", "name": "int"}},
+            ],
+        },
+    },
+
+    "c.field_decl": {
+        "class": CField,
+        "summary": "One field of a `c.struct_def`.",
+        "example": {
+            "kind": "c.field_decl", "name": "x",
+            "type": {"kind": "c.type", "name": "int"},
+        },
+    },
+
+    "c.struct_init": {
+        "class": CStructInit,
+        "summary": (
+            "`= {a, b}` aggregate initialiser for a struct value. "
+            "Pairs with layer-B `StructInit(type=type_name, "
+            "fields=...)`."
+        ),
+        "example": {
+            "kind": "c.struct_init", "type_name": "Point",
+            "fields": [
+                {"kind": "c.field_init", "name": "x",
+                 "value": {"kind": "c.var_ref", "name": "a"}},
+                {"kind": "c.field_init", "name": "y",
+                 "value": {"kind": "c.var_ref", "name": "b"}},
+            ],
+        },
+    },
+
+    "c.field_init": {
+        "class": CFieldInit,
+        "summary": (
+            "One field's value in a `c.struct_init`. `name` is None "
+            "for positional initialisers."
+        ),
+        "example": {
+            "kind": "c.field_init", "name": "x",
+            "value": {"kind": "c.var_ref", "name": "a"},
+        },
+    },
+
+    "c.field": {
+        "class": CFieldRead,
+        "summary": (
+            "`p.x` — by-value struct field access. Pairs with "
+            "layer-B `FieldRead(value=value', name='x')`."
+        ),
+        "example": {
+            "kind": "c.field",
+            "value": {"kind": "c.var_ref", "name": "p"},
+            "name": "x",
+            "field_type": {"kind": "c.type", "name": "int"},
+        },
+    },
+
+    "c.field_arrow": {
+        "class": CFieldArrow,
+        "summary": (
+            "`p->x` — struct-pointer field access. Pairs with "
+            "layer-B `LoadField(ptr=p', struct_type=..., name='x')`."
+        ),
+        "example": {
+            "kind": "c.field_arrow",
+            "ptr": {"kind": "c.var_ref", "name": "p"},
+            "struct_type": "Point",
+            "name": "x",
+            "field_type": {"kind": "c.type", "name": "int"},
+        },
+    },
+
+    "c.field_arrow_store": {
+        "class": CFieldArrowStore,
+        "summary": (
+            "`p->x = v;` — store via struct pointer. Pairs with "
+            "layer-B `StoreField(ptr=p', struct_type=..., "
+            "name='x', value=v')`. By-value field assignment "
+            "(`p.x = v`) is refused at ingest."
+        ),
+        "example": {
+            "kind": "c.field_arrow_store",
+            "ptr": {"kind": "c.var_ref", "name": "p"},
+            "struct_type": "Point",
+            "name": "x",
+            "value": {"kind": "c.lit_int", "value": 5},
         },
     },
 

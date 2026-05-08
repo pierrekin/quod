@@ -25,6 +25,8 @@ from quod.ingest.c.helpers import (
     _lookup_compound_assign,
     _lookup_int_binop,
     _LONG_DOUBLE_REFUSAL,
+    _StructInfo,
+    _StructRegistry,
     _VOID,
     _binop_token,
     _fenv_call_refusal,
@@ -41,6 +43,7 @@ from quod.ingest.c.helpers import (
     _refuse,
     _sizeof_quod_type,
     _split_for_children,
+    _struct_name_from_record_type,
     _unwrap,
 )
 from quod.model import (
@@ -64,6 +67,7 @@ from quod.model import (
     LibcLinkage,
     Let,
     Load,
+    LoadField,
     LocalRef,
     Param,
     ParamRef,
@@ -74,8 +78,15 @@ from quod.model import (
     ShortCircuitOr,
     Statement,
     Store,
+    StoreField,
     StringConstant,
     StringRef,
+    StructDef,
+    StructField,
+    StructInit,
+    StructType,
+    FieldInit,
+    FieldRead,
     Type,
     Unreachable,
     While,
@@ -209,13 +220,22 @@ class _ProgramState:
     are translated; consumed by `ingest_c` to populate the Program.
     """
 
-    def __init__(self, string_prefix: str = "") -> None:
+    def __init__(
+        self, string_prefix: str = "", *,
+        structs: "_StructRegistry | None" = None,
+    ) -> None:
+        from quod.ingest.c.helpers import _EMPTY_STRUCT_REGISTRY
         # Dedupe by literal value so identical strings collapse to one constant.
         self._string_by_value: dict[str, str] = {}
         self.constants: list[StringConstant] = []
         # Map external-symbol name → its inferred ExternFunction. First sighting
         # wins; later calls just look up by name.
         self.externs: dict[str, ExternFunction] = {}
+        # Per-TU struct registry — collected by the driver in pass 1
+        # before any function bodies are visited. Threaded through
+        # `_FunctionTranslator` so MEMBER_REF and INIT_LIST_EXPR
+        # dispatch can look up struct field metadata.
+        self.structs = structs if structs is not None else _EMPTY_STRUCT_REGISTRY
         # Per-source prefix for generated string-constant names. Without it,
         # two ingests both produce `.str.0` referring to different content,
         # which collides on merge into a single program.json. Convention:
@@ -343,6 +363,39 @@ class _FunctionTranslator:
             return LocalRef(name=name)
         raise _refuse(cursor, f"unknown identifier {name!r} (only params/locals are supported)")
 
+    def _qty(self, cursor: cx.Cursor, t: cx.Type) -> Type:
+        """Wrapper around `_local_type` that threads the per-TU
+        struct registry so `struct Foo` references resolve to
+        `StructType('Foo')` instead of refusing."""
+        return _local_type(cursor, t, structs=self._state.structs)
+
+    def _is_arrow_member_ref(
+        self, member_cursor: cx.Cursor, base_cursor: cx.Cursor,
+    ) -> bool:
+        """For a MEMBER_REF_EXPR cursor, determine whether the access
+        is `p->x` (arrow) or `p.x` (dot). libclang's Python bindings
+        expose neither directly, so we check the base's type: a
+        pointer-typed base is `->`, otherwise `.`."""
+        canon = base_cursor.type.get_canonical()
+        return canon.kind == cx.TypeKind.POINTER
+
+    def _struct_name_for_pointer_cursor(
+        self, cursor: cx.Cursor,
+    ) -> str | None:
+        """For an expression cursor whose type is `struct Foo *`,
+        return `'Foo'` if the struct is in the per-TU registry.
+        Returns None for non-struct-pointer types."""
+        canon = cursor.type.get_canonical()
+        if canon.kind != cx.TypeKind.POINTER:
+            return None
+        pointee = canon.get_pointee().get_canonical()
+        if pointee.kind != cx.TypeKind.RECORD:
+            return None
+        name = _struct_name_from_record_type(pointee)
+        if name is None or name not in self._state.structs:
+            return None
+        return name
+
     def _maybe_implicit_cast(self, cursor: cx.Cursor) -> Expr | None:
         """If `cursor` is an UNEXPOSED_EXPR / PAREN_EXPR whose `cursor.type`
         differs at the quod level from the inner cursor's `type`, return
@@ -379,8 +432,8 @@ class _FunctionTranslator:
         # through to the standard path where it'll refuse with the
         # right message.
         try:
-            outer_qty = _local_type(cursor, cursor.type)
-            inner_qty = _local_type(inner, inner.type)
+            outer_qty = self._qty(cursor, cursor.type)
+            inner_qty = self._qty(inner, inner.type)
         except IngestError:
             return None
         if type(outer_qty) is type(inner_qty):
@@ -419,7 +472,7 @@ class _FunctionTranslator:
             return FloatLit(type=ftype, bits=bits)
 
         if k in (cx.CursorKind.CSTYLE_CAST_EXPR, cx.CursorKind.CXX_FUNCTIONAL_CAST_EXPR):
-            target_qty = _local_type(c, c.type)
+            target_qty = self._qty(c, c.type)
             inner = None
             for child in c.get_children():
                 if child.kind != cx.CursorKind.TYPE_REF:
@@ -520,7 +573,7 @@ class _FunctionTranslator:
                         "`*p` on void* has no value type to load — "
                         "cast to a typed pointer first",
                     )
-                load_qty = _local_type(c, c.type)
+                load_qty = self._qty(c, c.type)
                 return Load(ptr=inner_expr, type=load_qty)
             if op == "!":
                 # C's logical-not is i1-typed (`!x` == 1 iff x == 0). Lower
@@ -604,6 +657,82 @@ class _FunctionTranslator:
             args = tuple(self.expr(a) for a in children[1:])
             return Call(function=callee.spelling, args=args)
 
+        if k == cx.CursorKind.MEMBER_REF_EXPR:
+            # `p.x` or `p->x` — base is the first child; arrow vs dot
+            # is read from the source-range tokens between base-end
+            # and the field name.
+            children = list(c.get_children())
+            if len(children) != 1:
+                raise _refuse(c, f"member-ref with {len(children)} children")
+            base_cursor = _unwrap(children[0])
+            field_name = c.spelling
+            if not field_name:
+                raise _refuse(c, "member-ref with no field name")
+            arrow = self._is_arrow_member_ref(c, base_cursor)
+            field_qty = self._qty(c, c.type)
+            if arrow:
+                struct_name = self._struct_name_for_pointer_cursor(base_cursor)
+                if struct_name is None:
+                    raise _refuse(
+                        c,
+                        f"`->` on non-struct-pointer base "
+                        f"({base_cursor.type.spelling!r})",
+                    )
+                return LoadField(
+                    ptr=self.expr(base_cursor),
+                    struct_type=struct_name,
+                    name=field_name,
+                )
+            return FieldRead(value=self.expr(base_cursor), name=field_name)
+
+        if k == cx.CursorKind.INIT_LIST_EXPR:
+            # `(struct Foo){...}` or the RHS of a `struct Foo p = {...};`
+            # decl. The cursor's type tells us which struct.
+            canon = c.type.get_canonical()
+            if canon.kind != cx.TypeKind.RECORD:
+                raise _refuse(
+                    c,
+                    f"non-struct init-list ({c.type.spelling!r}) is not "
+                    f"yet supported (only struct init lists are)",
+                )
+            struct_name = _struct_name_from_record_type(canon)
+            if struct_name is None or struct_name not in self._state.structs:
+                raise _refuse(
+                    c,
+                    f"unknown struct type for init-list "
+                    f"({c.type.spelling!r})",
+                )
+            info = self._state.structs.get(struct_name)
+            assert info is not None  # by the check above
+            child_cursors = list(c.get_children())
+            if len(child_cursors) > len(info.fields):
+                raise _refuse(
+                    c,
+                    f"too many initialisers for struct {struct_name!r} "
+                    f"({len(child_cursors)} for {len(info.fields)} fields)",
+                )
+            field_inits: list[FieldInit] = []
+            # Positional initialisers: pair in declaration order.
+            # Designated initialisers (`{.x = 1}`) require a different
+            # cursor shape (DESIGNATED_INIT_EXPR) and are refused for
+            # now if encountered.
+            for i, child in enumerate(child_cursors):
+                if child.kind == cx.CursorKind.UNEXPOSED_EXPR:
+                    pass  # let _unwrap handle it inside expr
+                if child.kind == cx.CursorKind.MEMBER_REF:
+                    raise _refuse(
+                        child,
+                        "designated struct initialisers (`{.field = "
+                        "value}`) are not yet supported",
+                    )
+                field_name = info.field_names[i]
+                field_inits.append(FieldInit(
+                    name=field_name, value=self.expr(child),
+                ))
+            return StructInit(
+                type=struct_name, fields=tuple(field_inits),
+            )
+
         if k == cx.CursorKind.ARRAY_SUBSCRIPT_EXPR:
             # `arr[k]` rvalue — load at a byte-strided offset.
             # `&arr[k]` is handled separately in the UNARY `&` arm
@@ -614,7 +743,7 @@ class _FunctionTranslator:
                 raise _refuse(c, f"array subscript with {len(children)} children")
             arr_c, idx_c = _unwrap(children[0]), _unwrap(children[1])
             elem_size = self._pointer_element_size(c, arr_c)
-            elem_qty = _local_type(c, c.type)
+            elem_qty = self._qty(c, c.type)
             return Load(
                 ptr=PtrOffset(
                     base=self.expr(arr_c),
@@ -762,7 +891,7 @@ class _FunctionTranslator:
             for decl in children:
                 if decl.kind != cx.CursorKind.VAR_DECL:
                     raise _refuse(decl, f"only var declarations supported, got {decl.kind.name}")
-                local_ty = _local_type(decl, decl.type)
+                local_ty = self._qty(decl, decl.type)
                 # libclang's VAR_DECL children include both type refs
                 # (TYPE_REF, NAMESPACE_REF, …) and the optional
                 # initializer expression. Filter to only expression-
@@ -809,6 +938,39 @@ class _FunctionTranslator:
                         ptr_expr = self.expr(deref_children[0])
                         value = self.expr(children[1])
                         return (Store(ptr=ptr_expr, value=value),)
+                # Field-arrow store: `p->x = v;`. Field-dot store
+                # (`p.x = v;` on a by-value local struct) is refused
+                # — quod's model has StoreField for heap structs but
+                # no by-value field-rebind primitive.
+                if lhs.kind == cx.CursorKind.MEMBER_REF_EXPR:
+                    member_children = list(lhs.get_children())
+                    if len(member_children) != 1:
+                        raise _refuse(lhs, "member-ref store with non-1 base children")
+                    base_cursor = _unwrap(member_children[0])
+                    field_name = lhs.spelling
+                    arrow = self._is_arrow_member_ref(lhs, base_cursor)
+                    if not arrow:
+                        raise _refuse(
+                            lhs,
+                            "by-value struct field assignment "
+                            f"({base_cursor.spelling}.{field_name} = ...) is "
+                            f"not supported; use a pointer to the struct "
+                            f"and `->` (e.g. `p->{field_name} = ...`)",
+                        )
+                    struct_name = self._struct_name_for_pointer_cursor(base_cursor)
+                    if struct_name is None:
+                        raise _refuse(
+                            lhs,
+                            f"`->` store on non-struct-pointer base "
+                            f"({base_cursor.type.spelling!r})",
+                        )
+                    value = self.expr(children[1])
+                    return (StoreField(
+                        ptr=self.expr(base_cursor),
+                        struct_type=struct_name,
+                        name=field_name,
+                        value=value,
+                    ),)
                 # Subscript store: `arr[k] = v;`
                 if lhs.kind == cx.CursorKind.ARRAY_SUBSCRIPT_EXPR:
                     sub_children = list(lhs.get_children())
@@ -905,7 +1067,7 @@ class _FunctionTranslator:
                     f"is not supported)"
                 )
             translated = "add" if op == "++" else "sub"
-            target_qty = _local_type(target, target.type)
+            target_qty = self._qty(target, target.type)
             return (Assign(
                 name=target.spelling,
                 value=BinOp(
@@ -1108,7 +1270,10 @@ def _translate_function(
     body_cursor: cx.Cursor | None = None
     for child in cursor.get_children():
         if child.kind == cx.CursorKind.PARM_DECL:
-            params.append(Param(name=child.spelling, type=_local_type(child, child.type)))
+            params.append(Param(
+                name=child.spelling,
+                type=_local_type(child, child.type, structs=state.structs),
+            ))
         elif child.kind == cx.CursorKind.COMPOUND_STMT:
             body_cursor = child
 
@@ -1146,4 +1311,16 @@ def _translate_function(
         return_type=return_type,
         body=Block(id=state.mint_block_id(), stmts=body),
         notes=(note,),
+    )
+
+
+
+def _struct_def_layer_b(info: _StructInfo) -> StructDef:
+    """Convert a per-TU `_StructInfo` into a layer-B `StructDef`.
+    Pairs with `_struct_def_layer_a` so source_units and the layer-B
+    program share the same struct definitions, just at different
+    layers. Field order is preserved."""
+    return StructDef(
+        name=info.name,
+        fields=tuple(StructField(name=n, type=t) for n, t in info.fields),
     )

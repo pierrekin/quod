@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Union
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_serializer
 
 from quod.model.base import _Node, _mint_node_id
 from quod.model.types import FloatType, IntType
@@ -47,11 +47,22 @@ class CPointerType(_Node):
     pointee: "CType"
 
 
-# Layer-A C type — a named scalar or a pointer-to-CType. Used wherever
-# a type annotation appears at layer A (CParam.type, CVarDecl.type,
-# CFn.return_type, CPointerType.pointee).
+class CStructType(_Node):
+    """A named record type reference: `struct Foo`. Pairs with a
+    layer-B `StructType(name=...)`. Only by-value struct values are
+    expressed via this type (params, locals, return values); pointers
+    to structs (`struct Foo *p`) collapse to `CPointerType` whose
+    pointee is a CStructType, then to layer-B `I8PtrType` like every
+    other pointer."""
+    kind: Literal["c.type.struct"] = "c.type.struct"
+    name: str
+
+
+# Layer-A C type — a named scalar, a pointer-to-CType, or a struct
+# reference. Used wherever a type annotation appears at layer A
+# (CParam.type, CVarDecl.type, CFn.return_type, CPointerType.pointee).
 CType = Annotated[
-    Union[CNamedType, CPointerType],
+    Union[CNamedType, CPointerType, CStructType],
     Field(discriminator="kind"),
 ]
 
@@ -222,6 +233,47 @@ class CDeref(_Node):
     load_type: "CType"
 
 
+class CFieldInit(_Node):
+    """One field's value in a `CStructInit`. The field name is
+    optional (None for positional initializers, set for designated
+    `{.name = value}` form). The lifter resolves positional inits
+    against the struct's declared field order to produce a layer-B
+    `FieldInit(name=..., value=...)`."""
+    kind: Literal["c.field_init"] = "c.field_init"
+    name: str | None = None
+    value: "CExpr"
+
+
+class CStructInit(_Node):
+    """`(struct Foo){…}` or `= {…}` — construct a struct value.
+    Pairs with layer-B `StructInit(type=type_name, fields=...)`."""
+    kind: Literal["c.struct_init"] = "c.struct_init"
+    id: str = Field(default_factory=lambda: _mint_node_id("cstructinit"))
+    type_name: str
+    fields: tuple[CFieldInit, ...]
+
+
+class CFieldRead(_Node):
+    """`p.x` — field access on a by-value struct rvalue. Pairs with
+    layer-B `FieldRead(value=value', name=name)`."""
+    kind: Literal["c.field"] = "c.field"
+    id: str = Field(default_factory=lambda: _mint_node_id("cfield"))
+    value: "CExpr"
+    name: str
+    field_type: "CType"
+
+
+class CFieldArrow(_Node):
+    """`p->x` — field access through a struct pointer. Pairs with
+    layer-B `LoadField(ptr=ptr', struct_type=struct_type, name=name)`."""
+    kind: Literal["c.field_arrow"] = "c.field_arrow"
+    id: str = Field(default_factory=lambda: _mint_node_id("cfieldarrow"))
+    ptr: "CExpr"
+    struct_type: str
+    name: str
+    field_type: "CType"
+
+
 class CAddressOf(_Node):
     """`&expr` — address-of. Only emitted with a
     `CArraySubscript` target (`&p[k]` ≡ `p + k` for char-pointer
@@ -284,7 +336,8 @@ class CUnary(_Node):
 
 CExpr = Annotated[
     Union[CIntLit, CFloatLit, CVarRef, CEnumConstRef, CBinOp, CStringLit, CCall,
-          CArraySubscript, CAddressOf, CDeref, CUnary, CTernary, CCast],
+          CArraySubscript, CAddressOf, CDeref, CStructInit, CFieldRead,
+          CFieldArrow, CUnary, CTernary, CCast],
     Field(discriminator="kind"),
 ]
 
@@ -426,6 +479,20 @@ class CSubscriptStore(_Node):
     elem_type: CType
 
 
+class CFieldArrowStore(_Node):
+    """`p->x = v;` — assign to a field through a struct pointer.
+    Pairs with layer-B `StoreField(ptr=ptr', struct_type=struct_type,
+    name=name, value=value')`. By-value field assignment (`p.x = v`
+    on a local struct) is refused at ingest — Stage A doesn't
+    support struct-rebind via FieldRead."""
+    kind: Literal["c.field_arrow_store"] = "c.field_arrow_store"
+    id: str = Field(default_factory=lambda: _mint_node_id("cfieldarrowstore"))
+    ptr: CExpr
+    struct_type: str
+    name: str
+    value: CExpr
+
+
 # CForInit is the union of statements that may appear in a C for-loop's
 # init or inc slot — a declaration or an assignment. Distinct from CStmt
 # because for-init permits a declaration even outside a block scope; the
@@ -495,7 +562,7 @@ class CMultiVarDecl(_Node):
 CStmt = Annotated[
     Union[CVarDecl, CMultiVarDecl, CAssign, CCompoundAssign, CIncrementStmt,
           CReturn, CFor, CIf, CWhile, CDoWhile, CExprStmt, CDerefStore,
-          CSubscriptStore, CBreak, CContinue, CSwitch],
+          CSubscriptStore, CFieldArrowStore, CBreak, CContinue, CSwitch],
     Field(discriminator="kind"),
 ]
 
@@ -510,6 +577,24 @@ class CFn(_Node):
     body: tuple[CStmt, ...] = ()
 
 
+class CField(_Node):
+    """One field of a `CStructDef`. Pairs with layer-B `StructField`."""
+    kind: Literal["c.field_decl"] = "c.field_decl"
+    name: str
+    type: CType
+
+
+class CStructDef(_Node):
+    """`struct Foo { int x; int y; };` — a top-level struct
+    declaration in C source. Pairs with layer-B `StructDef(name, [
+    StructField(...) for f in fields ])`. Anonymous structs, unions,
+    and bit-fields are refused at ingest."""
+    kind: Literal["c.struct_def"] = "c.struct_def"
+    id: str = Field(default_factory=lambda: _mint_node_id("cstructdef"))
+    name: str
+    fields: tuple[CField, ...]
+
+
 class CUnit(_Node):
     """A C translation unit — one source file's contents preserved as
     layer-A nodes. `source_path` is recorded so the graph can be paired
@@ -519,3 +604,11 @@ class CUnit(_Node):
     id: str = Field(default_factory=lambda: _mint_node_id("cunit"))
     source_path: str
     functions: tuple[CFn, ...] = ()
+    struct_defs: tuple[CStructDef, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_struct_defs(self, handler, info):
+        data = handler(self)
+        if not self.struct_defs:
+            data.pop("struct_defs", None)
+        return data

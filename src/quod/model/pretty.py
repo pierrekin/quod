@@ -55,6 +55,9 @@ from quod.model.layer_a import (
     CDerefStore,
     CEnumConstRef,
     CExprStmt,
+    CFieldArrow,
+    CFieldArrowStore,
+    CFieldRead,
     CFn,
     CFor,
     CIf,
@@ -65,6 +68,8 @@ from quod.model.layer_a import (
     CPointerType,
     CReturn,
     CStringLit,
+    CStructInit,
+    CStructType,
     CSubscriptStore,
     CUnit,
     CVarDecl,
@@ -353,6 +358,8 @@ def _format_c_type(t) -> str:
             return n
         case CPointerType(pointee=p):
             return f"{_format_c_type(p)}*"
+        case CStructType(name=n):
+            return f"struct {n}"
     raise ValueError(f"unhandled c.* type: {t!r}")
 
 
@@ -394,6 +401,8 @@ def _format_c_stmt(stmt, indent: int, *, label: NodeLabel) -> str:
             return f"{pad}{prefix}*{_format_c_expr(op)} = {_format_c_expr(v)};"
         case CSubscriptStore(base=b, index=i, value=v):
             return f"{pad}{prefix}{_format_c_expr(b)}[{_format_c_expr(i)}] = {_format_c_expr(v)};"
+        case CFieldArrowStore(ptr=p, name=n, value=v):
+            return f"{pad}{prefix}{_format_c_expr(p)}->{n} = {_format_c_expr(v)};"
     raise ValueError(f"unhandled c.* statement: {stmt!r}")
 
 
@@ -433,6 +442,16 @@ def _format_c_expr(e) -> str:
             return f"&{_format_c_expr(t)}"
         case CDeref(operand=op):
             return f"*{_format_c_expr(op)}"
+        case CFieldRead(value=v, name=n):
+            return f"{_format_c_expr(v)}.{n}"
+        case CFieldArrow(ptr=p, name=n):
+            return f"{_format_c_expr(p)}->{n}"
+        case CStructInit(type_name=tn, fields=fields):
+            parts = [
+                (f".{f.name} = " if f.name else "") + _format_c_expr(f.value)
+                for f in fields
+            ]
+            return f"(struct {tn}){{ {', '.join(parts)} }}"
         case CCast(target_type=t, value=v):
             return f"({_format_c_type(t)}){_format_c_expr(v)}"
     raise ValueError(f"unhandled c.* expression: {e!r}")

@@ -66,6 +66,13 @@ from quod.model import (
     CDeref,
     CDerefStore,
     CDoWhile,
+    CField,
+    CFieldArrow,
+    CFieldArrowStore,
+    CFieldInit,
+    CFieldRead,
+    CStructDef,
+    CStructInit,
     CEnumConstRef,
     CExprStmt,
     CFloatLit,
@@ -409,6 +416,20 @@ def _check_stmt(s, l, *, path: str) -> dict[str, Any]:
             "elem_type": _format_c_type_str(s.elem_type),
         }
 
+    if isinstance(s, CFieldArrowStore):
+        if s.struct_type != l.struct_type or s.name != l.name:
+            raise LiftCheckError(
+                f"{path}: c.field_arrow_store mismatch — "
+                f"source {s.struct_type!r}->{s.name!r}, "
+                f"lifted {l.struct_type!r}->{l.name!r}"
+            )
+        return {
+            "kind": "c.field_arrow_store",
+            "ptr": _check_expr(s.ptr, l.ptr, path=f"{path}.ptr"),
+            "struct_type": s.struct_type, "name": s.name,
+            "value": _check_expr(s.value, l.value, path=f"{path}.value"),
+        }
+
     if isinstance(s, CBreak):
         return {"kind": "c.break"}
 
@@ -628,6 +649,53 @@ def _check_expr(s, l, *, path: str) -> dict[str, Any]:
             "kind": "c.deref",
             "operand": _check_expr(s.operand, l.operand, path=f"{path}.operand"),
             "load_type": _format_c_type_str(s.load_type),
+        }
+
+    if isinstance(s, CFieldRead):
+        if s.name != l.name:
+            raise LiftCheckError(
+                f"{path}.name: {s.name!r} vs {l.name!r}"
+            )
+        return {
+            "kind": "c.field",
+            "value": _check_expr(s.value, l.value, path=f"{path}.value"),
+            "name": s.name,
+        }
+
+    if isinstance(s, CFieldArrow):
+        if s.struct_type != l.struct_type or s.name != l.name:
+            raise LiftCheckError(
+                f"{path}: c.field_arrow mismatch — "
+                f"source {s.struct_type!r}->{s.name!r}, "
+                f"lifted {l.struct_type!r}->{l.name!r}"
+            )
+        return {
+            "kind": "c.field_arrow",
+            "ptr": _check_expr(s.ptr, l.ptr, path=f"{path}.ptr"),
+            "struct_type": s.struct_type, "name": s.name,
+        }
+
+    if isinstance(s, CStructInit):
+        if s.type_name != l.type_name:
+            raise LiftCheckError(
+                f"{path}.type_name: {s.type_name!r} vs {l.type_name!r}"
+            )
+        if len(s.fields) != len(l.fields):
+            raise LiftCheckError(
+                f"{path}.fields: count {len(s.fields)} vs {len(l.fields)}"
+            )
+        return {
+            "kind": "c.struct_init",
+            "type_name": s.type_name,
+            "fields": [
+                {
+                    "name": sf.name,
+                    "value": _check_expr(
+                        sf.value, lf.value, path=f"{path}.fields[{i}].value",
+                    ),
+                }
+                for i, (sf, lf) in enumerate(zip(s.fields, l.fields))
+            ],
         }
 
     raise LiftCheckError(

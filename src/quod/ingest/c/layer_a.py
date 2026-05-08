@@ -23,6 +23,8 @@ from quod.ingest.c.helpers import (
     _COMPOUND_ASSIGN_TABLE,
     _FENV_API_NAMES,
     _LONG_DOUBLE_REFUSAL,
+    _StructInfo,
+    _StructRegistry,
     _binop_token,
     _fenv_call_refusal,
     _int_type_for,
@@ -31,6 +33,7 @@ from quod.ingest.c.helpers import (
     _parse_switch_groups,
     _refuse,
     _split_for_children,
+    _struct_name_from_record_type,
     _unwrap,
 )
 from quod.model import (
@@ -49,6 +52,11 @@ from quod.model import (
     CEnumConstRef,
     CExpr,
     CExprStmt,
+    CField,
+    CFieldArrow,
+    CFieldArrowStore,
+    CFieldInit,
+    CFieldRead,
     CFloatLit,
     CFn,
     CFor,
@@ -63,6 +71,9 @@ from quod.model import (
     CReturn,
     CStmt,
     CStringLit,
+    CStructDef,
+    CStructInit,
+    CStructType,
     CSubscriptStore,
     CSwitch,
     CSwitchCase,
@@ -90,9 +101,14 @@ class _LayerATranslator:
     breaks ingest determinism.
     """
 
-    def __init__(self, fn_name: str) -> None:
+    def __init__(
+        self, fn_name: str, *,
+        structs: _StructRegistry | None = None,
+    ) -> None:
+        from quod.ingest.c.helpers import _EMPTY_STRUCT_REGISTRY
         self._fn_name = fn_name
         self._counters: dict[str, int] = {}
+        self._structs = structs if structs is not None else _EMPTY_STRUCT_REGISTRY
 
     def _mint(self, prefix: str) -> str:
         n = self._counters.get(prefix, 0) + 1
@@ -274,6 +290,86 @@ class _LayerATranslator:
                 index=self.expr(index),
                 elem_type=elem_ctype,
             )
+        if k == cx.CursorKind.MEMBER_REF_EXPR:
+            children = list(c.get_children())
+            if len(children) != 1:
+                raise _refuse(c, f"layer A: member-ref with {len(children)} children")
+            base_cursor = _unwrap(children[0])
+            field_name = c.spelling
+            if not field_name:
+                raise _refuse(c, "layer A: member-ref with no field name")
+            field_ctype = _c_source_type(c, c.type)
+            base_canon = base_cursor.type.get_canonical()
+            arrow = base_canon.kind == cx.TypeKind.POINTER
+            if arrow:
+                pointee = base_canon.get_pointee().get_canonical()
+                if pointee.kind != cx.TypeKind.RECORD:
+                    raise _refuse(
+                        c,
+                        f"layer A: `->` on non-struct-pointer base "
+                        f"({base_cursor.type.spelling!r})",
+                    )
+                struct_name = _struct_name_from_record_type(pointee)
+                if struct_name is None or struct_name not in self._structs:
+                    raise _refuse(
+                        c,
+                        f"layer A: unknown struct type for `->` "
+                        f"({base_cursor.type.spelling!r})",
+                    )
+                return CFieldArrow(
+                    id=self._mint("cfieldarrow"),
+                    ptr=self.expr(base_cursor),
+                    struct_type=struct_name,
+                    name=field_name,
+                    field_type=field_ctype,
+                )
+            return CFieldRead(
+                id=self._mint("cfield"),
+                value=self.expr(base_cursor),
+                name=field_name,
+                field_type=field_ctype,
+            )
+        if k == cx.CursorKind.INIT_LIST_EXPR:
+            canon = c.type.get_canonical()
+            if canon.kind != cx.TypeKind.RECORD:
+                raise _refuse(
+                    c,
+                    f"layer A: non-struct init-list ({c.type.spelling!r}) "
+                    f"is not yet supported",
+                )
+            struct_name = _struct_name_from_record_type(canon)
+            if struct_name is None or struct_name not in self._structs:
+                raise _refuse(
+                    c,
+                    f"layer A: unknown struct type for init-list "
+                    f"({c.type.spelling!r})",
+                )
+            info = self._structs.get(struct_name)
+            assert info is not None
+            child_cursors = list(c.get_children())
+            field_inits: list[CFieldInit] = []
+            for i, child in enumerate(child_cursors):
+                if child.kind == cx.CursorKind.MEMBER_REF:
+                    raise _refuse(
+                        child,
+                        "layer A: designated struct initialisers are not "
+                        "yet supported",
+                    )
+                if i >= len(info.fields):
+                    raise _refuse(
+                        child,
+                        f"layer A: too many initialisers for struct "
+                        f"{struct_name!r}",
+                    )
+                field_inits.append(CFieldInit(
+                    name=info.field_names[i],
+                    value=self.expr(child),
+                ))
+            return CStructInit(
+                id=self._mint("cstructinit"),
+                type_name=struct_name,
+                fields=tuple(field_inits),
+            )
         if k == cx.CursorKind.CONDITIONAL_OPERATOR:
             children = list(c.get_children())
             if len(children) != 3:
@@ -346,6 +442,39 @@ class _LayerATranslator:
                             value=self.expr(children[1]),
                             store_type=store_ctype,
                         )
+                # Field-arrow store: `p->x = v;`
+                if lhs.kind == cx.CursorKind.MEMBER_REF_EXPR:
+                    member_children = list(lhs.get_children())
+                    if len(member_children) != 1:
+                        raise _refuse(
+                            lhs, "layer A: member-ref store with non-1 base children",
+                        )
+                    base_cursor = _unwrap(member_children[0])
+                    field_name = lhs.spelling
+                    base_canon = base_cursor.type.get_canonical()
+                    arrow = base_canon.kind == cx.TypeKind.POINTER
+                    if not arrow:
+                        raise _refuse(
+                            lhs,
+                            "layer A: by-value struct field assignment is "
+                            "not supported; use a pointer to the struct "
+                            "and `->`",
+                        )
+                    pointee = base_canon.get_pointee().get_canonical()
+                    struct_name = _struct_name_from_record_type(pointee)
+                    if struct_name is None or struct_name not in self._structs:
+                        raise _refuse(
+                            lhs,
+                            f"layer A: unknown struct type for `->` store "
+                            f"({base_cursor.type.spelling!r})",
+                        )
+                    return CFieldArrowStore(
+                        id=self._mint("cfieldarrowstore"),
+                        ptr=self.expr(base_cursor),
+                        struct_type=struct_name,
+                        name=field_name,
+                        value=self.expr(children[1]),
+                    )
                 # Subscript store
                 if lhs.kind == cx.CursorKind.ARRAY_SUBSCRIPT_EXPR:
                     sub_children = list(lhs.get_children())
@@ -560,8 +689,13 @@ def _c_source_type(cursor: cx.Cursor, t: cx.Type) -> CType:
     if canon.kind == cx.TypeKind.LONGDOUBLE:
         raise _refuse(cursor, _LONG_DOUBLE_REFUSAL)
     if canon.kind == cx.TypeKind.RECORD:
-        # Opaque struct (e.g. `struct Curl_easy` behind `CURL`). Use the
-        # source spelling so typedef aliases survive.
+        # Named struct: prefer the canonical struct name when libclang
+        # exposes it (e.g. `struct Foo` → `CStructType("Foo")`); fall
+        # back to the source spelling for opaque records (typedef'd
+        # aliases like `CURL` for `struct Curl_easy`).
+        struct_name = _struct_name_from_record_type(canon)
+        if struct_name is not None:
+            return CStructType(name=struct_name)
         return CNamedType(name=t.spelling)
     if canon.kind == cx.TypeKind.VOID:
         return CNamedType(name="void")
@@ -570,6 +704,7 @@ def _c_source_type(cursor: cx.Cursor, t: cx.Type) -> CType:
 
 def _translate_function_layer_a(
     cursor: cx.Cursor, source_path: Path,
+    structs: _StructRegistry | None = None,
 ) -> CFn:
     """Build the layer-A `CFn` for one C function definition. ID is
     derived from the spelling so it's stable across re-ingest of the
@@ -588,7 +723,7 @@ def _translate_function_layer_a(
             body_cursor = child
     if body_cursor is None:
         raise _refuse(cursor, "layer A: function has no body")
-    translator = _LayerATranslator(cursor.spelling)
+    translator = _LayerATranslator(cursor.spelling, structs=structs)
     body = tuple(translator.stmt(s) for s in body_cursor.get_children())
     return CFn(
         id=f"@cfn_c_{cursor.spelling}",
@@ -596,4 +731,28 @@ def _translate_function_layer_a(
         return_type=return_type,
         params=tuple(params),
         body=body,
+    )
+
+
+def _struct_def_layer_a(info: _StructInfo) -> CStructDef:
+    """Convert a per-TU `_StructInfo` into a layer-A `CStructDef`.
+    Used to populate `CUnit.struct_defs` so source units carry the
+    struct decls they reference. Field types map to layer-A `CType`s
+    via the cursor's source-form spelling."""
+    fields: list[CField] = []
+    for child in info.cursor.get_children():
+        if child.kind != cx.CursorKind.FIELD_DECL:
+            continue
+        if child.is_bitfield():
+            # Already refused at registry build, but defensively
+            # re-check.
+            raise _refuse(child, "bit-fields not yet supported")
+        fields.append(CField(
+            name=child.spelling,
+            type=_c_source_type(child, child.type),
+        ))
+    return CStructDef(
+        id=f"@cstructdef_c_{info.name}",
+        name=info.name,
+        fields=tuple(fields),
     )

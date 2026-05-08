@@ -50,16 +50,24 @@ from pathlib import Path
 
 import clang.cindex as cx
 
-from quod.ingest.c.helpers import IngestError
-from quod.ingest.c.layer_a import _translate_function_layer_a
+from quod.ingest.c.helpers import (
+    IngestError,
+    _build_struct_registry,
+)
+from quod.ingest.c.layer_a import (
+    _struct_def_layer_a,
+    _translate_function_layer_a,
+)
 from quod.ingest.c.layer_b import (
     _ProgramState,
     _build_extern_from_decl,
     _refuse,
+    _struct_def_layer_b,
     _translate_function,
 )
 from quod.model import (
     CFn,
+    CStructDef,
     CUnit,
     Equivalence,
     ExternFunction,
@@ -67,6 +75,7 @@ from quod.model import (
     ManualJustification,
     Program,
     ProvenanceEdge,
+    StructDef,
 )
 
 
@@ -238,7 +247,22 @@ def ingest_c(
 
     if string_prefix is None:
         string_prefix = _default_string_prefix(path)
-    state = _ProgramState(string_prefix=string_prefix)
+
+    # Pass 1 — collect every `struct Foo { ... };` definition into a
+    # registry keyed by name. Pass 2 (function bodies) reads the
+    # registry via `_local_type` to recognise struct field accesses
+    # and aggregate initializers.
+    struct_registry = _build_struct_registry(tu, path)
+    layer_b_struct_defs = tuple(
+        _struct_def_layer_b(info) for info in struct_registry.by_name.values()
+    )
+    layer_a_struct_defs = tuple(
+        _struct_def_layer_a(info) for info in struct_registry.by_name.values()
+    )
+
+    state = _ProgramState(
+        string_prefix=string_prefix, structs=struct_registry,
+    )
     functions: list[Function] = []
     fn_cursors: list[cx.Cursor] = []
     defined_names: set[str] = set()
@@ -247,6 +271,11 @@ def ingest_c(
         loc_file = cursor.location.file
         if loc_file is None or Path(loc_file.name).resolve() != path:
             continue
+        if cursor.kind == cx.CursorKind.STRUCT_DECL:
+            # Already collected in pass 1.
+            continue
+        if cursor.kind == cx.CursorKind.UNION_DECL:
+            raise _refuse(cursor, "unions not yet supported")
         if cursor.kind != cx.CursorKind.FUNCTION_DECL:
             raise _refuse(cursor, f"top-level {cursor.kind.name} not supported (only functions)")
         if not cursor.is_definition():
@@ -268,7 +297,7 @@ def ingest_c(
     layer_a_failed = False
     for cursor in fn_cursors:
         try:
-            cfns.append(_translate_function_layer_a(cursor, path))
+            cfns.append(_translate_function_layer_a(cursor, path, struct_registry))
         except IngestError:
             layer_a_failed = True
             break
@@ -281,6 +310,7 @@ def ingest_c(
     if layer_a_failed or not cfns:
         program = Program(
             constants=tuple(state.constants),
+            structs=layer_b_struct_defs,
             structured_functions=tuple(functions),
             externs=externs,
         )
@@ -312,9 +342,11 @@ def ingest_c(
             id=f"@cunit_c_{_default_string_prefix(path)}",
             source_path=path.name,
             functions=tuple(cfns),
+            struct_defs=layer_a_struct_defs,
         ),)
         program = Program(
             constants=tuple(state.constants),
+            structs=layer_b_struct_defs,
             structured_functions=tuple(functions),
             externs=externs,
             source_units=source_units,

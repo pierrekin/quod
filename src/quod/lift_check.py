@@ -76,6 +76,14 @@ from quod.model import (
     CDeref,
     CDerefStore,
     CDoWhile,
+    CField,
+    CFieldArrow,
+    CFieldArrowStore,
+    CFieldInit,
+    CFieldRead,
+    CStructDef,
+    CStructInit,
+    CStructType,
     CEnumConstRef,
     Continue,
     DoWhile,
@@ -112,19 +120,27 @@ from quod.model import (
     IntLit,
     Let,
     Load,
+    LoadField,
     LocalRef,
     Param,
     Cast,
     F32Type,
     F64Type,
+    FieldInit,
+    FieldRead,
     FloatLit,
     ParamRef,
     PtrOffset,
     Return,
     ReturnExpr,
     Store,
+    StoreField,
     StringConstant,
     StringRef,
+    StructDef,
+    StructField,
+    StructInit,
+    StructType,
     VoidType,
     While,
     ShortCircuitAnd,
@@ -401,12 +417,23 @@ def _check_value_type(a, b, *, path: str) -> None:
     pointers, so all `T*` denote i8* at IR level. `void` only appears
     in return position and pairs with `VoidType`. Integer types,
     floats, and their typedef'd standards consult
-    `_C_TYPE_NAME_TO_QUOD_KIND`."""
+    `_C_TYPE_NAME_TO_QUOD_KIND`. Struct types pair by name."""
     if isinstance(a, CPointerType):
         if not isinstance(b, I8PtrType):
             raise LiftCheckError(
                 f"{path}: layer-A pointer (`{_format_c_type_str(a)}`) "
                 f"but layer-B is {type(b).__name__}"
+            )
+        return
+    if isinstance(a, CStructType):
+        if not isinstance(b, StructType):
+            raise LiftCheckError(
+                f"{path}: layer-A `struct {a.name}` but layer-B "
+                f"is {type(b).__name__}"
+            )
+        if a.name != b.name:
+            raise LiftCheckError(
+                f"{path}: struct name {a.name!r} vs {b.name!r}"
             )
         return
     if isinstance(a, CNamedType):
@@ -421,7 +448,7 @@ def _check_value_type(a, b, *, path: str) -> None:
         raise LiftCheckError(
             f"{path}: layer-A type {a.name!r} is not in the supported subset"
         )
-    raise LiftCheckError(f"{path}: layer-A type is {type(a).__name__}, expected CNamedType or CPointerType")
+    raise LiftCheckError(f"{path}: layer-A type is {type(a).__name__}, expected CNamedType, CPointerType, or CStructType")
 
 
 def _format_c_type_str(t) -> str:
@@ -430,6 +457,8 @@ def _format_c_type_str(t) -> str:
         return t.name
     if isinstance(t, CPointerType):
         return _format_c_type_str(t.pointee) + "*"
+    if isinstance(t, CStructType):
+        return f"struct {t.name}"
     return repr(t)
 
 
@@ -907,6 +936,28 @@ def _check_stmt(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
             "elem_type": _format_c_type_str(a.elem_type),
         }
 
+    if isinstance(a, CFieldArrowStore):
+        # `p->x = v;` ↔ `StoreField(ptr=p', struct_type=..., name='x', value=v')`.
+        if not isinstance(b, StoreField):
+            raise LiftCheckError(
+                f"{path}: layer-A CFieldArrowStore vs layer-B {type(b).__name__}"
+            )
+        if a.struct_type != b.struct_type:
+            raise LiftCheckError(
+                f"{path}: struct_type {a.struct_type!r} vs {b.struct_type!r}"
+            )
+        if a.name != b.name:
+            raise LiftCheckError(
+                f"{path}: field name {a.name!r} vs {b.name!r}"
+            )
+        return {
+            "kind": "p->x = v ↔ store_field",
+            "a_id": a.id,
+            "ptr": _check_expr(a.ptr, b.ptr, path=f"{path}.ptr", ctx=ctx),
+            "struct_type": a.struct_type, "name": a.name,
+            "value": _check_expr(a.value, b.value, path=f"{path}.value", ctx=ctx),
+        }
+
     if isinstance(a, CBreak):
         if not isinstance(b, Break):
             raise LiftCheckError(f"{path}: layer-A CBreak vs layer-B {type(b).__name__}")
@@ -1306,6 +1357,77 @@ def _check_expr(a, b, *, path: str, ctx: "_Ctx") -> dict[str, Any]:
             "a_id": a.id,
             "operand": _check_expr(a.operand, b.ptr, path=f"{path}.operand", ctx=ctx),
             "load_type": _format_c_type_str(a.load_type),
+        }
+
+    if isinstance(a, CFieldRead):
+        # `p.x` ↔ `FieldRead(value=p', name='x')`.
+        if not isinstance(b, FieldRead):
+            raise LiftCheckError(
+                f"{path}: layer-A CFieldRead vs layer-B {type(b).__name__}"
+            )
+        if a.name != b.name:
+            raise LiftCheckError(
+                f"{path}: field name {a.name!r} vs {b.name!r}"
+            )
+        return {
+            "kind": "p.x ↔ field_read",
+            "a_id": a.id,
+            "value": _check_expr(a.value, b.value, path=f"{path}.value", ctx=ctx),
+            "name": a.name,
+        }
+
+    if isinstance(a, CFieldArrow):
+        # `p->x` ↔ `LoadField(ptr=p', struct_type=..., name='x')`.
+        if not isinstance(b, LoadField):
+            raise LiftCheckError(
+                f"{path}: layer-A CFieldArrow vs layer-B {type(b).__name__}"
+            )
+        if a.struct_type != b.struct_type:
+            raise LiftCheckError(
+                f"{path}: struct_type {a.struct_type!r} vs {b.struct_type!r}"
+            )
+        if a.name != b.name:
+            raise LiftCheckError(
+                f"{path}: field name {a.name!r} vs {b.name!r}"
+            )
+        return {
+            "kind": "p->x ↔ load_field",
+            "a_id": a.id,
+            "ptr": _check_expr(a.ptr, b.ptr, path=f"{path}.ptr", ctx=ctx),
+            "struct_type": a.struct_type,
+            "name": a.name,
+        }
+
+    if isinstance(a, CStructInit):
+        # `(struct Foo){...}` ↔ `StructInit(type=name, fields=...)`.
+        if not isinstance(b, StructInit):
+            raise LiftCheckError(
+                f"{path}: layer-A CStructInit vs layer-B {type(b).__name__}"
+            )
+        if a.type_name != b.type:
+            raise LiftCheckError(
+                f"{path}: struct name {a.type_name!r} vs {b.type!r}"
+            )
+        if len(a.fields) != len(b.fields):
+            raise LiftCheckError(
+                f"{path}: field count {len(a.fields)} vs {len(b.fields)}"
+            )
+        field_records = []
+        for i, (af, bf) in enumerate(zip(a.fields, b.fields)):
+            if af.name is not None and af.name != bf.name:
+                raise LiftCheckError(
+                    f"{path}.fields[{i}]: field name {af.name!r} vs {bf.name!r}"
+                )
+            field_records.append({
+                "name": bf.name,
+                "value": _check_expr(
+                    af.value, bf.value, path=f"{path}.fields[{i}].value", ctx=ctx,
+                ),
+            })
+        return {
+            "kind": "(struct){...} ↔ struct_init",
+            "a_id": a.id, "type_name": a.type_name,
+            "fields": field_records,
         }
 
     raise LiftCheckError(
