@@ -2,8 +2,10 @@ mod column_view;
 mod highlight;
 mod lsp;
 mod open_modal;
+mod path_classify;
 mod picker;
 mod recents;
+mod workspace;
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -26,15 +28,17 @@ use serde_json::{Value, json};
 
 use crate::column_view::{Column, ColumnView, Row};
 use crate::open_modal::{OpenModal, RecentEntry};
+use crate::path_classify::{ClassifyError, classify, read_project_name};
 use crate::picker::{Picker, PickerItem};
 use crate::recents::{Recents, relative_time};
+use crate::workspace::{Anchor, AnchorId, ProjectRef, Workspace, program_name_from_file};
 
 fn main() -> io::Result<()> {
     let server_cmd = std::env::var("QUI_QUOD_CMD").unwrap_or_else(|_| "quod".into());
-    let arg = std::env::args().nth(1);
+    let args: Vec<String> = std::env::args().skip(1).collect();
 
     let mut app = App::new(server_cmd);
-    if let Err(e) = app.bootstrap(arg.as_deref()) {
+    if let Err(e) = app.bootstrap(&args) {
         eprintln!("qui: {e}");
         std::process::exit(2);
     }
@@ -61,7 +65,14 @@ fn main() -> io::Result<()> {
 struct App {
     server_cmd: String,
     client: Option<lsp::Client>,
+    /// Set of workspace anchors — Project and standalone Program.
     workspace: Workspace,
+    /// LSP-derived view of project-routed programs. Refreshed whenever
+    /// the workspace folder set changes. Standalone programs aren't here
+    /// — they're enumerated from `workspace.standalone_programs()`.
+    programs: Vec<ProgramEntry>,
+    /// The currently-active program, keyed by `(anchor_context, name)`.
+    active: Option<Active>,
     overlay: Option<Overlay>,
     recents: Recents,
     error: Option<String>,
@@ -88,31 +99,26 @@ enum Overlay {
     OpenProject(OpenModal),
 }
 
-#[derive(Default)]
-struct Workspace {
-    projects: Vec<ProjectInfo>,
-    programs: Vec<ProgramEntry>,
-    active: Option<Active>,
-}
-
-#[derive(Clone)]
-struct ProjectInfo {
-    path: PathBuf,
-    name: String,
-}
-
 #[derive(Clone)]
 struct ProgramEntry {
+    /// `Config.name` of the project containing this program. Display only.
     project: String,
+    /// Absolute path to the project root — identity, not display.
     project_path: PathBuf,
+    /// `ProgramSpec.name`.
     name: String,
+    /// File path *relative to the project root*.
     file: String,
 }
 
 #[derive(Clone)]
 struct Active {
+    /// Display label for the active program. Equal to `program_name`
+    /// for project-routed; absolute file path for standalone.
     label: String,
-    project: Option<String>,
+    /// `Some(...)` when reached through a Project anchor; `None` for
+    /// standalone Program anchors.
+    anchor_context: Option<ProjectRef>,
     summary: String,
     outline: Vec<OutlineCategory>,
 }
@@ -124,12 +130,26 @@ struct OutlineCategory {
     items: Vec<String>,
 }
 
+/// Tags `PickerItem.user_data` so the picker outcome handler can
+/// dispatch to the right `setActiveProgram` shape (project-routed
+/// vs standalone). Encoded as a `usize` index over a flat
+/// `selectables` table the picker mirrors.
+#[derive(Clone)]
+enum SelectableProgram {
+    /// Index into `App.programs`.
+    Routed(usize),
+    /// Absolute path to a standalone Program anchor.
+    Standalone(PathBuf),
+}
+
 impl App {
     fn new(server_cmd: String) -> Self {
         Self {
             server_cmd,
             client: None,
             workspace: Workspace::default(),
+            programs: Vec::new(),
+            active: None,
             overlay: None,
             recents: Recents::load(),
             error: None,
@@ -140,55 +160,31 @@ impl App {
         }
     }
 
-    /// Translate the optional CLI arg into starting state. Per the spec:
-    ///   - no arg: walk cwd ancestors for quod.toml; if found, seed
-    ///   - dir w/ quod.toml or .toml file: seed that project
-    ///   - dir w/o quod.toml: open the open-project modal at that dir
-    ///   - anything else: hard error
-    fn bootstrap(&mut self, arg: Option<&str>) -> Result<(), String> {
+    /// Translate the CLI args into starting state. Each positional arg is
+    /// classified into an Anchor (Project for `quod.toml` / dir-with-
+    /// quod.toml, Program for `.json`). With no args, walk the cwd's
+    /// ancestors for a `quod.toml` and seed that as a single Project.
+    fn bootstrap(&mut self, args: &[String]) -> Result<(), String> {
         self.spawn_client_with(&[])?;
 
-        let seed = match arg {
-            None => find_ancestor_toml(&std::env::current_dir().unwrap_or_default())
-                .map(SeedAction::AddProject),
-            Some(s) => Some(self.classify_path(s)?),
-        };
-
-        match seed {
-            Some(SeedAction::AddProject(p)) => {
-                self.add_project(&p)?;
+        if args.is_empty() {
+            if let Some(root) = find_ancestor_toml(&std::env::current_dir().unwrap_or_default()) {
+                let name = read_project_name(&root.join("quod.toml")).map_err(|e| {
+                    format!("seed project at {}: {}", root.display(), e)
+                })?;
+                self.add_anchor(Anchor::Project { root, name })?;
                 self.maybe_auto_select();
             }
-            Some(SeedAction::OpenAt(initial)) => {
-                self.open_open_project_modal(Some(initial));
-            }
-            None => {}
+            return Ok(());
         }
-        Ok(())
-    }
 
-    fn classify_path(&self, raw: &str) -> Result<SeedAction, String> {
-        let path = expand_path(raw);
-        if !path.exists() {
-            return Err(format!("path does not exist: {}", path.display()));
+        for arg in args {
+            let anchor = classify(arg, |toml| read_project_name(toml))
+                .map_err(|e: ClassifyError| e.to_string())?;
+            self.add_anchor(anchor)?;
         }
-        if path.is_dir() {
-            if path.join("quod.toml").is_file() {
-                return Ok(SeedAction::AddProject(path));
-            }
-            return Ok(SeedAction::OpenAt(path));
-        }
-        if path.is_file() {
-            if path.extension().and_then(|s| s.to_str()) == Some("toml") {
-                let parent = path
-                    .parent()
-                    .map(Path::to_path_buf)
-                    .ok_or_else(|| format!("toml has no parent dir: {}", path.display()))?;
-                return Ok(SeedAction::AddProject(parent));
-            }
-            return Err(format!("not a project (.toml or dir): {}", path.display()));
-        }
-        Err(format!("unrecognized path: {}", path.display()))
+        self.maybe_auto_select();
+        Ok(())
     }
 
     fn run<B: ratatui::backend::Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
@@ -250,7 +246,7 @@ impl App {
     fn body_down(&mut self) {
         match self.body_mode {
             BodyMode::Outline => {
-                if let Some(active) = &self.workspace.active {
+                if let Some(active) = &self.active {
                     let len = active.outline.len();
                     if len > 0 && self.sidebar_cursor + 1 < len {
                         self.sidebar_cursor += 1;
@@ -280,7 +276,7 @@ impl App {
 
     /// Lazy-fetch the lift trace from the server. Idempotent.
     fn ensure_lift_trace(&mut self) {
-        if self.lift_trace.is_some() || self.workspace.active.is_none() {
+        if self.lift_trace.is_some() || self.active.is_none() {
             return;
         }
         let Some(client) = self.client.as_mut() else { return };
@@ -295,7 +291,7 @@ impl App {
     }
 
     fn ensure_bin_lift_trace(&mut self) {
-        if self.bin_lift_trace.is_some() || self.workspace.active.is_none() {
+        if self.bin_lift_trace.is_some() || self.active.is_none() {
             return;
         }
         let Some(client) = self.client.as_mut() else { return };
@@ -310,7 +306,7 @@ impl App {
     }
 
     fn ensure_no_dead_end(&mut self) {
-        if self.workspace.active.is_none() && self.overlay.is_none() {
+        if self.active.is_none() && self.overlay.is_none() {
             self.open_program_picker();
         }
     }
@@ -370,122 +366,173 @@ impl App {
             .notify("initialized", json!({}))
             .map_err(|e| e.to_string())?;
         self.client = Some(client);
-        self.workspace.programs = parse_programs(&raw);
+        self.programs = parse_programs(&raw);
         Ok(())
     }
 
-    fn add_project(&mut self, path: &Path) -> Result<(), String> {
-        let path = path
-            .canonicalize()
-            .map_err(|e| format!("canonicalize: {e}"))?;
-        if !path.join("quod.toml").is_file() {
-            return Err(format!("no quod.toml in {}", path.display()));
-        }
-        if self.workspace.projects.iter().any(|p| p.path == path) {
-            return Err(format!("already open: {}", path.display()));
+    /// Add an Anchor to the workspace. For Project anchors this notifies
+    /// the LSP via `workspace/didChangeWorkspaceFolders` and refreshes
+    /// `programs`. For Program anchors there's no LSP interaction —
+    /// activation happens later via `setActiveProgram({file})`.
+    fn add_anchor(&mut self, anchor: Anchor) -> Result<(), String> {
+        match &anchor {
+            Anchor::Project { root, .. } => {
+                let folder = lsp_types::WorkspaceFolder {
+                    uri: format!("file://{}", root.display())
+                        .parse()
+                        .map_err(|e: <lsp_types::Uri as std::str::FromStr>::Err| e.to_string())?,
+                    name: root
+                        .file_name()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| root.to_string_lossy().into_owned()),
+                };
+                let client = self.client.as_mut().ok_or("no LSP client")?;
+                client
+                    .notify(
+                        "workspace/didChangeWorkspaceFolders",
+                        json!({"event": {"added": [folder], "removed": []}}),
+                    )
+                    .map_err(|e| e.to_string())?;
+                let resp = client
+                    .request("quod/listPrograms", json!({}))
+                    .map_err(|e| e.to_string())?;
+                self.programs = parse_programs_field(&resp);
+                self.recents.note_project(root.clone(), None);
+            }
+            Anchor::Program { file } => {
+                self.recents.note_program(file.clone());
+            }
         }
 
-        let folder = lsp_types::WorkspaceFolder {
-            uri: format!("file://{}", path.display())
-                .parse()
-                .map_err(|e: <lsp_types::Uri as std::str::FromStr>::Err| e.to_string())?,
-            name: path
-                .file_name()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.to_string_lossy().into_owned()),
-        };
-        let client = self.client.as_mut().ok_or("no LSP client")?;
-        client
-            .notify(
-                "workspace/didChangeWorkspaceFolders",
-                json!({"event": {"added": [folder], "removed": []}}),
-            )
-            .map_err(|e| e.to_string())?;
-        let resp = client
-            .request("quod/listPrograms", json!({}))
-            .map_err(|e| e.to_string())?;
-        self.workspace.programs = parse_programs_field(&resp);
-
-        let name = path
-            .file_name()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| path.to_string_lossy().into_owned());
-        self.workspace.projects.push(ProjectInfo { path: path.clone(), name });
-        self.recents.note_folder(path, None);
+        if !self.workspace.add(anchor.clone()) {
+            return Err(format!("already open: {}", anchor.path().display()));
+        }
         self.error = None;
         Ok(())
     }
 
-    fn remove_project(&mut self, path: &Path) -> Result<(), String> {
-        let folder = lsp_types::WorkspaceFolder {
-            uri: format!("file://{}", path.display())
-                .parse()
-                .map_err(|e: <lsp_types::Uri as std::str::FromStr>::Err| e.to_string())?,
-            name: path
-                .file_name()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_default(),
-        };
-        let client = self.client.as_mut().ok_or("no LSP client")?;
-        client
-            .notify(
-                "workspace/didChangeWorkspaceFolders",
-                json!({"event": {"added": [], "removed": [folder]}}),
-            )
-            .map_err(|e| e.to_string())?;
-        let resp = client
-            .request("quod/listPrograms", json!({}))
-            .map_err(|e| e.to_string())?;
-        self.workspace.programs = parse_programs_field(&resp);
+    /// Remove an anchor by identity. For Project anchors this notifies
+    /// the LSP and refreshes `programs`. Drops `active` if it was rooted
+    /// in (or was) the removed anchor.
+    fn remove_anchor(&mut self, id: &AnchorId) -> Result<(), String> {
+        match id {
+            AnchorId::Project(root) => {
+                let folder = lsp_types::WorkspaceFolder {
+                    uri: format!("file://{}", root.display())
+                        .parse()
+                        .map_err(|e: <lsp_types::Uri as std::str::FromStr>::Err| e.to_string())?,
+                    name: root
+                        .file_name()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
+                };
+                let client = self.client.as_mut().ok_or("no LSP client")?;
+                client
+                    .notify(
+                        "workspace/didChangeWorkspaceFolders",
+                        json!({"event": {"added": [], "removed": [folder]}}),
+                    )
+                    .map_err(|e| e.to_string())?;
+                let resp = client
+                    .request("quod/listPrograms", json!({}))
+                    .map_err(|e| e.to_string())?;
+                self.programs = parse_programs_field(&resp);
 
-        self.workspace.projects.retain(|p| p.path != path);
-        if let Some(a) = &self.workspace.active {
-            if let Some(proj) = &a.project {
-                if !self.workspace.programs.iter().any(|p| &p.project == proj) {
-                    self.workspace.active = None;
+                // Drop active if its anchor_context just went away.
+                if let Some(a) = &self.active {
+                    if let Some(ctx) = &a.anchor_context {
+                        if &ctx.root == root {
+                            self.active = None;
+                        }
+                    }
+                }
+            }
+            AnchorId::Program(file) => {
+                if let Some(a) = &self.active {
+                    // Standalone activation: anchor_context is None and
+                    // label is the file path. Drop if the removed program
+                    // matches the active label.
+                    if a.anchor_context.is_none()
+                        && Path::new(&a.label) == file.as_path()
+                    {
+                        self.active = None;
+                    }
                 }
             }
         }
+        self.workspace.remove(id);
         Ok(())
     }
 
-    fn set_active(&mut self, project_path: &Path, name: &str) -> Result<(), String> {
+    fn set_active_routed(
+        &mut self,
+        project: &ProjectRef,
+        name: &str,
+    ) -> Result<(), String> {
         let client = self.client.as_mut().ok_or("no LSP client")?;
         let resp = client
             .request(
                 "quod/setActiveProgram",
                 json!({
-                    "projectPath": project_path.display().to_string(),
+                    "projectPath": project.root.display().to_string(),
                     "name": name,
                 }),
             )
             .map_err(|e| e.to_string())?;
+        self.finalize_set_active(resp)?;
+        self.recents.note_project(project.root.clone(), Some(name.to_string()));
+        Ok(())
+    }
+
+    fn set_active_standalone(&mut self, file: &Path) -> Result<(), String> {
+        let client = self.client.as_mut().ok_or("no LSP client")?;
+        let resp = client
+            .request(
+                "quod/setActiveProgram",
+                json!({"file": file.display().to_string()}),
+            )
+            .map_err(|e| e.to_string())?;
+        self.finalize_set_active(resp)?;
+        self.recents.note_program(file.to_path_buf());
+        Ok(())
+    }
+
+    fn finalize_set_active(&mut self, resp: Value) -> Result<(), String> {
+        let client = self.client.as_mut().ok_or("no LSP client")?;
         let outline_resp = client
             .request("quod/getProgramOutline", json!({}))
             .map_err(|e| e.to_string())?;
         let outline = parse_outline(&outline_resp);
-        self.workspace.active = Some(parse_active(&resp, outline)?);
+        self.active = Some(parse_active(&resp, outline)?);
         self.sidebar_cursor = 0;
         // Both columnar caches invalidate when the active program changes.
         self.lift_trace = None;
         self.bin_lift_trace = None;
-        if let Some(p) = self.workspace.projects.iter().find(|p| p.path == project_path) {
-            self.recents.note_folder(p.path.clone(), Some(name.to_string()));
-        }
         Ok(())
     }
 
     fn maybe_auto_select(&mut self) {
-        if self.workspace.active.is_none() && self.workspace.programs.len() == 1 {
-            let p = self.workspace.programs[0].clone();
-            let _ = self.set_active(&p.project_path, &p.name);
+        if self.active.is_some() {
+            return;
+        }
+        let routed: Vec<_> = self.programs.iter().cloned().collect();
+        let standalone: Vec<_> = self.workspace.standalone_programs().map(Path::to_path_buf).collect();
+        if routed.len() + standalone.len() == 1 {
+            if let Some(p) = routed.into_iter().next() {
+                let _ = self.set_active_routed(
+                    &ProjectRef { root: p.project_path, name: p.project },
+                    &p.name,
+                );
+            } else if let Some(file) = standalone.into_iter().next() {
+                let _ = self.set_active_standalone(&file);
+            }
         }
     }
 
     // ---------- Overlays ----------
 
     fn open_program_picker(&mut self) {
-        let items = self.build_program_items();
+        let (items, _) = self.build_program_items();
         let footer = self.program_picker_footer();
         self.overlay = Some(Overlay::ProgramPicker(
             Picker::new("programs")
@@ -494,19 +541,27 @@ impl App {
         ));
     }
 
-    fn build_program_items(&self) -> Vec<PickerItem> {
+    /// Build the picker rows. Returns the items plus a parallel
+    /// `selectables` table that maps `user_data` indices back to either
+    /// a project-routed `ProgramEntry` or a standalone Program anchor.
+    fn build_program_items(&self) -> (Vec<PickerItem>, Vec<SelectableProgram>) {
         let mut items: Vec<PickerItem> = Vec::new();
-        for project in &self.workspace.projects {
+        let mut selectables: Vec<SelectableProgram> = Vec::new();
+
+        // One header per Project anchor, with its programs nested.
+        for (root, name) in self.workspace.projects() {
             let header_idx = items.len();
-            items.push(PickerItem::header(format!("{}/", project.name), header_idx));
+            items.push(PickerItem::header(format!("{name}/"), header_idx));
             let mut had_any = false;
-            for (i, prog) in self.workspace.programs.iter().enumerate() {
-                if prog.project_path != project.path {
+            for (i, prog) in self.programs.iter().enumerate() {
+                if prog.project_path != root {
                     continue;
                 }
                 had_any = true;
+                let sel_idx = selectables.len();
+                selectables.push(SelectableProgram::Routed(i));
                 let mut item = PickerItem::selectable(prog.name.clone(), header_idx)
-                    .with_user_data(i);
+                    .with_user_data(sel_idx);
                 item.detail = Some(prog.file.clone());
                 items.push(item);
             }
@@ -514,20 +569,39 @@ impl App {
                 items.push(PickerItem::placeholder("{ no programs }", header_idx));
             }
         }
-        items
+
+        // Standalone Program anchors: one selectable each, under a single
+        // synthetic "standalone" header so the existing picker filter
+        // behaves predictably.
+        let standalone: Vec<&Path> = self.workspace.standalone_programs().collect();
+        if !standalone.is_empty() {
+            let header_idx = items.len();
+            items.push(PickerItem::header("standalone/", header_idx));
+            for file in standalone {
+                let display = program_name_from_file(file);
+                let sel_idx = selectables.len();
+                selectables.push(SelectableProgram::Standalone(file.to_path_buf()));
+                let mut item = PickerItem::selectable(display, header_idx)
+                    .with_user_data(sel_idx);
+                item.detail = Some(display_path(file));
+                items.push(item);
+            }
+        }
+
+        (items, selectables)
     }
 
     fn program_picker_footer(&self) -> Vec<(String, String)> {
-        if self.workspace.projects.is_empty() {
+        if self.workspace.anchors().is_empty() {
             vec![
-                ("o".into(), "add project".into()),
+                ("o".into(), "add anchor".into()),
                 ("q".into(), "quit".into()),
             ]
         } else {
             vec![
                 ("↵".into(), "select".into()),
                 ("o".into(), "add".into()),
-                ("x".into(), "remove project".into()),
+                ("x".into(), "remove anchor".into()),
                 ("esc".into(), "cancel".into()),
             ]
         }
@@ -537,19 +611,19 @@ impl App {
         let initial = initial.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let recents: Vec<RecentEntry> = self
             .recents
-            .folders
+            .anchors
             .iter()
-            .map(|f| RecentEntry {
-                path: f.path.clone(),
-                display: display_path(&f.path),
-                time_ago: relative_time(f.last_opened),
+            .map(|a| RecentEntry {
+                path: a.path.clone(),
+                display: display_path(&a.path),
+                time_ago: relative_time(a.last_opened),
             })
             .collect();
         self.overlay = Some(Overlay::OpenProject(OpenModal::new(initial, recents)));
     }
 
     fn refresh_program_picker_items(&mut self) {
-        let items = self.build_program_items();
+        let (items, _) = self.build_program_items();
         let footer = self.program_picker_footer();
         if let Some(Overlay::ProgramPicker(picker)) = self.overlay.as_mut() {
             picker.refresh_items(items);
@@ -563,23 +637,33 @@ impl App {
         let filtered = picker.filtered();
         let Some(item_idx) = filtered.get(picker.cursor).copied() else { return };
         let Some(item) = picker.items.get(item_idx).cloned() else { return };
-        let project_path: Option<PathBuf> = match item.user_data {
-            Some(prog_idx) => self
-                .workspace
-                .programs
-                .get(prog_idx)
-                .map(|p| p.project_path.clone()),
-            None => picker.items.get(item.group).and_then(|hdr| {
-                let stripped = hdr.label.strip_suffix('/').unwrap_or(&hdr.label);
-                self.workspace
-                    .projects
-                    .iter()
-                    .find(|p| p.name == stripped)
-                    .map(|p| p.path.clone())
-            }),
+        let (_items, selectables) = self.build_program_items();
+        let id: Option<AnchorId> = match item.user_data {
+            Some(sel_idx) => match selectables.get(sel_idx) {
+                Some(SelectableProgram::Routed(i)) => self
+                    .programs
+                    .get(*i)
+                    .map(|p| AnchorId::Project(p.project_path.clone())),
+                Some(SelectableProgram::Standalone(file)) => {
+                    Some(AnchorId::Program(file.clone()))
+                }
+                None => None,
+            },
+            None => {
+                // Header row: removing the anchor identified by the header.
+                let label = item.label.strip_suffix('/').unwrap_or(&item.label);
+                if label == "standalone" {
+                    None // header has no single anchor identity
+                } else {
+                    self.workspace
+                        .projects()
+                        .find(|(_, n)| *n == label)
+                        .map(|(root, _)| AnchorId::Project(root.to_path_buf()))
+                }
+            }
         };
-        let Some(path) = project_path else { return };
-        if let Err(e) = self.remove_project(&path) {
+        let Some(id) = id else { return };
+        if let Err(e) = self.remove_anchor(&id) {
             if let Some(Overlay::ProgramPicker(p)) = self.overlay.as_mut() {
                 p.set_error(format!("remove: {e}"));
             }
@@ -632,23 +716,36 @@ impl App {
                 self.overlay = None; // invariant will reopen if active is None
             }
             picker::Outcome::Item(idx) => {
-                let prog = match self.overlay.as_ref() {
+                let (_items, selectables) = self.build_program_items();
+                let sel = match self.overlay.as_ref() {
                     Some(Overlay::ProgramPicker(p)) => p
                         .items
                         .get(idx)
                         .and_then(|it| it.user_data)
-                        .and_then(|i| self.workspace.programs.get(i).cloned()),
+                        .and_then(|i| selectables.get(i).cloned()),
                     _ => None,
                 };
-                match prog {
-                    Some(p) => match self.set_active(&p.project_path, &p.name) {
-                        Ok(()) => self.overlay = None,
-                        Err(e) => {
-                            if let Some(Overlay::ProgramPicker(picker)) = self.overlay.as_mut() {
-                                picker.set_error(e);
-                            }
+                let result: Option<Result<(), String>> = match sel {
+                    Some(SelectableProgram::Routed(i)) => {
+                        self.programs.get(i).cloned().map(|p| {
+                            self.set_active_routed(
+                                &ProjectRef { root: p.project_path, name: p.project },
+                                &p.name,
+                            )
+                        })
+                    }
+                    Some(SelectableProgram::Standalone(file)) => {
+                        Some(self.set_active_standalone(&file))
+                    }
+                    None => None,
+                };
+                match result {
+                    Some(Ok(())) => self.overlay = None,
+                    Some(Err(e)) => {
+                        if let Some(Overlay::ProgramPicker(picker)) = self.overlay.as_mut() {
+                            picker.set_error(e);
                         }
-                    },
+                    }
                     None => {} // header/placeholder; ignore
                 }
             }
@@ -662,23 +759,11 @@ impl App {
                 self.overlay = None; // invariant will reopen program picker if no active
             }
             open_modal::Outcome::Open(path) => {
-                // Accept either a dir or a .toml file (step up to its parent).
-                let dir = if path.is_file()
-                    && path.extension().and_then(|s| s.to_str()) == Some("toml")
-                {
-                    match path.parent().map(Path::to_path_buf) {
-                        Some(p) => p,
-                        None => {
-                            if let Some(Overlay::OpenProject(m)) = self.overlay.as_mut() {
-                                m.set_error(format!("toml has no parent: {}", path.display()));
-                            }
-                            return;
-                        }
-                    }
-                } else {
-                    path
-                };
-                match self.add_project(&dir) {
+                let raw = path.to_string_lossy();
+                let anchor_result = classify(&raw, |toml| read_project_name(toml))
+                    .map_err(|e| e.to_string());
+                let result = anchor_result.and_then(|a| self.add_anchor(a));
+                match result {
                     Ok(()) => {
                         self.overlay = None;
                         self.maybe_auto_select();
@@ -718,11 +803,11 @@ impl App {
 
     fn draw_status(&self, frame: &mut Frame<'_>, area: Rect) {
         let style = Style::default().fg(Color::Black).bg(Color::Cyan);
-        let line = if let Some(a) = &self.workspace.active {
+        let line = if let Some(a) = &self.active {
             let mut spans = vec![Span::styled("  ", style)];
-            if let Some(proj) = &a.project {
+            if let Some(ctx) = &a.anchor_context {
                 spans.push(Span::styled(
-                    proj.clone(),
+                    ctx.name.clone(),
                     style.add_modifier(Modifier::BOLD),
                 ));
                 spans.push(Span::styled(" · ", style));
@@ -746,7 +831,7 @@ impl App {
     }
 
     fn draw_body(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        if self.workspace.active.is_none() {
+        if self.active.is_none() {
             return; // picker overlay covers
         }
         match self.body_mode {
@@ -763,7 +848,7 @@ impl App {
     }
 
     fn draw_body_outline(&self, frame: &mut Frame<'_>, area: Rect) {
-        let Some(active) = &self.workspace.active else { return };
+        let Some(active) = &self.active else { return };
         let sidebar_w = sidebar_width(&active.outline).min(area.width / 2).max(10);
         let cols = Layout::default()
             .direction(Direction::Horizontal)
@@ -782,7 +867,6 @@ impl App {
             .fg(Color::Cyan)
             .add_modifier(Modifier::BOLD);
 
-        // Top: small banner so the user knows this is the lift-trace mode.
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -802,10 +886,7 @@ impl App {
             chunks[0],
         );
         frame.render_widget(
-            Paragraph::new(Span::styled(
-                "─".repeat(area.width as usize),
-                dim,
-            )),
+            Paragraph::new(Span::styled("─".repeat(area.width as usize), dim)),
             chunks[1],
         );
 
@@ -855,10 +936,7 @@ impl App {
             chunks[0],
         );
         frame.render_widget(
-            Paragraph::new(Span::styled(
-                "─".repeat(area.width as usize),
-                dim,
-            )),
+            Paragraph::new(Span::styled("─".repeat(area.width as usize), dim)),
             chunks[1],
         );
 
@@ -982,7 +1060,7 @@ impl App {
                 spans.push(Span::styled(" · ", dim));
             }
         };
-        add("o", "add project", false);
+        add("o", "add anchor", false);
         add("p", "pick program", false);
         add("q", "quit", true);
         let _ = add;
@@ -994,11 +1072,6 @@ impl App {
 }
 
 // ---------- Helpers ----------
-
-enum SeedAction {
-    AddProject(PathBuf),
-    OpenAt(PathBuf),
-}
 
 fn parse_programs(initialize_resp: &Value) -> Vec<ProgramEntry> {
     parse_programs_array(
@@ -1034,10 +1107,12 @@ fn parse_active(resp: &Value, outline: Vec<OutlineCategory>) -> Result<Active, S
         .and_then(Value::as_str)
         .ok_or("missing label")?
         .to_string();
-    let project = resp
-        .get("projectName")
-        .and_then(Value::as_str)
-        .map(str::to_string);
+    let project_name = resp.get("projectName").and_then(Value::as_str).map(str::to_string);
+    let project_path = resp.get("projectPath").and_then(Value::as_str).map(PathBuf::from);
+    let anchor_context = match (project_name, project_path) {
+        (Some(name), Some(root)) => Some(ProjectRef { root, name }),
+        _ => None,
+    };
     let s = resp.get("summary").cloned().unwrap_or_default();
     let summary = format!(
         "{} fns · {} structured · {} externs · {} structs · {} claims · {} equivs",
@@ -1048,7 +1123,7 @@ fn parse_active(resp: &Value, outline: Vec<OutlineCategory>) -> Result<Active, S
         s.get("claims").and_then(Value::as_i64).unwrap_or(0),
         s.get("equivalences").and_then(Value::as_i64).unwrap_or(0),
     );
-    Ok(Active { label, project, summary, outline })
+    Ok(Active { label, anchor_context, summary, outline })
 }
 
 fn parse_lift_trace(resp: &Value) -> ColumnView {
@@ -1183,20 +1258,6 @@ fn find_ancestor_toml(start: &Path) -> Option<PathBuf> {
         cur = p.parent();
     }
     None
-}
-
-fn expand_path(text: &str) -> PathBuf {
-    if let Some(rest) = text.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return Path::new(&home).join(rest);
-        }
-    }
-    if text == "~" {
-        if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home);
-        }
-    }
-    PathBuf::from(text)
 }
 
 fn sidebar_width(outline: &[OutlineCategory]) -> u16 {

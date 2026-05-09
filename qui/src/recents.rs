@@ -1,9 +1,13 @@
-//! Persisted list of recently-opened folders and files.
+//! Persisted list of recently-opened workspace anchors.
 //!
 //! Stored at `$XDG_STATE_HOME/qui/recents.json` (falling back to
-//! `~/.local/state/qui/recents.json`). Best-effort: any I/O error
-//! treats the store as empty and continues — recents are convenience,
-//! not correctness.
+//! `~/.local/state/qui/recents.json`). Best-effort: any I/O error treats
+//! the store as empty and continues — recents are convenience, not
+//! correctness.
+//!
+//! Each entry is one anchor (project or standalone program). Anchors are
+//! identified by `(kind, absolute path)`; bumping recency on an existing
+//! entry rewrites the timestamp without producing a duplicate.
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -12,24 +16,39 @@ use serde::{Deserialize, Serialize};
 
 const CAP: usize = 20;
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AnchorKind {
+    Project,
+    Program,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RecentFolder {
+pub struct RecentAnchor {
+    pub kind: AnchorKind,
     pub path: PathBuf,
-    /// Unix seconds. Stored as i64 to keep the JSON readable.
+    /// Unix seconds. i64 keeps the JSON readable.
     pub last_opened: i64,
+    /// For Project anchors: the program-name within the project that was
+    /// last activated through this anchor. Carried so a future "reopen
+    /// most recent" can land on the same program.
     pub last_active_program: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Recents {
-    #[serde(default)]
-    pub folders: Vec<RecentFolder>,
+    #[serde(default, alias = "folders")]
+    pub anchors: Vec<RecentAnchor>,
 }
 
 impl Recents {
     pub fn load() -> Self {
         let Some(path) = store_path() else { return Self::default() };
         let Ok(data) = fs::read_to_string(&path) else { return Self::default() };
+        // serde_json silently tolerates extra/missing fields; the
+        // `alias = "folders"` lets old `Recents { folders: [...] }`
+        // files load — entries from the previous schema will lack `kind`
+        // and be discarded by `from_str` returning default. Best-effort.
         serde_json::from_str(&data).unwrap_or_default()
     }
 
@@ -42,28 +61,39 @@ impl Recents {
         fs::write(&path, data)
     }
 
-    pub fn note_folder(&mut self, path: PathBuf, active_program: Option<String>) {
+    /// Bump (or insert) a Project anchor. `active_program` is the name
+    /// of the program activated through this project right now, if any.
+    pub fn note_project(&mut self, path: PathBuf, active_program: Option<String>) {
+        self.note(AnchorKind::Project, path, active_program);
+    }
+
+    /// Bump (or insert) a standalone Program anchor.
+    pub fn note_program(&mut self, file: PathBuf) {
+        self.note(AnchorKind::Program, file, None);
+    }
+
+    fn note(&mut self, kind: AnchorKind, path: PathBuf, active_program: Option<String>) {
         let now = unix_now();
-        // Carry over previous last_active_program if the new one is None
-        // (e.g. opened folder then immediately switched away — don't lose
-        // the prior pick).
+        // Carry over the prior last_active_program when the new one is
+        // None — opening a project then immediately switching shouldn't
+        // lose what the user had picked last time.
         let prior = self
-            .folders
+            .anchors
             .iter()
-            .find(|f| f.path == path)
-            .and_then(|f| f.last_active_program.clone());
-        self.folders.retain(|f| f.path != path);
-        self.folders.insert(
+            .find(|a| a.kind == kind && a.path == path)
+            .and_then(|a| a.last_active_program.clone());
+        self.anchors.retain(|a| !(a.kind == kind && a.path == path));
+        self.anchors.insert(
             0,
-            RecentFolder {
+            RecentAnchor {
+                kind,
                 path,
                 last_opened: now,
                 last_active_program: active_program.or(prior),
             },
         );
-        self.folders.truncate(CAP);
+        self.anchors.truncate(CAP);
     }
-
 }
 
 fn unix_now() -> i64 {
@@ -112,4 +142,52 @@ pub fn relative_time(then: i64) -> String {
         return format!("{}mo ago", delta / (86400 * 30));
     }
     format!("{}y ago", delta / (86400 * 365))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn note_project_dedupes_by_path() {
+        let mut r = Recents::default();
+        r.note_project(PathBuf::from("/a"), Some("foo".into()));
+        r.note_project(PathBuf::from("/a"), Some("bar".into()));
+        assert_eq!(r.anchors.len(), 1);
+        assert_eq!(r.anchors[0].last_active_program.as_deref(), Some("bar"));
+    }
+
+    #[test]
+    fn note_carries_prior_program_when_new_is_none() {
+        let mut r = Recents::default();
+        r.note_project(PathBuf::from("/a"), Some("foo".into()));
+        r.note_project(PathBuf::from("/a"), None);
+        assert_eq!(r.anchors[0].last_active_program.as_deref(), Some("foo"));
+    }
+
+    #[test]
+    fn note_program_distinct_from_note_project_at_same_path() {
+        let mut r = Recents::default();
+        r.note_project(PathBuf::from("/a"), None);
+        r.note_program(PathBuf::from("/a"));
+        assert_eq!(r.anchors.len(), 2);
+    }
+
+    #[test]
+    fn most_recent_is_first() {
+        let mut r = Recents::default();
+        r.note_project(PathBuf::from("/older"), None);
+        r.note_project(PathBuf::from("/newer"), None);
+        assert_eq!(r.anchors[0].path, PathBuf::from("/newer"));
+        assert_eq!(r.anchors[1].path, PathBuf::from("/older"));
+    }
+
+    #[test]
+    fn cap_bounds_the_list() {
+        let mut r = Recents::default();
+        for i in 0..(CAP + 5) {
+            r.note_project(PathBuf::from(format!("/p{i}")), None);
+        }
+        assert_eq!(r.anchors.len(), CAP);
+    }
 }
