@@ -1,7 +1,11 @@
-//! Open-project modal: a directory browser pane (top) over a recents
+//! Open-anchor modal: a file/dir browser pane (top) over a recents
 //! pane (bottom). Tab toggles focus between them. Returns a path on
-//! commit; the App decides what to do with it (validate, add to
-//! workspace, set up active program, etc.).
+//! commit; the App classifies it into a workspace Anchor (Project for
+//! `.toml` / dir-with-quod.toml, Program for `.json`) and adds it.
+//!
+//! The browser filters to: dirs (for navigation) + files named exactly
+//! `quod.toml` + files with the `.json` extension. No "magical"
+//! is-project highlighting — the user is selecting a file, not a dir.
 use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -27,9 +31,9 @@ pub enum Focus {
 
 #[derive(Debug, Clone)]
 pub enum Entry {
-    Cur,                                          // "./"
-    Parent,                                       // "../"
-    Dir { name: String, is_project: bool },       // subdir; ✓ if it has quod.toml
+    Parent,                            // "../" — step out
+    Dir { name: String },              // subdir — step in on commit
+    File { name: String },             // quod.toml or *.json — commits as Anchor
 }
 
 #[derive(Debug, Clone)]
@@ -178,7 +182,6 @@ impl OpenModal {
                         .unwrap_or(typed)
                 };
                 match entry {
-                    Entry::Cur => Outcome::Open(base),
                     Entry::Parent => match base.parent() {
                         Some(p) => {
                             self.input = p.to_string_lossy().into_owned();
@@ -187,16 +190,13 @@ impl OpenModal {
                         }
                         None => Outcome::Continue,
                     },
-                    Entry::Dir { name, is_project } => {
+                    Entry::Dir { name } => {
                         let target = base.join(&name);
-                        if is_project {
-                            Outcome::Open(target)
-                        } else {
-                            self.input = target.to_string_lossy().into_owned();
-                            self.rescan();
-                            Outcome::Continue
-                        }
+                        self.input = target.to_string_lossy().into_owned();
+                        self.rescan();
+                        Outcome::Continue
                     }
+                    Entry::File { name } => Outcome::Open(base.join(&name)),
                 }
             }
             Focus::Recents => match self.recents.get(self.recents_cursor) {
@@ -366,19 +366,14 @@ impl OpenModal {
 }
 
 fn render_entry(e: &Entry) -> Line<'static> {
+    let dim = Style::default().fg(Color::DarkGray);
     match e {
-        Entry::Cur => Line::from(Span::raw("./")),
         Entry::Parent => Line::from(Span::raw("../")),
-        Entry::Dir { name, is_project } => {
-            let mut spans = vec![Span::raw(format!("{}/", name))];
-            if *is_project {
-                spans.push(Span::styled(
-                    "  ✓",
-                    Style::default().fg(Color::Green),
-                ));
-            }
-            Line::from(spans)
-        }
+        Entry::Dir { name } => Line::from(Span::raw(format!("{name}/"))),
+        Entry::File { name } => Line::from(vec![
+            Span::styled("- ", dim),
+            Span::raw(name.clone()),
+        ]),
     }
 }
 
@@ -401,27 +396,46 @@ fn render_footer(frame: &mut Frame<'_>, area: Rect, hints: &[(&str, &str)]) {
 }
 
 fn scan(path: &Path) -> Vec<Entry> {
-    let mut entries = vec![Entry::Cur, Entry::Parent];
+    let mut entries = vec![Entry::Parent];
     if let Ok(rd) = std::fs::read_dir(path) {
-        let mut dirs: Vec<(String, bool)> = Vec::new();
+        let mut dirs: Vec<String> = Vec::new();
+        let mut files: Vec<String> = Vec::new();
         for e in rd.flatten() {
             let name = e.file_name().to_string_lossy().into_owned();
             if name.starts_with('.') {
                 continue;
             }
             let Ok(ft) = e.file_type() else { continue };
-            if !ft.is_dir() {
-                continue;
+            if ft.is_dir() {
+                dirs.push(name);
+            } else if ft.is_file() && is_anchor_file(&name) {
+                files.push(name);
             }
-            let is_project = path.join(&name).join("quod.toml").is_file();
-            dirs.push((name, is_project));
         }
-        dirs.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
-        for (name, is_project) in dirs {
-            entries.push(Entry::Dir { name, is_project });
+        dirs.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        files.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        for name in dirs {
+            entries.push(Entry::Dir { name });
+        }
+        for name in files {
+            entries.push(Entry::File { name });
         }
     }
     entries
+}
+
+/// True iff `name` is a file the picker should surface — either the
+/// literal `quod.toml` (a Project anchor) or any `*.json` (a candidate
+/// Program anchor; the loader will reject non-program JSON at commit).
+fn is_anchor_file(name: &str) -> bool {
+    if name == "quod.toml" {
+        return true;
+    }
+    Path::new(name)
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("json"))
+        .unwrap_or(false)
 }
 
 fn expand(text: &str) -> PathBuf {
@@ -436,4 +450,89 @@ fn expand(text: &str) -> PathBuf {
         }
     }
     PathBuf::from(text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn tempdir() -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static N: AtomicU64 = AtomicU64::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "qui-openmodal-test-{}-{}-{}",
+            std::process::id(),
+            n,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn is_anchor_file_accepts_quod_toml_and_json() {
+        assert!(is_anchor_file("quod.toml"));
+        assert!(is_anchor_file("foo.json"));
+        assert!(is_anchor_file("FOO.JSON")); // case-insensitive ext
+    }
+
+    #[test]
+    fn is_anchor_file_rejects_other_tomls_and_random_files() {
+        assert!(!is_anchor_file("Cargo.toml"));
+        assert!(!is_anchor_file("pyproject.toml"));
+        assert!(!is_anchor_file("README.md"));
+        assert!(!is_anchor_file("script.sh"));
+        assert!(!is_anchor_file(""));
+    }
+
+    #[test]
+    fn scan_includes_only_anchor_files_plus_dirs_and_parent() {
+        let dir = tempdir();
+        fs::create_dir(dir.join("subdir")).unwrap();
+        fs::write(dir.join("quod.toml"), "name = \"x\"").unwrap();
+        fs::write(dir.join("foo.json"), "{}").unwrap();
+        fs::write(dir.join("Cargo.toml"), "").unwrap();
+        fs::write(dir.join("README.md"), "").unwrap();
+
+        let entries = scan(&dir);
+
+        // Parent first, then dirs, then files.
+        assert!(matches!(entries[0], Entry::Parent));
+
+        let names: Vec<&str> = entries
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Dir { name } => Some(name.as_str()),
+                Entry::File { name } => Some(name.as_str()),
+                Entry::Parent => None,
+            })
+            .collect();
+        assert!(names.contains(&"subdir"));
+        assert!(names.contains(&"quod.toml"));
+        assert!(names.contains(&"foo.json"));
+        assert!(!names.contains(&"Cargo.toml"));
+        assert!(!names.contains(&"README.md"));
+    }
+
+    #[test]
+    fn scan_hides_dot_entries() {
+        let dir = tempdir();
+        fs::create_dir(dir.join(".hidden")).unwrap();
+        fs::write(dir.join(".secret.json"), "{}").unwrap();
+        let entries = scan(&dir);
+        let names: Vec<&str> = entries
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Dir { name } => Some(name.as_str()),
+                Entry::File { name } => Some(name.as_str()),
+                Entry::Parent => None,
+            })
+            .collect();
+        assert!(names.is_empty(), "got {names:?}");
+    }
 }
