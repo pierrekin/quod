@@ -134,6 +134,7 @@ impl Picker {
         self.error = Some(msg.into());
     }
 
+    #[allow(dead_code)] // wired by the membership editor (next commit)
     pub fn refresh_items(&mut self, items: Vec<PickerItem>) {
         self.items = items;
         self.snap_cursor_to_selectable(0, true);

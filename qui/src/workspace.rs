@@ -78,6 +78,7 @@ impl Workspace {
     }
 
     /// Remove an anchor by identity. Returns `false` if not present.
+    #[allow(dead_code)] // wired by the membership editor (next commit)
     pub fn remove(&mut self, id: &AnchorId) -> bool {
         let before = self.anchors.len();
         self.anchors.retain(|a| a.id() != *id);

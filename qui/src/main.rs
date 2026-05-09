@@ -1,4 +1,5 @@
 mod column_view;
+mod help_modal;
 mod highlight;
 mod lsp;
 mod open_modal;
@@ -97,6 +98,7 @@ enum BodyMode {
 enum Overlay {
     ProgramPicker(Picker),
     OpenProject(OpenModal),
+    Help(help_modal::HelpModal),
 }
 
 #[derive(Clone)]
@@ -205,18 +207,23 @@ impl App {
                 if self.handle_overlay_key(key) {
                     return Ok(());
                 }
-            } else {
-                match key.code {
-                    KeyCode::Char('q') => return Ok(()),
-                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        return Ok(());
+            } else if let Some(action) = classify_key(key) {
+                match action {
+                    Action::Quit => return Ok(()),
+                    Action::Cancel => return Ok(()), // no overlay → quit
+                    Action::OpenMembership => self.open_open_project_modal(None),
+                    Action::OpenPicker => self.open_program_picker(),
+                    Action::OpenHelp => {
+                        self.overlay = Some(Overlay::Help(help_modal::HelpModal::new()));
                     }
-                    KeyCode::Char('o') => self.open_open_project_modal(None),
-                    KeyCode::Char('p') => self.open_program_picker(),
-                    KeyCode::Char('v') => self.cycle_body_mode(),
-                    KeyCode::Up | KeyCode::Char('k') => self.body_up(),
-                    KeyCode::Down | KeyCode::Char('j') => self.body_down(),
-                    _ => {}
+                    Action::CycleBody => self.cycle_body_mode(),
+                    Action::BodyUp => self.body_up(),
+                    Action::BodyDown => self.body_down(),
+                    // Tab/projection cycling and tab close land with the
+                    // tabs/projections work; for now they're no-ops.
+                    Action::CloseTab | Action::ToggleNavBody
+                    | Action::CycleTabPrev | Action::CycleTabNext
+                    | Action::CycleProjPrev | Action::CycleProjNext => {}
                 }
             }
         }
@@ -413,6 +420,7 @@ impl App {
     /// Remove an anchor by identity. For Project anchors this notifies
     /// the LSP and refreshes `programs`. Drops `active` if it was rooted
     /// in (or was) the removed anchor.
+    #[allow(dead_code)] // wired by the membership editor (next commit)
     fn remove_anchor(&mut self, id: &AnchorId) -> Result<(), String> {
         match id {
             AnchorId::Project(root) => {
@@ -593,14 +601,13 @@ impl App {
     fn program_picker_footer(&self) -> Vec<(String, String)> {
         if self.workspace.anchors().is_empty() {
             vec![
-                ("o".into(), "add anchor".into()),
-                ("q".into(), "quit".into()),
+                ("ctrl-o".into(), "add anchor".into()),
+                ("ctrl-q".into(), "quit".into()),
             ]
         } else {
             vec![
                 ("↵".into(), "select".into()),
-                ("o".into(), "add".into()),
-                ("x".into(), "remove anchor".into()),
+                ("ctrl-o".into(), "add anchor".into()),
                 ("esc".into(), "cancel".into()),
             ]
         }
@@ -621,6 +628,7 @@ impl App {
         self.overlay = Some(Overlay::OpenProject(OpenModal::new(initial, recents)));
     }
 
+    #[allow(dead_code)] // wired up by the membership editor (next commit)
     fn refresh_program_picker_items(&mut self) {
         let (items, _) = self.build_program_items();
         let footer = self.program_picker_footer();
@@ -630,66 +638,29 @@ impl App {
         }
     }
 
-    fn remove_focused_in_picker(&mut self) {
-        // Only meaningful from the program picker.
-        let Some(Overlay::ProgramPicker(picker)) = self.overlay.as_ref() else { return };
-        let filtered = picker.filtered();
-        let Some(item_idx) = filtered.get(picker.cursor).copied() else { return };
-        let Some(item) = picker.items.get(item_idx).cloned() else { return };
-        let (_items, selectables) = self.build_program_items();
-        let id: Option<AnchorId> = match item.user_data {
-            Some(sel_idx) => match selectables.get(sel_idx) {
-                Some(SelectableProgram::Routed(i)) => self
-                    .programs
-                    .get(*i)
-                    .map(|p| AnchorId::Project(p.project_path.clone())),
-                Some(SelectableProgram::Standalone(file)) => {
-                    Some(AnchorId::Program(file.clone()))
-                }
-                None => None,
-            },
-            None => {
-                // Header row: removing the anchor identified by the header.
-                let label = item.label.strip_suffix('/').unwrap_or(&item.label);
-                if label == "standalone" {
-                    None // header has no single anchor identity
-                } else {
-                    self.workspace
-                        .projects()
-                        .find(|(_, n)| *n == label)
-                        .map(|(root, _)| AnchorId::Project(root.to_path_buf()))
-                }
-            }
-        };
-        let Some(id) = id else { return };
-        if let Err(e) = self.remove_anchor(&id) {
-            if let Some(Overlay::ProgramPicker(p)) = self.overlay.as_mut() {
-                p.set_error(format!("remove: {e}"));
-            }
-            return;
-        }
-        self.refresh_program_picker_items();
-    }
-
     fn handle_overlay_key(&mut self, key: crossterm::event::KeyEvent) -> bool {
-        // ctrl-c always quits, even from inside an overlay.
-        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        // ctrl-c is universal cancel/back: closes the current overlay.
+        // ctrl-q always quits, even from inside an overlay.
+        if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return true;
         }
-        // o/x shortcuts inside the program picker take precedence over filter typing.
-        if let Some(Overlay::ProgramPicker(_)) = &self.overlay {
-            if key.modifiers.is_empty() {
-                match key.code {
-                    KeyCode::Char('o') => {
-                        self.open_open_project_modal(None);
-                        return false;
-                    }
-                    KeyCode::Char('x') => {
-                        self.remove_focused_in_picker();
-                        return false;
-                    }
-                    _ => {}
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            self.overlay = None;
+            return false;
+        }
+        // ctrl-p / ctrl-o reach the picker / membership editor from anywhere,
+        // including from another overlay (replaces the current one).
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            match key.code {
+                KeyCode::Char('p') => {
+                    self.open_program_picker();
+                    return false;
                 }
+                KeyCode::Char('o') => {
+                    self.open_open_project_modal(None);
+                    return false;
+                }
+                _ => {}
             }
         }
 
@@ -702,6 +673,12 @@ impl App {
             Some(Overlay::OpenProject(m)) => {
                 let outcome = m.handle_key(key);
                 self.process_open_modal_outcome(outcome);
+                false
+            }
+            Some(Overlay::Help(h)) => {
+                if let help_modal::Outcome::Close = h.handle_key(key) {
+                    self.overlay = None;
+                }
                 false
             }
             None => false,
@@ -796,6 +773,7 @@ impl App {
             match overlay {
                 Overlay::ProgramPicker(p) => p.render(frame, area),
                 Overlay::OpenProject(m) => m.render(frame, area),
+                Overlay::Help(h) => h.render(frame, area),
             }
         }
     }
@@ -1041,29 +1019,77 @@ impl App {
         frame.render_widget(Paragraph::new(lines), inner);
     }
 
-    /// Always reflects the *background* surface — the main view's
-    /// bindings. Doesn't change when an overlay is up; the overlay has
-    /// its own footer.
+    /// Single-line hint pointing to `?` for the full chord list. Kept
+    /// minimal because the chord set has outgrown what fits on one line.
     fn draw_keymap(&self, frame: &mut Frame<'_>, area: Rect) {
         let dim = Style::default().fg(Color::DarkGray);
         let key = Style::default().fg(Color::Cyan);
-        let mut spans: Vec<Span> = vec![Span::raw(" ")];
-        let mut add = |k: &'static str, label: &'static str, last: bool| {
-            spans.push(Span::styled(k, key));
-            spans.push(Span::raw(" "));
-            spans.push(Span::styled(label, dim));
-            if !last {
-                spans.push(Span::styled(" · ", dim));
-            }
-        };
-        add("o", "add anchor", false);
-        add("p", "pick program", false);
-        add("q", "quit", true);
-        let _ = add;
+        let spans: Vec<Span> = vec![
+            Span::raw(" "),
+            Span::styled("?", key),
+            Span::raw(" "),
+            Span::styled("for help", dim),
+        ];
         frame.render_widget(
             Paragraph::new(Line::from(spans)).alignment(Alignment::Left),
             area,
         );
+    }
+}
+
+// ---------- Key dispatch ----------
+
+/// Top-level actions the main view's key handler can dispatch. New
+/// chords become new variants here; the actual binding lives in
+/// `classify_key` so it's easy to keep the chord table coherent.
+enum Action {
+    Quit,
+    Cancel,
+    OpenMembership,
+    OpenPicker,
+    OpenHelp,
+    CloseTab,
+    ToggleNavBody,
+    CycleTabPrev,
+    CycleTabNext,
+    CycleProjPrev,
+    CycleProjNext,
+    CycleBody,
+    BodyUp,
+    BodyDown,
+}
+
+/// Map a raw key event from the *main view* (no overlay focused) into
+/// a logical action. Returns `None` for keys the main view doesn't bind.
+/// The control architecture (`03-`) makes unqualified keys local to the
+/// focused thing; the main view today owns the body, so unqualified
+/// arrow / hjkl forward to body nav.
+fn classify_key(key: crossterm::event::KeyEvent) -> Option<Action> {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+    match key.code {
+        KeyCode::Char('q') if ctrl => Some(Action::Quit),
+        KeyCode::Char('c') if ctrl => Some(Action::Cancel),
+        KeyCode::Char('o') if ctrl => Some(Action::OpenMembership),
+        KeyCode::Char('p') if ctrl => Some(Action::OpenPicker),
+        KeyCode::Char('x') if ctrl => Some(Action::CloseTab),
+        KeyCode::Char('n') if ctrl => Some(Action::ToggleNavBody),
+        // ctrl-shift-[ / ] cycles projections; ctrl-[ / ] cycles tabs.
+        // Most terminals deliver the bracket char with the SHIFT modifier
+        // for `{` / `}`, so accept both encodings.
+        KeyCode::Char('[') if ctrl && shift => Some(Action::CycleProjPrev),
+        KeyCode::Char(']') if ctrl && shift => Some(Action::CycleProjNext),
+        KeyCode::Char('{') if ctrl => Some(Action::CycleProjPrev),
+        KeyCode::Char('}') if ctrl => Some(Action::CycleProjNext),
+        KeyCode::Char('[') if ctrl => Some(Action::CycleTabPrev),
+        KeyCode::Char(']') if ctrl => Some(Action::CycleTabNext),
+        KeyCode::Char('?') => Some(Action::OpenHelp),
+        // Body-local nav (no ctrl). `v` cycles body modes for now;
+        // disappears once tabs/projections replace BodyMode.
+        KeyCode::Char('v') if !ctrl => Some(Action::CycleBody),
+        KeyCode::Up | KeyCode::Char('k') if !ctrl => Some(Action::BodyUp),
+        KeyCode::Down | KeyCode::Char('j') if !ctrl => Some(Action::BodyDown),
+        _ => None,
     }
 }
 
