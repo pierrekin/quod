@@ -128,6 +128,7 @@ def _write_project(root: Path, *, with_source: bool = True) -> None:
     save_program(program, root / "program.json")
 
     (root / "quod.toml").write_text(
+        'name = "demo"\n'
         'build_dir  = "build"\n'
         'proofs_dir = "proofs"\n'
         '\n'
@@ -251,6 +252,7 @@ def test_fn_ls_binary_with_no_binary_units(tmp_path):
     """A program without binary_units — `--binary` just prints the
     empty marker."""
     (tmp_path / "quod.toml").write_text(
+        'name = "demo"\n'
         'build_dir  = "build"\n'
         'proofs_dir = "proofs"\n'
         '\n'
@@ -323,6 +325,7 @@ def test_fn_show_binary_elides_block_comments_by_default(tmp_path):
     program = ingest_binary_dump(dump_path)
     save_program(program, tmp_path / "program.json")
     (tmp_path / "quod.toml").write_text(
+        'name = "demo"\n'
         'build_dir  = "build"\n'
         'proofs_dir = "proofs"\n'
         '\n'
@@ -355,6 +358,7 @@ def test_fn_show_binary_raw_decompile_keeps_block_comments(tmp_path):
     program = ingest_binary_dump(dump_path)
     save_program(program, tmp_path / "program.json")
     (tmp_path / "quod.toml").write_text(
+        'name = "demo"\n'
         'build_dir  = "build"\n'
         'proofs_dir = "proofs"\n'
         '\n'
@@ -393,6 +397,7 @@ def test_fn_show_binary_json_keeps_full_decompile_text(tmp_path):
     program = ingest_binary_dump(dump_path)
     save_program(program, tmp_path / "program.json")
     (tmp_path / "quod.toml").write_text(
+        'name = "demo"\n'
         'build_dir  = "build"\n'
         'proofs_dir = "proofs"\n'
         '\n'
@@ -415,6 +420,7 @@ def test_ingest_callback_refuses_unknown_kind(tmp_path):
     unknown kind fails with a message naming the supported set."""
     (tmp_path / "x.txt").write_text("noop")
     (tmp_path / "quod.toml").write_text(
+        'name = "demo"\n'
         'build_dir  = "build"\n'
         'proofs_dir = "proofs"\n'
         '\n'

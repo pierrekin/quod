@@ -221,6 +221,7 @@ def test_equiv_verify_fails_on_version_mismatch_via_cli(tmp_path, monkeypatch):
         "{ s = s + i; } return s; }\n"
     )
     (tmp_path / "quod.toml").write_text(
+        'name = "demo"\n'
         'build_dir = "build"\n'
         'proofs_dir = "proofs"\n'
         '\n'

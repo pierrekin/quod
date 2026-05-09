@@ -9,6 +9,8 @@
 # Run one:            `quod run -p hello`            (or `quod run --bin hello`)
 # Inspect one:        `quod -p range_check fn ls`
 
+name = "Examples"
+
 build_dir  = "build"
 proofs_dir = "proofs"
 

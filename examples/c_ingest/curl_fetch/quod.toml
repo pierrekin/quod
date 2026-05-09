@@ -4,6 +4,8 @@
 #
 # Run:  cd examples/c_ingest/curl_fetch && quod run
 
+name = "Curl Fetch"
+
 [build]
 profile = 2
 

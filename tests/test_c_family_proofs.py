@@ -196,6 +196,7 @@ def test_verify_lift_equivalence_artifact_missing(tmp_path, monkeypatch):
     from quod import cli as cli_mod
     from quod.config import Config, ProgramSpec
     cfg = Config(
+        name="t",
         programs=(ProgramSpec(name="t", version="0.1", file="program.json"),),
         root=tmp_path,
     )

@@ -137,6 +137,7 @@ class EnforceConfig:
 
 @dataclass(frozen=True)
 class Config:
+    name: str
     programs: tuple[ProgramSpec, ...] = ()
     build_dir: Path = Path("build")
     proofs_dir: Path = Path("proofs")
@@ -188,6 +189,12 @@ def load_config(path: Path) -> Config:
 
     raw = tomllib.loads(path.read_text())
     root = path.parent
+
+    if "name" not in raw:
+        raise ValueError(f"{path}: missing required top-level key `name`")
+    name = str(raw["name"])
+    if not name:
+        raise ValueError(f"{path}: top-level `name` must be a non-empty string")
 
     build_dir = Path(raw.get("build_dir", "build"))
     proofs_dir = Path(raw.get("proofs_dir", "proofs"))
@@ -305,6 +312,7 @@ def load_config(path: Path) -> Config:
         ))
 
     return Config(
+        name=name,
         programs=tuple(programs),
         build_dir=build_dir,
         proofs_dir=proofs_dir,
@@ -346,6 +354,8 @@ def with_overrides(
 
 _STARTER_TOMLS: dict[str, str] = {
     "hello": """\
+name = "Hello"
+
 [build]
 profile = 2
 
@@ -361,6 +371,8 @@ file    = "program.json"
     "guarded": """\
 # `guarded` is a claim/proof playground — function `f` takes a parameter,
 # so it can't be an entry point. Add a [[program.bin]] once you've written one.
+name = "Guarded"
+
 [build]
 profile = 2
 
@@ -370,6 +382,8 @@ version = "0.1.0"
 file    = "program.json"
 """,
     "empty": """\
+name = "Empty"
+
 [build]
 profile = 2
 

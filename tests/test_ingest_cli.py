@@ -25,6 +25,8 @@ def _run(toml_path: Path, *args: str):
 
 def _toml_basic_with_profile() -> str:
     return """\
+name = "p"
+
 [build]
 profile = 2
 

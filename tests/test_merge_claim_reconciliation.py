@@ -337,6 +337,7 @@ def test_reingest_preserves_authored_claim_via_cli(tmp_path):
         "}\n"
     )
     (tmp_path / "quod.toml").write_text(
+        'name = "demo"\n'
         'build_dir  = "build"\n'
         'proofs_dir = "proofs"\n'
         '\n'

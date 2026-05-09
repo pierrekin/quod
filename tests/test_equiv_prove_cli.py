@@ -27,6 +27,7 @@ def _write_demo_project(root: Path) -> None:
         "}\n"
     )
     (root / "quod.toml").write_text(
+        'name = "demo"\n'
         'build_dir  = "build"\n'
         'proofs_dir = "proofs"\n'
         '\n'

@@ -68,6 +68,7 @@ int affine(int x) { return 3 * x + 6; }
 def _write_project(root: Path, c_source: str = _C_SOURCE) -> None:
     (root / "poc.c").write_text(c_source)
     (root / "quod.toml").write_text(
+        'name = "demo"\n'
         'build_dir  = "build"\n'
         'proofs_dir = "proofs"\n'
         '\n'

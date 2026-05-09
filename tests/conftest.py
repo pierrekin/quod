@@ -286,6 +286,8 @@ def _load_program(case: dict[str, Any], case_dir: Path) -> Program:
 # ---------- CLI cases ----------
 
 _SANDBOX_TOML = """\
+name = "test"
+
 build_dir  = "build"
 proofs_dir = "proofs"
 
