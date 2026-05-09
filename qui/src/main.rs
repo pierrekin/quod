@@ -539,12 +539,14 @@ impl App {
     // ---------- Overlays ----------
 
     fn open_program_picker(&mut self) {
-        let (items, _) = self.build_program_items();
+        let (items, selectables) = self.build_program_items();
         let footer = self.program_picker_footer();
+        let active_item = self.compute_active_item_index(&items, &selectables);
         self.overlay = Some(Overlay::ProgramPicker(
             Picker::new("programs")
                 .with_items(items)
-                .with_footer(footer),
+                .with_footer(footer)
+                .with_active(active_item),
         ));
     }
 
@@ -555,10 +557,14 @@ impl App {
         let mut items: Vec<PickerItem> = Vec::new();
         let mut selectables: Vec<SelectableProgram> = Vec::new();
 
-        // One header per Project anchor, with its programs nested.
+        // One header per Project anchor, with its programs nested. The
+        // header carries the abs path to `quod.toml` as detail, rendered
+        // right-aligned with `~`-substitution by the picker.
         for (root, name) in self.workspace.projects() {
             let header_idx = items.len();
-            items.push(PickerItem::header(format!("{name}/"), header_idx));
+            let mut header = PickerItem::header(name.to_string(), header_idx);
+            header.detail = Some(display_path(&root.join("quod.toml")));
+            items.push(header);
             let mut had_any = false;
             for (i, prog) in self.programs.iter().enumerate() {
                 if prog.project_path != root {
@@ -577,25 +583,52 @@ impl App {
             }
         }
 
-        // Standalone Program anchors: one selectable each, under a single
-        // synthetic "standalone" header so the existing picker filter
-        // behaves predictably.
-        let standalone: Vec<&Path> = self.workspace.standalone_programs().collect();
-        if !standalone.is_empty() {
-            let header_idx = items.len();
-            items.push(PickerItem::header("standalone/", header_idx));
-            for file in standalone {
-                let display = program_name_from_file(file);
-                let sel_idx = selectables.len();
-                selectables.push(SelectableProgram::Standalone(file.to_path_buf()));
-                let mut item = PickerItem::selectable(display, header_idx)
-                    .with_user_data(sel_idx);
-                item.detail = Some(display_path(file));
-                items.push(item);
-            }
+        // Standalone Program anchors render at the top level — no header,
+        // just `- name    /abs/path` rows. Each is its own filter group.
+        for file in self.workspace.standalone_programs() {
+            let display = program_name_from_file(file);
+            let sel_idx = selectables.len();
+            selectables.push(SelectableProgram::Standalone(file.to_path_buf()));
+            let item_idx = items.len();
+            let mut item = PickerItem::standalone(display, item_idx).with_user_data(sel_idx);
+            item.detail = Some(display_path(file));
+            items.push(item);
         }
 
         (items, selectables)
+    }
+
+    /// Find the picker `items` index that corresponds to the currently
+    /// active program, if any. Looks up the active state's
+    /// `(anchor_context, label)` against the `selectables` table.
+    fn compute_active_item_index(
+        &self,
+        items: &[PickerItem],
+        selectables: &[SelectableProgram],
+    ) -> Option<usize> {
+        let active = self.active.as_ref()?;
+        for (item_idx, item) in items.iter().enumerate() {
+            let Some(sel_idx) = item.user_data else { continue };
+            let Some(sel) = selectables.get(sel_idx) else { continue };
+            let matches = match sel {
+                SelectableProgram::Routed(i) => {
+                    let Some(prog) = self.programs.get(*i) else { continue };
+                    matches!(
+                        &active.anchor_context,
+                        Some(ctx)
+                            if ctx.root == prog.project_path && active.label == prog.name
+                    )
+                }
+                SelectableProgram::Standalone(file) => {
+                    active.anchor_context.is_none()
+                        && Path::new(&active.label) == file.as_path()
+                }
+            };
+            if matches {
+                return Some(item_idx);
+            }
+        }
+        None
     }
 
     fn program_picker_footer(&self) -> Vec<(String, String)> {

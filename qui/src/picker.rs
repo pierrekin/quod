@@ -69,6 +69,21 @@ impl PickerItem {
         }
     }
 
+    /// Selectable rendered at the top level (no parent header). Behaves
+    /// like a degenerate group: its `group` index is its own item index.
+    pub fn standalone(label: impl Into<String>, idx: usize) -> Self {
+        let label = label.into();
+        Self {
+            search_key: label.clone(),
+            label,
+            detail: None,
+            kind: ItemKind::Selectable,
+            group: idx,
+            indent: 0,
+            user_data: None,
+        }
+    }
+
     pub fn placeholder(label: impl Into<String>, group: usize) -> Self {
         Self {
             label: label.into(),
@@ -98,6 +113,10 @@ pub struct Picker {
     /// labels dim. Empty list = no footer.
     pub footer: Vec<(String, String)>,
     pub error: Option<String>,
+    /// Index into `items` of the currently-active row (the program the
+    /// app is rendering). Renders a `*` in the gutter and applies the
+    /// active-row style. None = no active row.
+    pub active_item: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -116,7 +135,13 @@ impl Picker {
             cursor: 0,
             footer: vec![("↵".into(), "select".into()), ("esc".into(), "cancel".into())],
             error: None,
+            active_item: None,
         }
+    }
+
+    pub fn with_active(mut self, idx: Option<usize>) -> Self {
+        self.active_item = idx;
+        self
     }
 
     pub fn with_items(mut self, items: Vec<PickerItem>) -> Self {
@@ -339,43 +364,94 @@ impl Picker {
         let placeholder_style = Style::default()
             .fg(Color::DarkGray)
             .add_modifier(Modifier::ITALIC);
+        // Per 01-program-picker.md: the active row gets a left-edge `*`
+        // in the gutter and the row spans render bold + green.
+        let active_style = Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD);
+
+        // Reserve the leftmost column as a 2-char gutter for the active
+        // marker. Headers/placeholders still render but never get the
+        // marker.
+        const GUTTER: &str = "  ";
+        const GUTTER_ACTIVE: &str = "* ";
 
         let items: Vec<ListItem> = filtered
             .iter()
             .map(|i| {
                 let it = &self.items[*i];
+                let is_active = self.active_item == Some(*i);
+                let gutter = if is_active { GUTTER_ACTIVE } else { GUTTER };
+                let gutter_span = if is_active {
+                    Span::styled(gutter, active_style)
+                } else {
+                    Span::raw(gutter)
+                };
                 let indent = " ".repeat(it.indent as usize);
                 let line = match it.kind {
-                    ItemKind::Header => Line::from(vec![
-                        Span::raw(indent),
-                        Span::styled(it.label.clone(), header_style),
-                    ]),
-                    ItemKind::Placeholder => Line::from(vec![
-                        Span::raw(indent),
-                        Span::styled(it.label.clone(), placeholder_style),
-                    ]),
-                    ItemKind::Selectable => {
-                        let label_w = it.indent as usize + it.label.chars().count();
+                    ItemKind::Header => {
+                        // `> Name        ~/abs/path`
+                        let label_w = 2 /* "> " */ + it.label.chars().count();
+                        let label_span = Span::styled(
+                            format!("> {}", it.label),
+                            header_style,
+                        );
                         match &it.detail {
                             Some(d) => {
-                                // Pad to push detail to the right; truncate
-                                // detail from the left if it doesn't fit.
                                 let avail = (list_area.width as usize)
-                                    .saturating_sub(label_w + 2);
+                                    .saturating_sub(label_w + GUTTER.len() + 2);
                                 let trimmed = truncate_left(d, avail);
                                 let pad = (list_area.width as usize)
-                                    .saturating_sub(label_w + trimmed.chars().count() + 1);
+                                    .saturating_sub(label_w + trimmed.chars().count() + GUTTER.len() + 1);
                                 Line::from(vec![
-                                    Span::raw(indent),
-                                    Span::raw(it.label.clone()),
+                                    gutter_span,
+                                    label_span,
                                     Span::raw(" ".repeat(pad)),
                                     Span::styled(trimmed, dim),
                                 ])
                             }
-                            None => Line::from(vec![
-                                Span::raw(indent),
-                                Span::raw(it.label.clone()),
-                            ]),
+                            None => Line::from(vec![gutter_span, label_span]),
+                        }
+                    }
+                    ItemKind::Placeholder => Line::from(vec![
+                        gutter_span,
+                        Span::raw(indent),
+                        Span::styled(it.label.clone(), placeholder_style),
+                    ]),
+                    ItemKind::Selectable => {
+                        // `  - Name           rel/path`  (under a header)
+                        // `- Name             /abs/path` (top-level standalone)
+                        let bullet = "- ";
+                        let label_w = it.indent as usize
+                            + bullet.chars().count()
+                            + it.label.chars().count();
+                        let label_style = if is_active { active_style } else { Style::default() };
+                        let label_spans = vec![
+                            Span::raw(indent),
+                            Span::styled(bullet, if is_active { active_style } else { dim }),
+                            Span::styled(it.label.clone(), label_style),
+                        ];
+                        match &it.detail {
+                            Some(d) => {
+                                let avail = (list_area.width as usize)
+                                    .saturating_sub(label_w + GUTTER.len() + 2);
+                                let trimmed = truncate_left(d, avail);
+                                let pad = (list_area.width as usize)
+                                    .saturating_sub(label_w + trimmed.chars().count() + GUTTER.len() + 1);
+                                let mut spans = vec![gutter_span];
+                                spans.extend(label_spans);
+                                spans.push(Span::raw(" ".repeat(pad)));
+                                spans.push(Span::styled(
+                                    trimmed,
+                                    if is_active { active_style } else { dim },
+                                ));
+                                Line::from(spans)
+                            }
+                            None => {
+                                let mut spans = vec![gutter_span];
+                                spans.extend(label_spans);
+                                Line::from(spans)
+                            }
                         }
                     }
                 };
