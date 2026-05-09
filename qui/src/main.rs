@@ -119,7 +119,6 @@ struct Active {
     /// `Some(...)` when reached through a Project anchor; `None` for
     /// standalone Program anchors.
     anchor_context: Option<ProjectRef>,
-    summary: String,
     outline: Vec<OutlineCategory>,
 }
 
@@ -802,32 +801,29 @@ impl App {
     }
 
     fn draw_status(&self, frame: &mut Frame<'_>, area: Rect) {
-        let style = Style::default().fg(Color::Black).bg(Color::Cyan);
+        // Cyan bg is the bar's base; per-Span fg/modifiers compose on top.
+        let bg = Style::default().bg(Color::Cyan).fg(Color::Black);
+        let bold = bg.add_modifier(Modifier::BOLD);
+        let dim = bg.add_modifier(Modifier::DIM);
         let line = if let Some(a) = &self.active {
-            let mut spans = vec![Span::styled("  ", style)];
+            let mut spans = vec![Span::styled("  ", bg)];
             if let Some(ctx) = &a.anchor_context {
-                spans.push(Span::styled(
-                    ctx.name.clone(),
-                    style.add_modifier(Modifier::BOLD),
-                ));
-                spans.push(Span::styled(" · ", style));
+                // `> Project / Program`
+                spans.push(Span::styled("> ", dim));
+                spans.push(Span::styled(ctx.name.clone(), bold));
+                spans.push(Span::styled(" / ", dim));
+                spans.push(Span::styled(a.label.clone(), bold));
             } else {
-                spans.push(Span::styled("(file mode) · ", style));
+                // Standalone — bare program name, no glyph (per 02-).
+                spans.push(Span::styled(a.label.clone(), bold));
             }
-            spans.push(Span::styled(
-                a.label.clone(),
-                style.add_modifier(Modifier::BOLD),
-            ));
-            spans.push(Span::styled(" · ", style));
-            spans.push(Span::styled(a.summary.clone(), style));
+            // Nav state slot is empty until views/tabs land. When empty,
+            // omit the trailing `|` per 02-.
             Line::from(spans)
         } else {
-            Line::from(Span::styled(
-                "  qui",
-                style.add_modifier(Modifier::BOLD),
-            ))
+            Line::from(Span::styled("  qui", bold))
         };
-        frame.render_widget(Paragraph::new(line).style(style), area);
+        frame.render_widget(Paragraph::new(line).style(bg), area);
     }
 
     fn draw_body(&mut self, frame: &mut Frame<'_>, area: Rect) {
@@ -1113,17 +1109,7 @@ fn parse_active(resp: &Value, outline: Vec<OutlineCategory>) -> Result<Active, S
         (Some(name), Some(root)) => Some(ProjectRef { root, name }),
         _ => None,
     };
-    let s = resp.get("summary").cloned().unwrap_or_default();
-    let summary = format!(
-        "{} fns · {} structured · {} externs · {} structs · {} claims · {} equivs",
-        s.get("functions").and_then(Value::as_i64).unwrap_or(0),
-        s.get("structuredFunctions").and_then(Value::as_i64).unwrap_or(0),
-        s.get("externs").and_then(Value::as_i64).unwrap_or(0),
-        s.get("structs").and_then(Value::as_i64).unwrap_or(0),
-        s.get("claims").and_then(Value::as_i64).unwrap_or(0),
-        s.get("equivalences").and_then(Value::as_i64).unwrap_or(0),
-    );
-    Ok(Active { label, anchor_context, summary, outline })
+    Ok(Active { label, anchor_context, outline })
 }
 
 fn parse_lift_trace(resp: &Value) -> ColumnView {
