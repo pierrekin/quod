@@ -72,12 +72,15 @@ struct App {
     /// Lazily-fetched lift trace for the active program. Cleared on
     /// active-program change.
     lift_trace: Option<ColumnView>,
+    /// Same idea, but for the binary→quod pipeline.
+    bin_lift_trace: Option<ColumnView>,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 enum BodyMode {
     Outline,
     LiftTrace,
+    BinLiftTrace,
 }
 
 enum Overlay {
@@ -133,6 +136,7 @@ impl App {
             sidebar_cursor: 0,
             body_mode: BodyMode::Outline,
             lift_trace: None,
+            bin_lift_trace: None,
         }
     }
 
@@ -235,6 +239,11 @@ impl App {
                     t.move_up();
                 }
             }
+            BodyMode::BinLiftTrace => {
+                if let Some(t) = self.bin_lift_trace.as_mut() {
+                    t.move_up();
+                }
+            }
         }
     }
 
@@ -253,13 +262,19 @@ impl App {
                     t.move_down();
                 }
             }
+            BodyMode::BinLiftTrace => {
+                if let Some(t) = self.bin_lift_trace.as_mut() {
+                    t.move_down();
+                }
+            }
         }
     }
 
     fn cycle_body_mode(&mut self) {
         self.body_mode = match self.body_mode {
             BodyMode::Outline => BodyMode::LiftTrace,
-            BodyMode::LiftTrace => BodyMode::Outline,
+            BodyMode::LiftTrace => BodyMode::BinLiftTrace,
+            BodyMode::BinLiftTrace => BodyMode::Outline,
         };
     }
 
@@ -277,6 +292,21 @@ impl App {
             }
         };
         self.lift_trace = Some(parse_lift_trace(&resp));
+    }
+
+    fn ensure_bin_lift_trace(&mut self) {
+        if self.bin_lift_trace.is_some() || self.workspace.active.is_none() {
+            return;
+        }
+        let Some(client) = self.client.as_mut() else { return };
+        let resp = match client.request("quod/getBinLiftTrace", json!({})) {
+            Ok(v) => v,
+            Err(e) => {
+                self.error = Some(format!("getBinLiftTrace: {e}"));
+                return;
+            }
+        };
+        self.bin_lift_trace = Some(parse_bin_lift_trace(&resp));
     }
 
     fn ensure_no_dead_end(&mut self) {
@@ -433,7 +463,9 @@ impl App {
         let outline = parse_outline(&outline_resp);
         self.workspace.active = Some(parse_active(&resp, outline)?);
         self.sidebar_cursor = 0;
-        self.lift_trace = None; // invalidate; refetched lazily on first LiftTrace draw
+        // Both columnar caches invalidate when the active program changes.
+        self.lift_trace = None;
+        self.bin_lift_trace = None;
         if let Some(p) = self.workspace.projects.iter().find(|p| p.name == project) {
             self.recents.note_folder(p.path.clone(), Some(name.to_string()));
         }
@@ -720,6 +752,10 @@ impl App {
                 self.ensure_lift_trace();
                 self.draw_body_lift_trace(frame, area);
             }
+            BodyMode::BinLiftTrace => {
+                self.ensure_bin_lift_trace();
+                self.draw_body_bin_lift_trace(frame, area);
+            }
         }
     }
 
@@ -778,6 +814,59 @@ impl App {
                 frame.render_widget(
                     Paragraph::new(Span::styled(
                         "(no rows — this program has no layer-A/B/C joins)",
+                        dim,
+                    )),
+                    chunks[2],
+                );
+            }
+            None => {
+                frame.render_widget(
+                    Paragraph::new(Span::styled("loading…", dim)),
+                    chunks[2],
+                );
+            }
+        }
+    }
+
+    fn draw_body_bin_lift_trace(&mut self, frame: &mut Frame<'_>, area: Rect) {
+        let dim = Style::default().fg(Color::DarkGray);
+        let header = Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD);
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Min(1),
+            ])
+            .split(area);
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled(" bin lift trace ", header),
+                Span::styled(
+                    "  Ghidra decompile → layer-A (CFn) → layer-B → layer-C",
+                    dim,
+                ),
+            ])),
+            chunks[0],
+        );
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                "─".repeat(area.width as usize),
+                dim,
+            )),
+            chunks[1],
+        );
+
+        match self.bin_lift_trace.as_mut() {
+            Some(view) if !view.rows.is_empty() => {
+                view.render(frame, chunks[2]);
+            }
+            Some(_) => {
+                frame.render_widget(
+                    Paragraph::new(Span::styled(
+                        "(no rows — this program has no binary_units)",
                         dim,
                     )),
                     chunks[2],
@@ -987,6 +1076,62 @@ fn parse_lift_trace(resp: &Value) -> ColumnView {
         },
         Column {
             label: "layer-A (C)".into(),
+            fixed_width: None,
+            language: highlight::Language::C,
+        },
+        Column {
+            label: "layer-B".into(),
+            fixed_width: None,
+            language: highlight::Language::QuodScript,
+        },
+        Column {
+            label: "layer-C".into(),
+            fixed_width: None,
+            language: highlight::Language::QuodScript,
+        },
+    ];
+    ColumnView::new(columns, rows)
+}
+
+fn parse_bin_lift_trace(resp: &Value) -> ColumnView {
+    let rows: Vec<Row> = resp
+        .get("rows")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| {
+                    let hash = v.get("hash")?.as_str().unwrap_or("").to_string();
+                    let name = v.get("name")?.as_str().unwrap_or("").to_string();
+                    let bin = v.get("bin").and_then(Value::as_str).unwrap_or("").to_string();
+                    let layer_a = v.get("layerA").and_then(Value::as_str).unwrap_or("").to_string();
+                    let layer_b = v.get("layerB").and_then(Value::as_str).unwrap_or("").to_string();
+                    let layer_c = v.get("layerC").and_then(Value::as_str).unwrap_or("").to_string();
+                    let id = if hash.is_empty() {
+                        name.clone()
+                    } else {
+                        format!("{} · {}", hash, name)
+                    };
+                    Some(Row {
+                        cells: vec![id, bin, layer_a, layer_b, layer_c],
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let columns = vec![
+        Column {
+            label: "hash · name".into(),
+            fixed_width: Some(22),
+            language: highlight::Language::Plain,
+        },
+        Column {
+            // Ghidra decompile is C-shaped; tree-sitter-c gets us mostly there.
+            label: "bin (decompile)".into(),
+            fixed_width: None,
+            language: highlight::Language::C,
+        },
+        Column {
+            label: "layer-A (CFn)".into(),
             fixed_width: None,
             language: highlight::Language::C,
         },

@@ -48,6 +48,7 @@ _CUSTOM_METHODS = [
     "quod/setActiveProgram",
     "quod/getProgramOutline",
     "quod/getLiftTrace",
+    "quod/getBinLiftTrace",
 ]
 _PROGRAMS_CHANGED = "quod/programsChanged"
 
@@ -276,6 +277,50 @@ def build_server() -> QuodServer:
             "summary": ls.active.summary,
             "via": "name",
         }
+
+    @server.feature("quod/getBinLiftTrace")
+    def get_bin_lift_trace(ls: QuodServer, _params: Any) -> dict[str, Any]:
+        """Cross-layer view of the binary→quod pipeline. One row per
+        BinFunction across all `binary_units`, joined to its lifted CFn
+        (Layer-A, in `binary_units[i].lifted_cfns`), structured Function
+        (Layer-B), and core Function (Layer-C). Match key is name —
+        BinFunction.demangled_name / mangled_name vs the lifted CFn /
+        structured / core function names.
+
+        First-cut join: name match. Honest provenance (via
+        `signature_bindings` / Equivalence with DecompileLift
+        justification) follows once the wire format settles."""
+        if ls.active is None:
+            return {"rows": []}
+        prog = ls.active.program
+
+        layer_c_by_name = {fn.name: fn for fn in prog.functions}
+        layer_b_by_name = {fn.name: fn for fn in prog.structured_functions}
+
+        rows: list[dict[str, Any]] = []
+        for unit in prog.binary_units:
+            lifted_by_name: dict[str, Any] = {}
+            for cfn in getattr(unit, "lifted_cfns", ()):
+                lifted_by_name.setdefault(cfn.name, cfn)
+            for binfn in getattr(unit, "functions", ()):
+                name = binfn.demangled_name or binfn.mangled_name
+                lifted = lifted_by_name.get(name)
+                sfn = layer_b_by_name.get(name)
+                cfn = layer_c_by_name.get(name)
+                anchor = cfn or sfn or lifted or binfn
+                bin_text = (binfn.decompile_text or "").strip()
+                if not bin_text:
+                    addr = getattr(binfn, "address", 0) or 0
+                    bin_text = f"// no decompile_text for {binfn.mangled_name} @ 0x{addr:x}"
+                rows.append({
+                    "name": name,
+                    "hash": short_hash(anchor) if anchor is not None else "",
+                    "bin": bin_text,
+                    "layerA": format_c_fn(lifted) if lifted is not None else "",
+                    "layerB": format_function(sfn) if sfn is not None else "",
+                    "layerC": format_function(cfn) if cfn is not None else "",
+                })
+        return {"rows": rows}
 
     @server.feature("quod/getLiftTrace")
     def get_lift_trace(ls: QuodServer, _params: Any) -> dict[str, Any]:

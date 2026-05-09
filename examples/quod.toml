@@ -384,3 +384,13 @@ file    = "c_ingest/string_offset/program.json"
   [[program.bin]]
   name  = "c_string_offset"
   entry = "main"
+
+# ---------- bin ingest ----------
+
+# Ingested from libaffine.so via `quod ingest binary`. Demonstrates the
+# Ghidra-decompile → Layer-A → Layer-B → Layer-C pipeline; visible in
+# qui's bin-lift-trace view (press `v` twice from the outline).
+[[program]]
+name    = "bin_affine"
+version = "0.1.0"
+file    = "bin_demo/program.json"
