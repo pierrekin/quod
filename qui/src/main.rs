@@ -28,7 +28,7 @@ use ratatui::widgets::Paragraph;
 use serde_json::{Value, json};
 
 use crate::column_view::{Column, ColumnView, Row};
-use crate::open_modal::{OpenModal, RecentEntry};
+use crate::open_modal::{OpenModal, RecentEntry, WorkspaceEntry};
 use crate::path_classify::{ClassifyError, classify, read_project_name};
 use crate::picker::{Picker, PickerItem};
 use crate::recents::{Recents, relative_time};
@@ -420,7 +420,6 @@ impl App {
     /// Remove an anchor by identity. For Project anchors this notifies
     /// the LSP and refreshes `programs`. Drops `active` if it was rooted
     /// in (or was) the removed anchor.
-    #[allow(dead_code)] // wired by the membership editor (next commit)
     fn remove_anchor(&mut self, id: &AnchorId) -> Result<(), String> {
         match id {
             AnchorId::Project(root) => {
@@ -648,6 +647,7 @@ impl App {
 
     fn open_open_project_modal(&mut self, initial: Option<PathBuf>) {
         let initial = initial.unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let workspace = self.build_workspace_entries();
         let recents: Vec<RecentEntry> = self
             .recents
             .anchors
@@ -658,7 +658,29 @@ impl App {
                 time_ago: relative_time(a.last_opened),
             })
             .collect();
-        self.overlay = Some(Overlay::OpenProject(OpenModal::new(initial, recents)));
+        self.overlay = Some(Overlay::OpenProject(OpenModal::new(initial, workspace, recents)));
+    }
+
+    /// Project anchors first, then standalone Programs — same order
+    /// they appear in the picker. Indexes are stable so the modal can
+    /// hand them back as `Outcome::RemoveWorkspace(idx)`.
+    fn build_workspace_entries(&self) -> Vec<WorkspaceEntry> {
+        let mut out = Vec::new();
+        for (root, name) in self.workspace.projects() {
+            out.push(WorkspaceEntry {
+                glyph: '>',
+                display_name: name.to_string(),
+                display_path: display_path(&root.join("quod.toml")),
+            });
+        }
+        for file in self.workspace.standalone_programs() {
+            out.push(WorkspaceEntry {
+                glyph: '-',
+                display_name: program_name_from_file(file),
+                display_path: display_path(file),
+            });
+        }
+        out
     }
 
     #[allow(dead_code)] // wired up by the membership editor (next commit)
@@ -783,6 +805,59 @@ impl App {
                         }
                     }
                 }
+            }
+            open_modal::Outcome::RemoveWorkspace(idx) => {
+                // Translate the modal's index back to an AnchorId. Order
+                // mirrors `build_workspace_entries`: projects first, then
+                // standalone programs.
+                let projects: Vec<PathBuf> = self
+                    .workspace
+                    .projects()
+                    .map(|(p, _)| p.to_path_buf())
+                    .collect();
+                let standalone: Vec<PathBuf> = self
+                    .workspace
+                    .standalone_programs()
+                    .map(Path::to_path_buf)
+                    .collect();
+                let id = if idx < projects.len() {
+                    Some(AnchorId::Project(projects[idx].clone()))
+                } else if idx - projects.len() < standalone.len() {
+                    Some(AnchorId::Program(standalone[idx - projects.len()].clone()))
+                } else {
+                    None
+                };
+                let Some(id) = id else { return };
+                if let Err(e) = self.remove_anchor(&id) {
+                    if let Some(Overlay::OpenProject(m)) = self.overlay.as_mut() {
+                        m.set_error(format!("remove: {e}"));
+                    }
+                    return;
+                }
+                // Refresh the modal's contents in place so the user can
+                // remove more without reopening.
+                self.refresh_open_modal_contents();
+            }
+        }
+    }
+
+    fn refresh_open_modal_contents(&mut self) {
+        let workspace = self.build_workspace_entries();
+        let recents: Vec<RecentEntry> = self
+            .recents
+            .anchors
+            .iter()
+            .map(|a| RecentEntry {
+                path: a.path.clone(),
+                display: display_path(&a.path),
+                time_ago: relative_time(a.last_opened),
+            })
+            .collect();
+        if let Some(Overlay::OpenProject(m)) = self.overlay.as_mut() {
+            m.workspace = workspace;
+            m.recents = recents;
+            if m.workspace_cursor >= m.workspace.len() && !m.workspace.is_empty() {
+                m.workspace_cursor = m.workspace.len() - 1;
             }
         }
     }
