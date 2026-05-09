@@ -39,6 +39,7 @@ from quod.cli import struct  # noqa: F401
 from quod.cli import enum  # noqa: F401
 from quod.cli import note  # noqa: F401
 from quod.cli import provider  # noqa: F401
+from quod.cli import lsp  # noqa: F401
 
 # Re-exports for tests that reach into private CLI internals.
 from quod.cli.claim import _verify_justification  # noqa: F401

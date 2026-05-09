@@ -8,6 +8,7 @@ dependencies = [
     "llvmlite>=0.47.0",
     "pydantic>=2.13.3",
     "pyghidra>=3.0.2",
+    "pygls>=2.1.1",
     "typer>=0.25.0",
 ]
 
