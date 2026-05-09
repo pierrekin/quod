@@ -1,5 +1,6 @@
 mod body;
 mod column_view;
+mod error_modal;
 mod help_modal;
 mod highlight;
 mod lsp;
@@ -86,7 +87,6 @@ struct App {
     program_shape: ProgramShape,
     overlay: Option<Overlay>,
     recents: Recents,
-    error: Option<String>,
     /// Lazily-fetched C-Lift table for the active program. Cleared on
     /// active-program change.
     c_lift: Option<ColumnView>,
@@ -98,6 +98,7 @@ enum Overlay {
     ProgramPicker(Picker),
     OpenProject(OpenModal),
     Help(help_modal::HelpModal),
+    Error(error_modal::ErrorModal),
 }
 
 #[derive(Clone)]
@@ -148,7 +149,6 @@ impl App {
             program_shape: ProgramShape::default(),
             overlay: None,
             recents: Recents::load(),
-            error: None,
             c_lift: None,
             bin_lift: None,
         }
@@ -268,7 +268,7 @@ impl App {
         let resp = match client.request("quod/getLiftTrace", json!({})) {
             Ok(v) => v,
             Err(e) => {
-                self.error = Some(format!("getLiftTrace: {e}"));
+                self.show_recoverable_error("getLiftTrace failed", e.to_string());
                 return;
             }
         };
@@ -283,11 +283,17 @@ impl App {
         let resp = match client.request("quod/getBinLiftTrace", json!({})) {
             Ok(v) => v,
             Err(e) => {
-                self.error = Some(format!("getBinLiftTrace: {e}"));
+                self.show_recoverable_error("getBinLiftTrace failed", e.to_string());
                 return;
             }
         };
         self.bin_lift = Some(parse_bin_lift_trace(&resp));
+    }
+
+    fn show_recoverable_error(&mut self, title: impl Into<String>, body: impl Into<String>) {
+        self.overlay = Some(Overlay::Error(error_modal::ErrorModal::recoverable(
+            title, body,
+        )));
     }
 
     fn ensure_no_dead_end(&mut self) {
@@ -392,7 +398,6 @@ impl App {
         if !self.workspace.add(anchor.clone()) {
             return Err(format!("already open: {}", anchor.path().display()));
         }
-        self.error = None;
         Ok(())
     }
 
@@ -725,6 +730,16 @@ impl App {
                 }
                 false
             }
+            Some(Overlay::Error(e)) => {
+                match e.handle_key(key) {
+                    error_modal::Outcome::Continue => false,
+                    error_modal::Outcome::Close => {
+                        self.overlay = None;
+                        false
+                    }
+                    error_modal::Outcome::Quit => true,
+                }
+            }
             None => false,
         }
     }
@@ -871,6 +886,7 @@ impl App {
                 Overlay::ProgramPicker(p) => p.render(frame, area),
                 Overlay::OpenProject(m) => m.render(frame, area),
                 Overlay::Help(h) => h.render(frame, area),
+                Overlay::Error(e) => e.render(frame, area),
             }
         }
     }
@@ -922,24 +938,6 @@ impl App {
             bin_lift: self.bin_lift.as_mut(),
         };
         body::render(&self.body, frame, area, frame_data);
-
-        if let Some(err) = &self.error {
-            // Errors render as a thin one-line strip overlaid at the
-            // bottom of the body. Cleared on next user input.
-            let strip = Rect {
-                x: area.x,
-                y: area.y + area.height.saturating_sub(1),
-                width: area.width,
-                height: 1,
-            };
-            frame.render_widget(
-                Paragraph::new(Span::styled(
-                    err.clone(),
-                    Style::default().fg(Color::Red),
-                )),
-                strip,
-            );
-        }
     }
 
     /// Single-line hint pointing to `?` for the full chord list. Kept
