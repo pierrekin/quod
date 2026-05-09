@@ -231,10 +231,10 @@ def load_config(path: Path) -> Config:
             raise ValueError(
                 f"{path}: [[program]] {entry['name']!r} missing required key `file`"
             )
-        name = str(entry["name"])
-        if name in seen_names:
-            raise ValueError(f"{path}: duplicate [[program]] name {name!r}")
-        seen_names.add(name)
+        prog_name = str(entry["name"])
+        if prog_name in seen_names:
+            raise ValueError(f"{path}: duplicate [[program]] name {prog_name!r}")
+        seen_names.add(prog_name)
         version = str(entry.get("version", "0.0.0"))
         file = Path(entry["file"])
 
@@ -245,7 +245,7 @@ def load_config(path: Path) -> Config:
             Bin(name=str(bb["name"]), entry=str(bb.get("entry", bb["name"])))
             for bb in bins_raw
         )
-        programs.append(ProgramSpec(name=name, version=version, file=file, bins=bins))
+        programs.append(ProgramSpec(name=prog_name, version=version, file=file, bins=bins))
 
     # Schema:
     #   [ingest.profile.<name>]  clang_args = [...]

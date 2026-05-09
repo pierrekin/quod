@@ -49,6 +49,7 @@ _CUSTOM_METHODS = [
     "quod/getProgramOutline",
     "quod/getLiftTrace",
     "quod/getBinLiftTrace",
+    "quod/getActiveProgramShape",
 ]
 _PROGRAMS_CHANGED = "quod/programsChanged"
 
@@ -61,8 +62,8 @@ except PackageNotFoundError:
 @dataclass
 class ActiveProgram:
     label: str
-    project: str | None        # project name (basename of root) or None for file mode
-    project_path: Path | None  # project root or None
+    project_name: str | None   # Config.name for display, or None for standalone
+    project_path: Path | None  # absolute project root (identity), or None
     summary: dict[str, int]
     via_name: str | None
     via_file: Path | None
@@ -76,13 +77,11 @@ def _file_uri_to_path(uri: str) -> Path | None:
     return Path(unquote(parsed.path))
 
 
-def _project_name(root: Path) -> str:
-    return root.name or str(root)
-
-
-def _program_payload(spec: ProgramSpec, root: Path) -> dict[str, Any]:
+def _program_payload(spec: ProgramSpec, root: Path, project_name: str) -> dict[str, Any]:
     return {
-        "project": _project_name(root),
+        # `projectName` is display-only (Config.name). `projectPath` is the
+        # identity (resolves a project across calls; basenames may collide).
+        "projectName": project_name,
         "projectPath": str(root),
         "name": spec.name,
         "file": str(spec.file),
@@ -141,7 +140,7 @@ class QuodServer(LanguageServer):
         out: list[dict[str, Any]] = []
         for root, config in self.projects.items():
             for spec in config.programs:
-                out.append(_program_payload(spec, root))
+                out.append(_program_payload(spec, root, config.name))
         return out
 
 
@@ -214,18 +213,20 @@ def build_server() -> QuodServer:
                 return params.get(key)
             return None
 
-        project_name = _get("project")
+        project_path_raw = _get("projectPath")
         name = _get("name")
         file = _get("file")
 
         if file is not None:
-            if project_name is not None or name is not None:
-                raise ValueError("setActiveProgram: pass {project, name} or {file}, not both")
+            if project_path_raw is not None or name is not None:
+                raise ValueError(
+                    "setActiveProgram: pass {projectPath, name} or {file}, not both"
+                )
             file_path = Path(file)
             program = load_program(file_path)
             ls.active = ActiveProgram(
                 label=str(file_path),
-                project=None,
+                project_name=None,
                 project_path=None,
                 summary=_summarize(program),
                 via_name=None,
@@ -234,37 +235,46 @@ def build_server() -> QuodServer:
             )
             return {
                 "label": ls.active.label,
-                "project": None,
+                "projectName": None,
+                "projectPath": None,
                 "summary": ls.active.summary,
                 "via": "file",
             }
 
         if name is None:
-            raise ValueError("setActiveProgram: needs {project, name} or {file}")
+            raise ValueError(
+                "setActiveProgram: needs {projectPath, name} or {file}"
+            )
 
-        # Resolve the project. If `project` is given, match by basename;
-        # otherwise require a single open project.
-        candidates = [
-            (root, cfg)
-            for root, cfg in ls.projects.items()
-            if project_name is None or _project_name(root) == project_name
-        ]
-        if not candidates:
-            raise ValueError(f"no open project named {project_name!r}")
-        if project_name is None and len(candidates) > 1:
-            raise ValueError("multiple projects open; pass {project, name}")
-        root, cfg = candidates[0]
+        # Resolve the project by absolute root path. Basenames may collide
+        # across roots (e.g. ~/work/foo and ~/play/foo); the path is the
+        # only stable identity.
+        if project_path_raw is None:
+            if len(ls.projects) == 1:
+                root, cfg = next(iter(ls.projects.items()))
+            elif not ls.projects:
+                raise ValueError("no projects open")
+            else:
+                raise ValueError(
+                    "multiple projects open; pass {projectPath, name}"
+                )
+        else:
+            root = Path(project_path_raw)
+            cfg = ls.projects.get(root)
+            if cfg is None:
+                raise ValueError(f"no open project at path {root}")
+
         spec = next((p for p in cfg.programs if p.name == name), None)
         if spec is None:
             avail = ", ".join(p.name for p in cfg.programs) or "(none)"
             raise ValueError(
-                f"no program named {name!r} in {_project_name(root)}; available: {avail}"
+                f"no program named {name!r} in {cfg.name!r} ({root}); available: {avail}"
             )
         program_path = root / spec.file
         program = load_program(program_path)
         ls.active = ActiveProgram(
             label=name,
-            project=_project_name(root),
+            project_name=cfg.name,
             project_path=root,
             summary=_summarize(program),
             via_name=name,
@@ -273,9 +283,28 @@ def build_server() -> QuodServer:
         )
         return {
             "label": name,
-            "project": _project_name(root),
+            "projectName": cfg.name,
+            "projectPath": str(root),
             "summary": ls.active.summary,
             "via": "name",
+        }
+
+    @server.feature("quod/getActiveProgramShape")
+    def get_active_program_shape(ls: QuodServer, _params: Any) -> dict[str, Any]:
+        """Booleans summarizing what's populated in the active program.
+        Lets clients filter their available views/sections without pulling
+        the full data first."""
+        if ls.active is None:
+            return {
+                "hasSourceUnits": False,
+                "hasBinaryUnits": False,
+                "hasEquivalences": False,
+            }
+        prog = ls.active.program
+        return {
+            "hasSourceUnits": bool(getattr(prog, "source_units", ())),
+            "hasBinaryUnits": bool(getattr(prog, "binary_units", ())),
+            "hasEquivalences": bool(getattr(prog, "equivalences", ())),
         }
 
     @server.feature("quod/getBinLiftTrace")

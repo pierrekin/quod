@@ -449,12 +449,15 @@ impl App {
         Ok(())
     }
 
-    fn set_active(&mut self, project: &str, name: &str) -> Result<(), String> {
+    fn set_active(&mut self, project_path: &Path, name: &str) -> Result<(), String> {
         let client = self.client.as_mut().ok_or("no LSP client")?;
         let resp = client
             .request(
                 "quod/setActiveProgram",
-                json!({"project": project, "name": name}),
+                json!({
+                    "projectPath": project_path.display().to_string(),
+                    "name": name,
+                }),
             )
             .map_err(|e| e.to_string())?;
         let outline_resp = client
@@ -466,7 +469,7 @@ impl App {
         // Both columnar caches invalidate when the active program changes.
         self.lift_trace = None;
         self.bin_lift_trace = None;
-        if let Some(p) = self.workspace.projects.iter().find(|p| p.name == project) {
+        if let Some(p) = self.workspace.projects.iter().find(|p| p.path == project_path) {
             self.recents.note_folder(p.path.clone(), Some(name.to_string()));
         }
         Ok(())
@@ -475,7 +478,7 @@ impl App {
     fn maybe_auto_select(&mut self) {
         if self.workspace.active.is_none() && self.workspace.programs.len() == 1 {
             let p = self.workspace.programs[0].clone();
-            let _ = self.set_active(&p.project, &p.name);
+            let _ = self.set_active(&p.project_path, &p.name);
         }
     }
 
@@ -638,7 +641,7 @@ impl App {
                     _ => None,
                 };
                 match prog {
-                    Some(p) => match self.set_active(&p.project, &p.name) {
+                    Some(p) => match self.set_active(&p.project_path, &p.name) {
                         Ok(()) => self.overlay = None,
                         Err(e) => {
                             if let Some(Overlay::ProgramPicker(picker)) = self.overlay.as_mut() {
@@ -1014,7 +1017,7 @@ fn parse_programs_array(arr: Option<&Vec<Value>>) -> Vec<ProgramEntry> {
         a.iter()
             .filter_map(|v| {
                 Some(ProgramEntry {
-                    project: v.get("project")?.as_str()?.to_string(),
+                    project: v.get("projectName")?.as_str()?.to_string(),
                     project_path: PathBuf::from(v.get("projectPath")?.as_str()?),
                     name: v.get("name")?.as_str()?.to_string(),
                     file: v.get("file")?.as_str()?.to_string(),
@@ -1032,7 +1035,7 @@ fn parse_active(resp: &Value, outline: Vec<OutlineCategory>) -> Result<Active, S
         .ok_or("missing label")?
         .to_string();
     let project = resp
-        .get("project")
+        .get("projectName")
         .and_then(Value::as_str)
         .map(str::to_string);
     let s = resp.get("summary").cloned().unwrap_or_default();
