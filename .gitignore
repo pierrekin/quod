@@ -7,3 +7,10 @@ build/
 
 # Python
 __pycache__
+
+# Rust
+/qui/target/
+/tree-sitter-quodscript/target/
+
+# tree-sitter-quodscript node ecosystem (we ship the generated parser.c)
+/tree-sitter-quodscript/node_modules/

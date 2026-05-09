@@ -1,0 +1,20 @@
+{
+  "name": "tree-sitter-quodscript",
+  "version": "0.0.1",
+  "description": "Quodscript grammar for tree-sitter",
+  "main": "bindings/node",
+  "tree-sitter": [
+    {
+      "scope": "source.qs",
+      "file-types": ["qs"],
+      "highlights": "queries/highlights.scm"
+    }
+  ],
+  "dependencies": {
+    "node-addon-api": "^7.1.0",
+    "node-gyp-build": "^4.8.0"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.25.0"
+  }
+}

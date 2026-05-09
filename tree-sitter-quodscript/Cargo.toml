@@ -1,0 +1,17 @@
+[package]
+name = "tree-sitter-quodscript"
+version = "0.0.1"
+edition = "2021"
+build = "bindings/rust/build.rs"
+include = ["bindings/rust/*", "grammar.js", "queries/*", "src/*"]
+publish = false
+
+[lib]
+name = "tree_sitter_quodscript"
+path = "bindings/rust/lib.rs"
+
+[dependencies]
+tree-sitter-language = "0.1"
+
+[build-dependencies]
+cc = "1"
