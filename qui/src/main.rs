@@ -1,3 +1,4 @@
+mod body;
 mod column_view;
 mod help_modal;
 mod highlight;
@@ -27,6 +28,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use serde_json::{Value, json};
 
+use crate::body::{Body, BodyFocus, BodyFrame, EntityCategory, ProgramShape, View};
 use crate::column_view::{Column, ColumnView, Row};
 use crate::open_modal::{OpenModal, RecentEntry, WorkspaceEntry};
 use crate::path_classify::{ClassifyError, classify, read_project_name};
@@ -69,30 +71,27 @@ struct App {
     /// Set of workspace anchors — Project and standalone Program.
     workspace: Workspace,
     /// LSP-derived view of project-routed programs. Refreshed whenever
-    /// the workspace folder set changes. Standalone programs aren't here
-    /// — they're enumerated from `workspace.standalone_programs()`.
+    /// the workspace folder set changes.
     programs: Vec<ProgramEntry>,
     /// The currently-active program, keyed by `(anchor_context, name)`.
     active: Option<Active>,
+    /// Body pane state: sidebar (Entities + Views) plus tab strip.
+    body: Body,
+    /// Categories for the active program's Entities sidebar section.
+    /// Filtered to non-empty by the App; empty when no active program.
+    entities: Vec<EntityCategory>,
+    /// Views available for the active program — gated by ProgramShape.
+    views: Vec<View>,
+    /// What's populated in the active program. Drives `views`.
+    program_shape: ProgramShape,
     overlay: Option<Overlay>,
     recents: Recents,
     error: Option<String>,
-    /// Selected category index in the body sidebar (Outline mode).
-    sidebar_cursor: usize,
-    /// Which body view is showing.
-    body_mode: BodyMode,
-    /// Lazily-fetched lift trace for the active program. Cleared on
+    /// Lazily-fetched C-Lift table for the active program. Cleared on
     /// active-program change.
-    lift_trace: Option<ColumnView>,
-    /// Same idea, but for the binary→quod pipeline.
-    bin_lift_trace: Option<ColumnView>,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq)]
-enum BodyMode {
-    Outline,
-    LiftTrace,
-    BinLiftTrace,
+    c_lift: Option<ColumnView>,
+    /// Same idea, for the binary→quod pipeline.
+    bin_lift: Option<ColumnView>,
 }
 
 enum Overlay {
@@ -121,14 +120,6 @@ struct Active {
     /// `Some(...)` when reached through a Project anchor; `None` for
     /// standalone Program anchors.
     anchor_context: Option<ProjectRef>,
-    outline: Vec<OutlineCategory>,
-}
-
-#[derive(Clone)]
-struct OutlineCategory {
-    label: String,
-    count: usize,
-    items: Vec<String>,
 }
 
 /// Tags `PickerItem.user_data` so the picker outcome handler can
@@ -151,13 +142,15 @@ impl App {
             workspace: Workspace::default(),
             programs: Vec::new(),
             active: None,
+            body: Body::default(),
+            entities: Vec::new(),
+            views: Vec::new(),
+            program_shape: ProgramShape::default(),
             overlay: None,
             recents: Recents::load(),
             error: None,
-            sidebar_cursor: 0,
-            body_mode: BodyMode::Outline,
-            lift_trace: None,
-            bin_lift_trace: None,
+            c_lift: None,
+            bin_lift: None,
         }
     }
 
@@ -216,73 +209,59 @@ impl App {
                     Action::OpenHelp => {
                         self.overlay = Some(Overlay::Help(help_modal::HelpModal::new()));
                     }
-                    Action::CycleBody => self.cycle_body_mode(),
+                    Action::ToggleNavBody => self.body.toggle_focus(),
+                    Action::CycleTabPrev => self.body.cycle_tab(false),
+                    Action::CycleTabNext => self.body.cycle_tab(true),
+                    Action::CloseTab => self.body.close_active_tab(),
+                    Action::TabKey => self.body.handle_tab(),
+                    Action::Launch => {
+                        self.body.launch_under_cursor(&self.entities, &self.views);
+                    }
                     Action::BodyUp => self.body_up(),
                     Action::BodyDown => self.body_down(),
-                    // Tab/projection cycling and tab close land with the
-                    // tabs/projections work; for now they're no-ops.
-                    Action::CloseTab | Action::ToggleNavBody
-                    | Action::CycleTabPrev | Action::CycleTabNext
-                    | Action::CycleProjPrev | Action::CycleProjNext => {}
+                    // Per-tab projection cycling: only `details` exists
+                    // today, so these are no-ops until per-category
+                    // projection lists land.
+                    Action::CycleProjPrev | Action::CycleProjNext => {}
                 }
             }
         }
     }
 
     fn body_up(&mut self) {
-        match self.body_mode {
-            BodyMode::Outline => {
-                if self.sidebar_cursor > 0 {
-                    self.sidebar_cursor -= 1;
-                }
-            }
-            BodyMode::LiftTrace => {
-                if let Some(t) = self.lift_trace.as_mut() {
-                    t.move_up();
-                }
-            }
-            BodyMode::BinLiftTrace => {
-                if let Some(t) = self.bin_lift_trace.as_mut() {
-                    t.move_up();
-                }
-            }
+        if let Some(view) = self.body_active_view_mut() {
+            view.move_up();
+        } else {
+            self.body.move_up();
         }
     }
 
     fn body_down(&mut self) {
-        match self.body_mode {
-            BodyMode::Outline => {
-                if let Some(active) = &self.active {
-                    let len = active.outline.len();
-                    if len > 0 && self.sidebar_cursor + 1 < len {
-                        self.sidebar_cursor += 1;
-                    }
-                }
-            }
-            BodyMode::LiftTrace => {
-                if let Some(t) = self.lift_trace.as_mut() {
-                    t.move_down();
-                }
-            }
-            BodyMode::BinLiftTrace => {
-                if let Some(t) = self.bin_lift_trace.as_mut() {
-                    t.move_down();
-                }
-            }
+        if let Some(view) = self.body_active_view_mut() {
+            view.move_down();
+        } else {
+            self.body.move_down(self.entities.len(), self.views.len());
         }
     }
 
-    fn cycle_body_mode(&mut self) {
-        self.body_mode = match self.body_mode {
-            BodyMode::Outline => BodyMode::LiftTrace,
-            BodyMode::LiftTrace => BodyMode::BinLiftTrace,
-            BodyMode::BinLiftTrace => BodyMode::Outline,
-        };
+    /// When the body is focused on a view tab, returns the view's
+    /// ColumnView so arrow keys scroll it. Otherwise None.
+    fn body_active_view_mut(&mut self) -> Option<&mut ColumnView> {
+        if self.body.focus != BodyFocus::Tab {
+            return None;
+        }
+        let idx = self.body.active_tab?;
+        let kind = self.body.tabs.get(idx)?.kind.clone();
+        match kind {
+            body::TabKind::View(View::CLift) => self.c_lift.as_mut(),
+            body::TabKind::View(View::BinaryLift) => self.bin_lift.as_mut(),
+            body::TabKind::CategoryList { .. } => None,
+        }
     }
 
-    /// Lazy-fetch the lift trace from the server. Idempotent.
-    fn ensure_lift_trace(&mut self) {
-        if self.lift_trace.is_some() || self.active.is_none() {
+    /// Lazy-fetch the C-Lift table for the active program. Idempotent.
+    fn ensure_c_lift(&mut self) {
+        if self.c_lift.is_some() || self.active.is_none() {
             return;
         }
         let Some(client) = self.client.as_mut() else { return };
@@ -293,11 +272,11 @@ impl App {
                 return;
             }
         };
-        self.lift_trace = Some(parse_lift_trace(&resp));
+        self.c_lift = Some(parse_lift_trace(&resp));
     }
 
-    fn ensure_bin_lift_trace(&mut self) {
-        if self.bin_lift_trace.is_some() || self.active.is_none() {
+    fn ensure_bin_lift(&mut self) {
+        if self.bin_lift.is_some() || self.active.is_none() {
             return;
         }
         let Some(client) = self.client.as_mut() else { return };
@@ -308,7 +287,7 @@ impl App {
                 return;
             }
         };
-        self.bin_lift_trace = Some(parse_bin_lift_trace(&resp));
+        self.bin_lift = Some(parse_bin_lift_trace(&resp));
     }
 
     fn ensure_no_dead_end(&mut self) {
@@ -508,12 +487,22 @@ impl App {
         let outline_resp = client
             .request("quod/getProgramOutline", json!({}))
             .map_err(|e| e.to_string())?;
-        let outline = parse_outline(&outline_resp);
-        self.active = Some(parse_active(&resp, outline)?);
-        self.sidebar_cursor = 0;
-        // Both columnar caches invalidate when the active program changes.
-        self.lift_trace = None;
-        self.bin_lift_trace = None;
+        let entities = parse_outline_to_entities(&outline_resp);
+
+        let shape_resp = client
+            .request("quod/getActiveProgramShape", json!({}))
+            .map_err(|e| e.to_string())?;
+        let shape = parse_program_shape(&shape_resp);
+
+        self.active = Some(parse_active(&resp)?);
+        self.entities = entities;
+        self.program_shape = shape;
+        self.views = available_views(shape);
+        // Per 04-: all tabs close when the active program changes.
+        self.body.reset_for_new_program();
+        // Per-view caches invalidate.
+        self.c_lift = None;
+        self.bin_lift = None;
         Ok(())
     }
 
@@ -916,215 +905,41 @@ impl App {
         if self.active.is_none() {
             return; // picker overlay covers
         }
-        match self.body_mode {
-            BodyMode::Outline => self.draw_body_outline(frame, area),
-            BodyMode::LiftTrace => {
-                self.ensure_lift_trace();
-                self.draw_body_lift_trace(frame, area);
-            }
-            BodyMode::BinLiftTrace => {
-                self.ensure_bin_lift_trace();
-                self.draw_body_bin_lift_trace(frame, area);
-            }
-        }
-    }
-
-    fn draw_body_outline(&self, frame: &mut Frame<'_>, area: Rect) {
-        let Some(active) = &self.active else { return };
-        let sidebar_w = sidebar_width(&active.outline).min(area.width / 2).max(10);
-        let cols = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Length(sidebar_w),
-                Constraint::Min(1),
-            ])
-            .split(area);
-        self.draw_sidebar(frame, cols[0], &active.outline);
-        self.draw_detail(frame, cols[1], &active.outline);
-    }
-
-    fn draw_body_lift_trace(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let dim = Style::default().fg(Color::DarkGray);
-        let header = Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD);
-
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Min(1),
-            ])
-            .split(area);
-        frame.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled(" lift trace ", header),
-                Span::styled(
-                    "  layer-A (C source) → layer-B (structured) → layer-C (core)",
-                    dim,
-                ),
-            ])),
-            chunks[0],
-        );
-        frame.render_widget(
-            Paragraph::new(Span::styled("─".repeat(area.width as usize), dim)),
-            chunks[1],
-        );
-
-        match self.lift_trace.as_mut() {
-            Some(view) if !view.rows.is_empty() => {
-                view.render(frame, chunks[2]);
-            }
-            Some(_) => {
-                frame.render_widget(
-                    Paragraph::new(Span::styled(
-                        "(no rows — this program has no layer-A/B/C joins)",
-                        dim,
-                    )),
-                    chunks[2],
-                );
-            }
-            None => {
-                frame.render_widget(
-                    Paragraph::new(Span::styled("loading…", dim)),
-                    chunks[2],
-                );
-            }
-        }
-    }
-
-    fn draw_body_bin_lift_trace(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let dim = Style::default().fg(Color::DarkGray);
-        let header = Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD);
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Min(1),
-            ])
-            .split(area);
-        frame.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::styled(" bin lift trace ", header),
-                Span::styled(
-                    "  Ghidra decompile → layer-A (CFn) → layer-B → layer-C",
-                    dim,
-                ),
-            ])),
-            chunks[0],
-        );
-        frame.render_widget(
-            Paragraph::new(Span::styled("─".repeat(area.width as usize), dim)),
-            chunks[1],
-        );
-
-        match self.bin_lift_trace.as_mut() {
-            Some(view) if !view.rows.is_empty() => {
-                view.render(frame, chunks[2]);
-            }
-            Some(_) => {
-                frame.render_widget(
-                    Paragraph::new(Span::styled(
-                        "(no rows — this program has no binary_units)",
-                        dim,
-                    )),
-                    chunks[2],
-                );
-            }
-            None => {
-                frame.render_widget(
-                    Paragraph::new(Span::styled("loading…", dim)),
-                    chunks[2],
-                );
-            }
-        }
-    }
-
-    fn draw_sidebar(&self, frame: &mut Frame<'_>, area: Rect, outline: &[OutlineCategory]) {
-        let dim = Style::default().fg(Color::DarkGray);
-        let header = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
-        let highlight = Style::default()
-            .fg(Color::Black)
-            .bg(Color::Cyan)
-            .add_modifier(Modifier::BOLD);
-
-        let inner = Rect {
-            x: area.x + 1,
-            y: area.y + 1,
-            width: area.width.saturating_sub(2),
-            height: area.height.saturating_sub(2),
-        };
-        let mut lines: Vec<Line> = Vec::new();
-        lines.push(Line::from(Span::styled("elements", header)));
-        lines.push(Line::from(""));
-        for (i, cat) in outline.iter().enumerate() {
-            let label_w = cat.label.chars().count();
-            let count_str = format!("{}", cat.count);
-            let count_w = count_str.chars().count();
-            let avail = (inner.width as usize).saturating_sub(2);
-            let pad = avail.saturating_sub(label_w + count_w);
-            let line = if i == self.sidebar_cursor {
-                Line::from(vec![
-                    Span::styled(format!(" {}", cat.label), highlight),
-                    Span::styled(" ".repeat(pad), highlight),
-                    Span::styled(format!("{} ", count_str), highlight),
-                ])
-            } else {
-                Line::from(vec![
-                    Span::raw(format!(" {}", cat.label)),
-                    Span::raw(" ".repeat(pad)),
-                    Span::styled(format!("{} ", count_str), dim),
-                ])
-            };
-            lines.push(line);
-        }
-        frame.render_widget(Paragraph::new(lines), inner);
-    }
-
-    fn draw_detail(&self, frame: &mut Frame<'_>, area: Rect, outline: &[OutlineCategory]) {
-        let dim = Style::default().fg(Color::DarkGray);
-        let header = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
-
-        let inner = Rect {
-            x: area.x + 2,
-            y: area.y + 1,
-            width: area.width.saturating_sub(3),
-            height: area.height.saturating_sub(2),
-        };
-        let cat = outline.get(self.sidebar_cursor);
-        let mut lines: Vec<Line> = Vec::new();
-        match cat {
-            Some(c) => {
-                lines.push(Line::from(vec![
-                    Span::styled(c.label.clone(), header),
-                    Span::raw(" "),
-                    Span::styled(format!("({})", c.count), dim),
-                ]));
-                lines.push(Line::from(""));
-                if c.items.is_empty() {
-                    lines.push(Line::from(Span::styled("(empty)", dim)));
-                } else {
-                    for item in &c.items {
-                        lines.push(Line::from(Span::raw(item.clone())));
-                    }
+        // Lazy-fetch any view tab that's about to render.
+        if let Some(idx) = self.body.active_tab {
+            if let Some(tab) = self.body.tabs.get(idx) {
+                match &tab.kind {
+                    body::TabKind::View(View::CLift) => self.ensure_c_lift(),
+                    body::TabKind::View(View::BinaryLift) => self.ensure_bin_lift(),
+                    body::TabKind::CategoryList { .. } => {}
                 }
             }
-            None => {
-                lines.push(Line::from(Span::styled("(no category)", dim)));
-            }
         }
+        let frame_data = BodyFrame {
+            entities: &self.entities,
+            views: &self.views,
+            c_lift: self.c_lift.as_mut(),
+            bin_lift: self.bin_lift.as_mut(),
+        };
+        body::render(&self.body, frame, area, frame_data);
+
         if let Some(err) = &self.error {
-            lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(
-                err.clone(),
-                Style::default().fg(Color::Red),
-            )));
+            // Errors render as a thin one-line strip overlaid at the
+            // bottom of the body. Cleared on next user input.
+            let strip = Rect {
+                x: area.x,
+                y: area.y + area.height.saturating_sub(1),
+                width: area.width,
+                height: 1,
+            };
+            frame.render_widget(
+                Paragraph::new(Span::styled(
+                    err.clone(),
+                    Style::default().fg(Color::Red),
+                )),
+                strip,
+            );
         }
-        frame.render_widget(Paragraph::new(lines), inner);
     }
 
     /// Single-line hint pointing to `?` for the full chord list. Kept
@@ -1162,7 +977,10 @@ enum Action {
     CycleTabNext,
     CycleProjPrev,
     CycleProjNext,
-    CycleBody,
+    /// `tab` key — local-context (e.g., toggle sidebar section).
+    TabKey,
+    /// `enter` — launch the highlighted sidebar entry as a tab.
+    Launch,
     BodyUp,
     BodyDown,
 }
@@ -1192,9 +1010,8 @@ fn classify_key(key: crossterm::event::KeyEvent) -> Option<Action> {
         KeyCode::Char('[') if ctrl => Some(Action::CycleTabPrev),
         KeyCode::Char(']') if ctrl => Some(Action::CycleTabNext),
         KeyCode::Char('?') => Some(Action::OpenHelp),
-        // Body-local nav (no ctrl). `v` cycles body modes for now;
-        // disappears once tabs/projections replace BodyMode.
-        KeyCode::Char('v') if !ctrl => Some(Action::CycleBody),
+        KeyCode::Tab => Some(Action::TabKey),
+        KeyCode::Enter => Some(Action::Launch),
         KeyCode::Up | KeyCode::Char('k') if !ctrl => Some(Action::BodyUp),
         KeyCode::Down | KeyCode::Char('j') if !ctrl => Some(Action::BodyDown),
         _ => None,
@@ -1231,7 +1048,7 @@ fn parse_programs_array(arr: Option<&Vec<Value>>) -> Vec<ProgramEntry> {
     .unwrap_or_default()
 }
 
-fn parse_active(resp: &Value, outline: Vec<OutlineCategory>) -> Result<Active, String> {
+fn parse_active(resp: &Value) -> Result<Active, String> {
     let label = resp
         .get("label")
         .and_then(Value::as_str)
@@ -1243,7 +1060,53 @@ fn parse_active(resp: &Value, outline: Vec<OutlineCategory>) -> Result<Active, S
         (Some(name), Some(root)) => Some(ProjectRef { root, name }),
         _ => None,
     };
-    Ok(Active { label, anchor_context, outline })
+    Ok(Active { label, anchor_context })
+}
+
+fn parse_program_shape(resp: &Value) -> ProgramShape {
+    ProgramShape {
+        has_source_units: resp.get("hasSourceUnits").and_then(Value::as_bool).unwrap_or(false),
+        has_binary_units: resp.get("hasBinaryUnits").and_then(Value::as_bool).unwrap_or(false),
+        has_equivalences: resp.get("hasEquivalences").and_then(Value::as_bool).unwrap_or(false),
+    }
+}
+
+/// Filter the LSP outline to non-empty categories (per 05-: empty
+/// categories don't appear in the sidebar).
+fn parse_outline_to_entities(resp: &Value) -> Vec<EntityCategory> {
+    resp.get("categories")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| {
+                    let label = v.get("label")?.as_str()?.to_string();
+                    let count = v.get("count")?.as_u64()? as usize;
+                    if count == 0 {
+                        return None;
+                    }
+                    let items = v
+                        .get("items")?
+                        .as_array()?
+                        .iter()
+                        .filter_map(|s| s.as_str().map(str::to_string))
+                        .collect();
+                    Some(EntityCategory { label, count, items })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Which Views are available for the active program's shape.
+fn available_views(shape: ProgramShape) -> Vec<View> {
+    let mut out = Vec::new();
+    if shape.has_source_units {
+        out.push(View::CLift);
+    }
+    if shape.has_binary_units {
+        out.push(View::BinaryLift);
+    }
+    out
 }
 
 fn parse_lift_trace(resp: &Value) -> ColumnView {
@@ -1347,28 +1210,6 @@ fn parse_bin_lift_trace(resp: &Value) -> ColumnView {
     ColumnView::new(columns, rows)
 }
 
-fn parse_outline(resp: &Value) -> Vec<OutlineCategory> {
-    resp.get("categories")
-        .and_then(Value::as_array)
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| {
-                    Some(OutlineCategory {
-                        label: v.get("label")?.as_str()?.to_string(),
-                        count: v.get("count")?.as_u64()? as usize,
-                        items: v
-                            .get("items")?
-                            .as_array()?
-                            .iter()
-                            .filter_map(|s| s.as_str().map(str::to_string))
-                            .collect(),
-                    })
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 fn find_ancestor_toml(start: &Path) -> Option<PathBuf> {
     let mut cur = Some(start);
     while let Some(p) = cur {
@@ -1378,16 +1219,6 @@ fn find_ancestor_toml(start: &Path) -> Option<PathBuf> {
         cur = p.parent();
     }
     None
-}
-
-fn sidebar_width(outline: &[OutlineCategory]) -> u16 {
-    // Longest "label  count" plus padding (1 left, 2 right) and a min.
-    let needed = outline
-        .iter()
-        .map(|c| c.label.chars().count() + format!("{}", c.count).chars().count() + 4)
-        .max()
-        .unwrap_or(16);
-    needed.clamp(16, 28) as u16
 }
 
 fn display_path(p: &Path) -> String {
