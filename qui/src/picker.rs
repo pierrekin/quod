@@ -20,6 +20,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
 
 use crate::footer;
+use crate::scroll;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ItemKind {
@@ -119,6 +120,7 @@ pub struct Picker {
     /// app is rendering). Renders a `*` in the gutter and applies the
     /// active-row style. None = no active row.
     pub active_item: Option<usize>,
+    scroll_offset: usize,
 }
 
 #[derive(Debug)]
@@ -138,6 +140,7 @@ impl Picker {
             footer: vec![("ctrl-c", "close")],
             error: None,
             active_item: None,
+            scroll_offset: 0,
         }
     }
 
@@ -304,7 +307,7 @@ impl Picker {
         }
     }
 
-    pub fn render(&self, frame: &mut Frame<'_>, full_area: Rect) {
+    pub fn render(&mut self, frame: &mut Frame<'_>, full_area: Rect) {
         let need_h = 6 + self.error.is_some() as u16;
         let need_w = 18;
         if full_area.width < need_w || full_area.height < need_h {
@@ -469,7 +472,15 @@ impl Picker {
 
         let mut state = ListState::default();
         if !filtered.is_empty() {
-            state.select(Some(self.cursor.min(filtered.len() - 1)));
+            let cursor = self.cursor.min(filtered.len() - 1);
+            state.select(Some(cursor));
+            self.scroll_offset = scroll::compute_offset(
+                self.scroll_offset,
+                cursor,
+                list_area.height as usize,
+                filtered.len(),
+            );
+            *state.offset_mut() = self.scroll_offset;
         }
         let list = List::new(items).highlight_style(
             Style::default()

@@ -9,6 +9,7 @@ mod open_modal;
 mod path_classify;
 mod picker;
 mod recents;
+mod scroll;
 mod workspace;
 
 use std::io;
@@ -821,7 +822,7 @@ impl App {
         self.draw_status(frame, chunks[0]);
         self.draw_body(frame, chunks[1]);
         self.draw_keymap(frame, chunks[2]);
-        if let Some(overlay) = &self.overlay {
+        if let Some(overlay) = self.overlay.as_mut() {
             match overlay {
                 Overlay::ProgramPicker(p) => p.render(frame, area),
                 Overlay::OpenProject(m) => m.render(frame, area),
@@ -877,7 +878,7 @@ impl App {
             c_lift: self.c_lift.as_mut(),
             bin_lift: self.bin_lift.as_mut(),
         };
-        body::render(&self.body, frame, area, frame_data);
+        body::render(&mut self.body, frame, area, frame_data);
     }
 
     /// Footer block at the bottom of the main view — same renderer as

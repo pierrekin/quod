@@ -10,6 +10,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::highlight::{self, Language};
+use crate::scroll;
 
 #[derive(Debug, Clone)]
 pub struct Column {
@@ -91,18 +92,18 @@ impl ColumnView {
         self.max_cell_lines + 1 // cells + 1-line separator
     }
 
-    /// Adjust scroll so the cursor row is visible. Called from render.
     fn ensure_cursor_visible(&mut self, body_height: u16) {
         let row_h = self.row_height();
         if row_h == 0 || self.rows.is_empty() {
             return;
         }
         let visible_rows = (body_height / row_h).max(1) as usize;
-        if self.cursor < self.scroll {
-            self.scroll = self.cursor;
-        } else if self.cursor >= self.scroll + visible_rows {
-            self.scroll = self.cursor + 1 - visible_rows;
-        }
+        self.scroll = scroll::compute_offset(
+            self.scroll,
+            self.cursor,
+            visible_rows,
+            self.rows.len(),
+        );
     }
 
     pub fn render(&mut self, frame: &mut Frame<'_>, area: Rect) {

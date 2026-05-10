@@ -27,6 +27,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::column_view::ColumnView;
+use crate::scroll;
 
 /// One sidebar entity category. Mirrors what the LSP returns from
 /// `quod/getProgramOutline`, filtered to non-empty by the App.
@@ -102,6 +103,7 @@ pub struct Body {
     pub sidebar_section: SidebarSection,
     pub entities_cursor: usize,
     pub views_cursor: usize,
+    sidebar_scroll: usize,
 }
 
 impl Default for Body {
@@ -113,6 +115,7 @@ impl Default for Body {
             sidebar_section: SidebarSection::Entities,
             entities_cursor: 0,
             views_cursor: 0,
+            sidebar_scroll: 0,
         }
     }
 }
@@ -133,6 +136,7 @@ impl Body {
         self.sidebar_section = SidebarSection::Entities;
         self.entities_cursor = 0;
         self.views_cursor = 0;
+        self.sidebar_scroll = 0;
     }
 
     pub fn handle_tab(&mut self, forward: bool, entities_len: usize, views_len: usize) {
@@ -361,7 +365,7 @@ pub struct BodyFrame<'a> {
     pub bin_lift: Option<&'a mut ColumnView>,
 }
 
-pub fn render(body: &Body, frame: &mut Frame<'_>, area: Rect, mut data: BodyFrame<'_>) {
+pub fn render(body: &mut Body, frame: &mut Frame<'_>, area: Rect, mut data: BodyFrame<'_>) {
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -386,7 +390,7 @@ fn sidebar_width(entities: &[EntityCategory], views: &[View]) -> u16 {
 }
 
 fn render_sidebar(
-    body: &Body,
+    body: &mut Body,
     frame: &mut Frame<'_>,
     area: Rect,
     data: &BodyFrame<'_>,
@@ -452,7 +456,26 @@ fn render_sidebar(
         }
     }
 
-    frame.render_widget(Paragraph::new(lines), inner);
+    let cursor_row = sidebar_cursor_row(body, data.entities.len(), data.views.len());
+    body.sidebar_scroll = scroll::compute_offset(
+        body.sidebar_scroll,
+        cursor_row,
+        inner.height as usize,
+        lines.len(),
+    );
+    frame.render_widget(
+        Paragraph::new(lines).scroll((body.sidebar_scroll as u16, 0)),
+        inner,
+    );
+}
+
+fn sidebar_cursor_row(body: &Body, entities_len: usize, views_len: usize) -> usize {
+    let entities_rows = entities_len.max(1);
+    match body.sidebar_section {
+        SidebarSection::Entities => 1 + body.entities_cursor,
+        SidebarSection::Views => 1 + entities_rows + 1 + 1 + body.views_cursor,
+    }
+    .min(1 + entities_rows + 1 + 1 + views_len.max(1).saturating_sub(1))
 }
 
 fn section_header(

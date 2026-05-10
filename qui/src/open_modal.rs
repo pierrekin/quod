@@ -18,6 +18,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
 
 use crate::footer;
+use crate::scroll;
 
 #[derive(Debug)]
 pub enum Outcome {
@@ -55,6 +56,8 @@ pub struct OpenModal {
     pub fs_cursor: usize,
     pub recents_cursor: usize,
     pub error: Option<String>,
+    fs_scroll: usize,
+    recents_scroll: usize,
 }
 
 impl OpenModal {
@@ -69,6 +72,8 @@ impl OpenModal {
             fs_cursor: 0,
             recents_cursor: 0,
             error: None,
+            fs_scroll: 0,
+            recents_scroll: 0,
         }
     }
 
@@ -229,7 +234,7 @@ impl OpenModal {
         }
     }
 
-    pub fn render(&self, frame: &mut Frame<'_>, full_area: Rect) {
+    pub fn render(&mut self, frame: &mut Frame<'_>, full_area: Rect) {
         let need_h = 12;
         let need_w = 36;
         if full_area.width < need_w || full_area.height < need_h {
@@ -317,7 +322,15 @@ impl OpenModal {
             .collect();
         let mut state = ListState::default();
         if !entries.is_empty() {
-            state.select(Some(self.fs_cursor.min(entries.len() - 1)));
+            let cursor = self.fs_cursor.min(entries.len() - 1);
+            state.select(Some(cursor));
+            self.fs_scroll = scroll::compute_offset(
+                self.fs_scroll,
+                cursor,
+                files_area.height as usize,
+                entries.len(),
+            );
+            *state.offset_mut() = self.fs_scroll;
         }
         let style = if self.focus == Focus::Files { focused_hl } else { unfocused_hl };
         frame.render_stateful_widget(
@@ -360,7 +373,15 @@ impl OpenModal {
             .collect();
         let mut r_state = ListState::default();
         if !self.recents.is_empty() {
-            r_state.select(Some(self.recents_cursor.min(self.recents.len() - 1)));
+            let cursor = self.recents_cursor.min(self.recents.len() - 1);
+            r_state.select(Some(cursor));
+            self.recents_scroll = scroll::compute_offset(
+                self.recents_scroll,
+                cursor,
+                recents_area.height as usize,
+                self.recents.len(),
+            );
+            *r_state.offset_mut() = self.recents_scroll;
         }
         let r_style = if self.focus == Focus::Recents { focused_hl } else { unfocused_hl };
         frame.render_stateful_widget(
