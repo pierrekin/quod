@@ -78,7 +78,6 @@ impl Workspace {
     }
 
     /// Remove an anchor by identity. Returns `false` if not present.
-    #[allow(dead_code)] // wired up when the picker grows `x` removal
     pub fn remove(&mut self, id: &AnchorId) -> bool {
         let before = self.anchors.len();
         self.anchors.retain(|a| a.id() != *id);

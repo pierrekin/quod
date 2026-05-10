@@ -125,7 +125,8 @@ pub struct Picker {
 
 #[derive(Debug)]
 pub enum Outcome {
-    Item(usize), // index into self.items (always Selectable)
+    Item(usize),         // index into self.items (always Selectable)
+    RemoveOwning(usize), // index into self.items — caller resolves the owning entity
     Cancel,
     Continue,
 }
@@ -170,9 +171,22 @@ impl Picker {
         self.error = Some(msg.into());
     }
 
-    #[allow(dead_code)] // wired by the membership editor (next commit)
-    pub fn refresh_items(&mut self, items: Vec<PickerItem>) {
+    pub fn refresh(
+        &mut self,
+        items: Vec<PickerItem>,
+        footer: Vec<(&'static str, &'static str)>,
+        active: Option<usize>,
+    ) {
         self.items = items;
+        self.footer = footer;
+        self.active_item = active;
+        if let Some(i) = active {
+            let filtered = self.filtered();
+            if let Some(pos) = filtered.iter().position(|&fi| fi == i) {
+                self.cursor = pos;
+                return;
+            }
+        }
         self.snap_cursor_to_selectable(0, true);
     }
 
@@ -296,6 +310,22 @@ impl Picker {
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.input.clear();
                 self.snap_cursor_to_selectable(0, true);
+                Outcome::Continue
+            }
+            // `x` removes the owning entity when the filter is empty (so
+            // typing `x` mid-search still narrows results).
+            KeyCode::Char('x')
+                if !key.modifiers.contains(KeyModifiers::CONTROL) && self.input.is_empty() =>
+            {
+                let f = self.filtered();
+                if let Some(&idx) = f.get(self.cursor) {
+                    if matches!(
+                        self.items.get(idx).map(|it| it.kind),
+                        Some(ItemKind::Selectable)
+                    ) {
+                        return Outcome::RemoveOwning(idx);
+                    }
+                }
                 Outcome::Continue
             }
             KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {

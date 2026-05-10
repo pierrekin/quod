@@ -413,10 +413,6 @@ impl App {
         Ok(())
     }
 
-    /// Remove an anchor by identity. For Project anchors this notifies
-    /// the LSP and refreshes `programs`. Drops `active` if it was rooted
-    /// in (or was) the removed anchor.
-    #[allow(dead_code)] // wired up when the picker grows `x` removal
     fn remove_anchor(&mut self, id: &AnchorId) -> Result<(), String> {
         match id {
             AnchorId::Project(root) => {
@@ -669,13 +665,12 @@ impl App {
         self.overlay = Some(Overlay::OpenProject(OpenModal::new(initial, recents)));
     }
 
-    #[allow(dead_code)] // wired up by the membership editor (next commit)
     fn refresh_program_picker_items(&mut self) {
-        let (items, _) = self.build_program_items();
+        let (items, selectables) = self.build_program_items();
         let footer = self.program_picker_footer();
+        let active = self.compute_active_item_index(&items, &selectables);
         if let Some(Overlay::ProgramPicker(picker)) = self.overlay.as_mut() {
-            picker.refresh_items(items);
-            picker.footer = footer;
+            picker.refresh(items, footer, active);
         }
     }
 
@@ -775,6 +770,34 @@ impl App {
                     }
                     None => {} // header/placeholder; ignore
                 }
+            }
+            picker::Outcome::RemoveOwning(idx) => {
+                let (_items, selectables) = self.build_program_items();
+                let sel = match self.overlay.as_ref() {
+                    Some(Overlay::ProgramPicker(p)) => p
+                        .items
+                        .get(idx)
+                        .and_then(|it| it.user_data)
+                        .and_then(|i| selectables.get(i).cloned()),
+                    _ => None,
+                };
+                let id = match sel {
+                    Some(SelectableProgram::Routed(i)) => self
+                        .programs
+                        .get(i)
+                        .map(|p| AnchorId::Project(p.project_path.clone())),
+                    Some(SelectableProgram::Standalone(file)) => Some(AnchorId::Program(file)),
+                    None => None,
+                };
+                let Some(id) = id else { return };
+                if let Err(e) = self.remove_anchor(&id) {
+                    if let Some(Overlay::ProgramPicker(picker)) = self.overlay.as_mut() {
+                        picker.set_error(format!("remove: {e}"));
+                    }
+                    return;
+                }
+                let _ = self.maybe_auto_select();
+                self.refresh_program_picker_items();
             }
         }
     }
