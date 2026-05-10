@@ -1,6 +1,7 @@
 mod body;
 mod column_view;
 mod error_modal;
+mod footer;
 mod help_modal;
 mod highlight;
 mod lsp;
@@ -23,7 +24,7 @@ use lsp_types::{ClientCapabilities, ClientInfo, InitializeParams, InitializeResu
 use ratatui::Frame;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
@@ -203,7 +204,6 @@ impl App {
             } else if let Some(action) = classify_key(key) {
                 match action {
                     Action::Quit => return Ok(()),
-                    Action::Cancel => return Ok(()), // no overlay → quit
                     Action::OpenMembership => self.open_open_project_modal(None),
                     Action::OpenPicker => self.open_program_picker(),
                     Action::OpenHelp => {
@@ -625,12 +625,15 @@ impl App {
         None
     }
 
-    fn program_picker_footer(&self) -> Vec<(String, String)> {
-        let mut hints = vec![("ctrl-o".into(), "open".into())];
-        // When the workspace is empty, esc would dead-end (the picker
-        // reopens immediately) — surface ctrl-q so the user has a way out.
+    fn program_picker_footer(&self) -> Vec<(&'static str, &'static str)> {
+        let mut hints = vec![("ctrl-o", "open")];
+        // When the workspace is empty, ctrl-c / esc would dead-end (the
+        // picker reopens immediately) — surface ctrl-q as the way out.
+        // Otherwise ctrl-c closes back to the active program.
         if self.workspace.anchors().is_empty() {
-            hints.push(("ctrl-q".into(), "quit".into()));
+            hints.push(("ctrl-q", "quit"));
+        } else {
+            hints.push(("ctrl-c", "close"));
         }
         hints
     }
@@ -795,7 +798,7 @@ impl App {
             .constraints([
                 Constraint::Length(1), // status
                 Constraint::Min(1),    // body
-                Constraint::Length(1), // keymap
+                Constraint::Length(2), // footer block
             ])
             .split(area);
         self.draw_status(frame, chunks[0]);
@@ -860,20 +863,14 @@ impl App {
         body::render(&self.body, frame, area, frame_data);
     }
 
-    /// Single-line hint pointing to `?` for the full chord list. Kept
-    /// minimal because the chord set has outgrown what fits on one line.
+    /// Footer block at the bottom of the main view — same renderer as
+    /// every modal. Always shows `?` for the full chord list and `ctrl-q`
+    /// as the way out.
     fn draw_keymap(&self, frame: &mut Frame<'_>, area: Rect) {
-        let dim = Style::default().fg(Color::DarkGray);
-        let key = Style::default().fg(Color::Cyan);
-        let spans: Vec<Span> = vec![
-            Span::raw(" "),
-            Span::styled("?", key),
-            Span::raw(" "),
-            Span::styled("for help", dim),
-        ];
-        frame.render_widget(
-            Paragraph::new(Line::from(spans)).alignment(Alignment::Left),
+        footer::render(
+            frame,
             area,
+            &[("?", "show help"), ("ctrl-q", "quit")],
         );
     }
 }
@@ -885,7 +882,6 @@ impl App {
 /// `classify_key` so it's easy to keep the chord table coherent.
 enum Action {
     Quit,
-    Cancel,
     OpenMembership,
     OpenPicker,
     OpenHelp,
@@ -913,7 +909,6 @@ fn classify_key(key: crossterm::event::KeyEvent) -> Option<Action> {
     let shift = key.modifiers.contains(KeyModifiers::SHIFT);
     match key.code {
         KeyCode::Char('q') if ctrl => Some(Action::Quit),
-        KeyCode::Char('c') if ctrl => Some(Action::Cancel),
         KeyCode::Char('o') if ctrl => Some(Action::OpenMembership),
         KeyCode::Char('p') if ctrl => Some(Action::OpenPicker),
         KeyCode::Char('x') if ctrl => Some(Action::CloseTab),

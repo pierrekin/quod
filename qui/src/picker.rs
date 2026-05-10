@@ -19,6 +19,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
 
+use crate::footer;
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ItemKind {
     Header,
@@ -110,9 +112,8 @@ pub struct Picker {
     /// Selectable when one exists.
     pub cursor: usize,
     /// Each entry is `(hotkey, label)`. Hotkeys are rendered in cyan,
-    /// labels dim. Empty list = blank footer area (the row is still
-    /// reserved so the layout doesn't reflow).
-    pub footer: Vec<(String, String)>,
+    /// labels dim. The footer row is always reserved.
+    pub footer: Vec<(&'static str, &'static str)>,
     pub error: Option<String>,
     /// Index into `items` of the currently-active row (the program the
     /// app is rendering). Renders a `*` in the gutter and applies the
@@ -134,7 +135,7 @@ impl Picker {
             items: Vec::new(),
             input: String::new(),
             cursor: 0,
-            footer: Vec::new(),
+            footer: vec![("ctrl-c", "close")],
             error: None,
             active_item: None,
         }
@@ -151,7 +152,7 @@ impl Picker {
         self
     }
 
-    pub fn with_footer(mut self, hints: Vec<(String, String)>) -> Self {
+    pub fn with_footer(mut self, hints: Vec<(&'static str, &'static str)>) -> Self {
         self.footer = hints;
         self
     }
@@ -325,8 +326,7 @@ impl Picker {
             constraints.push(Constraint::Length(1));
         }
         constraints.push(Constraint::Min(1)); // list
-        constraints.push(Constraint::Length(1)); // footer separator
-        constraints.push(Constraint::Length(1)); // footer
+        constraints.push(Constraint::Length(2)); // footer block
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(constraints)
@@ -474,26 +474,7 @@ impl Picker {
         frame.render_stateful_widget(list, list_area, &mut state);
 
         idx += 1;
-        // Footer separator (full-width `─`) above the hint row.
-        frame.render_widget(
-            Paragraph::new(Span::styled("─".repeat(inner.width as usize), dim)),
-            chunks[idx],
-        );
-        idx += 1;
-        let key_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
-        let mut footer_spans: Vec<Span> = Vec::new();
-        for (i, (k, label)) in self.footer.iter().enumerate() {
-            if i > 0 {
-                footer_spans.push(Span::styled(" · ", dim));
-            }
-            footer_spans.push(Span::styled(k.clone(), key_style));
-            footer_spans.push(Span::raw(" "));
-            footer_spans.push(Span::styled(label.clone(), dim));
-        }
-        frame.render_widget(
-            Paragraph::new(Line::from(footer_spans)).alignment(Alignment::Center),
-            chunks[idx],
-        );
+        footer::render(frame, chunks[idx], &self.footer);
     }
 }
 

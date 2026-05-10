@@ -8,6 +8,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
+use crate::footer;
+
 #[derive(Debug)]
 pub enum Outcome {
     Continue,
@@ -31,7 +33,7 @@ impl HelpModal {
     }
 
     pub fn render(&self, frame: &mut Frame<'_>, full_area: Rect) {
-        let need_h = (CHORDS.len() as u16) + 6;
+        let need_h = (CHORDS.len() as u16) + 7;
         let need_w = 50;
         if full_area.width < need_w || full_area.height < need_h {
             return;
@@ -54,7 +56,7 @@ impl HelpModal {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Min(1),
-                Constraint::Length(1),
+                Constraint::Length(2),
             ])
             .split(inner);
 
@@ -74,10 +76,7 @@ impl HelpModal {
             ]));
         }
         frame.render_widget(Paragraph::new(lines), chunks[0]);
-        frame.render_widget(
-            Paragraph::new(Span::styled("esc to close", dim)).alignment(Alignment::Center),
-            chunks[1],
-        );
+        footer::render(frame, chunks[1], &[("ctrl-c", "close")]);
     }
 }
 

@@ -8,9 +8,11 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Span};
+use ratatui::style::{Color, Style};
+use ratatui::text::Span;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
+
+use crate::footer;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Severity {
@@ -59,7 +61,7 @@ impl ErrorModal {
     }
 
     pub fn render(&self, frame: &mut Frame<'_>, full_area: Rect) {
-        let need_h: u16 = 8;
+        let need_h: u16 = 9;
         let need_w: u16 = 40;
         if full_area.width < need_w || full_area.height < need_h {
             return;
@@ -86,7 +88,7 @@ impl ErrorModal {
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .constraints([Constraint::Min(1), Constraint::Length(2)])
             .split(inner);
 
         let body_style = Style::default().fg(Color::White);
@@ -95,26 +97,10 @@ impl ErrorModal {
             chunks[0],
         );
 
-        let dim = Style::default().fg(Color::DarkGray);
-        let key = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
-        let hints: Vec<Span> = match self.severity {
-            Severity::Recoverable => vec![
-                Span::styled("ctrl-c / esc", key),
-                Span::raw(" "),
-                Span::styled("dismiss", dim),
-            ],
-            Severity::Fatal => vec![
-                Span::styled("ctrl-q", key),
-                Span::raw(" "),
-                Span::styled("quit  ", dim),
-                Span::styled("ctrl-c", key),
-                Span::raw(" "),
-                Span::styled("dismiss", dim),
-            ],
+        let hints: &[(&str, &str)] = match self.severity {
+            Severity::Recoverable => &[("ctrl-c", "close")],
+            Severity::Fatal => &[("ctrl-q", "quit"), ("ctrl-c", "close")],
         };
-        frame.render_widget(
-            Paragraph::new(Line::from(hints)).alignment(Alignment::Center),
-            chunks[1],
-        );
+        footer::render(frame, chunks[1], hints);
     }
 }

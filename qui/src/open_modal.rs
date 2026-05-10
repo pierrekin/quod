@@ -17,6 +17,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
 
+use crate::footer;
+
 #[derive(Debug)]
 pub enum Outcome {
     /// User picked a path. App classifies it and adds to the workspace.
@@ -250,9 +252,9 @@ impl OpenModal {
         // Vertical layout:
         //   path (1) · sep (1) · [error (1)] · files (min 4)
         //   · sep (1) · "Recent" header (1) · recents (≤ N)
-        //   · sep (1) · footer (1)
-        // Footer + sep are always reserved so the layout doesn't
-        // reflow when the conditional `↵ open` hint appears.
+        //   · footer block (2)
+        // Footer is always reserved so the layout doesn't reflow when
+        // the conditional `↵ open` hint appears.
         let recents_h = (self.recents.len() as u16).clamp(1, 5);
         let mut constraints: Vec<Constraint> = vec![
             Constraint::Length(1),
@@ -265,8 +267,7 @@ impl OpenModal {
         constraints.push(Constraint::Length(1));
         constraints.push(Constraint::Length(1));
         constraints.push(Constraint::Length(recents_h));
-        constraints.push(Constraint::Length(1));
-        constraints.push(Constraint::Length(1));
+        constraints.push(Constraint::Length(2));
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(constraints)
@@ -368,21 +369,14 @@ impl OpenModal {
             &mut r_state,
         );
 
-        // Sep + footer always render so the layout stays stable. The
-        // hint inside the footer is conditional — `↵ open` only when
-        // enter would actually open. Universal nav (arrows / tab /
-        // enter / esc) is left to the user's intuition.
-        frame.render_widget(
-            Paragraph::new(Span::styled("─".repeat(inner.width as usize), dim)),
-            chunks[idx],
-        );
-        idx += 1;
-        let hints: &[(&str, &str)] = if self.enter_would_open() {
-            &[("↵", "open")]
+        // Always-on footer: `ctrl-c close` is the canonical way out;
+        // `↵ open` is prepended when enter would actually commit.
+        let hints: Vec<(&str, &str)> = if self.enter_would_open() {
+            vec![("↵", "open"), ("ctrl-c", "close")]
         } else {
-            &[]
+            vec![("ctrl-c", "close")]
         };
-        render_footer(frame, chunks[idx], hints);
+        footer::render(frame, chunks[idx], &hints);
     }
 }
 
@@ -396,24 +390,6 @@ fn render_entry(e: &Entry) -> Line<'static> {
             Span::raw(name.clone()),
         ]),
     }
-}
-
-fn render_footer(frame: &mut Frame<'_>, area: Rect, hints: &[(&str, &str)]) {
-    let key_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
-    let dim = Style::default().fg(Color::DarkGray);
-    let mut spans: Vec<Span> = Vec::new();
-    for (i, (k, label)) in hints.iter().enumerate() {
-        if i > 0 {
-            spans.push(Span::styled(" · ", dim));
-        }
-        spans.push(Span::styled(*k, key_style));
-        spans.push(Span::raw(" "));
-        spans.push(Span::styled(*label, dim));
-    }
-    frame.render_widget(
-        Paragraph::new(Line::from(spans)).alignment(Alignment::Center),
-        area,
-    );
 }
 
 fn scan(path: &Path) -> Vec<Entry> {
