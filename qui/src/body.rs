@@ -455,7 +455,6 @@ fn render_tab_strip(body: &Body, frame: &mut Frame<'_>, area: Rect) {
 }
 
 fn render_projection_strip(body: &Body, frame: &mut Frame<'_>, area: Rect) {
-    let dim = Style::default().fg(Color::DarkGray);
     let active = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
 
     // Per 04-: view tabs have no projection sub-strip; entity-launched
@@ -468,7 +467,6 @@ fn render_projection_strip(body: &Body, frame: &mut Frame<'_>, area: Rect) {
             let spans = vec![
                 Span::raw(" "),
                 Span::styled("[details]", active),
-                Span::styled("  ctrl-shift-[ / ] cycles projections", dim),
             ];
             frame.render_widget(Paragraph::new(Line::from(spans)), area);
         }
