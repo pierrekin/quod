@@ -537,7 +537,7 @@ impl App {
         let footer = self.program_picker_footer();
         let active_item = self.compute_active_item_index(&items, &selectables);
         self.overlay = Some(Overlay::ProgramPicker(
-            Picker::new("programs")
+            Picker::new("choose program")
                 .with_items(items)
                 .with_footer(footer)
                 .with_active(active_item),

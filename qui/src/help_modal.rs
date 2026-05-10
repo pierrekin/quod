@@ -84,13 +84,13 @@ impl HelpModal {
 /// (chord, what it does). Edit when adding new chords. Order is what the
 /// help modal renders top-to-bottom.
 const CHORDS: &[(&str, &str)] = &[
-    ("ctrl-p", "program picker"),
-    ("ctrl-o", "workspace anchors (add / remove)"),
-    ("ctrl-c", "cancel / back one level"),
+    ("ctrl-o", "open program"),
+    ("ctrl-p", "choose program"),
+    ("ctrl-c", "cancel"),
     ("ctrl-q", "quit"),
-    ("ctrl-x", "close active tab"),
-    ("ctrl-n", "switch focus between nav and body"),
+    ("ctrl-x", "close tab"),
+    ("ctrl-n", "switch focus"),
     ("ctrl-[ / ctrl-]", "cycle tabs"),
-    ("ctrl-shift-[ / ctrl-shift-]", "cycle projections"),
-    ("?", "this help"),
+    ("ctrl-shift-[ / ctrl-shift-]", "cycle subtabs"),
+    ("?", "show help"),
 ];
