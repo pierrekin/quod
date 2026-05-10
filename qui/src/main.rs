@@ -833,29 +833,37 @@ impl App {
     }
 
     fn draw_status(&self, frame: &mut Frame<'_>, area: Rect) {
-        // Cyan bg is the bar's base; per-Span fg/modifiers compose on top.
         let bg = Style::default().bg(Color::Cyan).fg(Color::Black);
         let bold = bg.add_modifier(Modifier::BOLD);
         let dim = bg.add_modifier(Modifier::DIM);
         let line = if let Some(a) = &self.active {
             let mut spans = vec![Span::styled("  ", bg)];
             if let Some(ctx) = &a.anchor_context {
-                // `> Project / Program`
                 spans.push(Span::styled("> ", dim));
                 spans.push(Span::styled(ctx.name.clone(), bold));
                 spans.push(Span::styled(" / ", dim));
                 spans.push(Span::styled(a.label.clone(), bold));
             } else {
-                // Standalone — bare program name, no glyph (per 02-).
                 spans.push(Span::styled(a.label.clone(), bold));
             }
-            // Nav state slot is empty until views/tabs land. When empty,
-            // omit the trailing `|` per 02-.
+            if let Some(label) = self.active_tab_status_label() {
+                spans.push(Span::styled(" | ", dim));
+                spans.push(Span::styled(label, bold));
+            }
             Line::from(spans)
         } else {
             Line::from(Span::styled("  qui", bold))
         };
         frame.render_widget(Paragraph::new(line).style(bg), area);
+    }
+
+    fn active_tab_status_label(&self) -> Option<String> {
+        let tab = self.body.tabs.get(self.body.active_tab?)?;
+        match &tab.kind {
+            body::TabKind::Welcome => None,
+            body::TabKind::View(_) => Some(tab.label.clone()),
+            body::TabKind::CategoryList { .. } => Some(format!("{} / details", tab.label)),
+        }
     }
 
     fn draw_body(&mut self, frame: &mut Frame<'_>, area: Rect) {
