@@ -523,21 +523,25 @@ impl App {
         Ok(())
     }
 
-    fn maybe_auto_select(&mut self) {
+    fn maybe_auto_select(&mut self) -> bool {
         if self.active.is_some() {
-            return;
+            return false;
         }
         let routed: Vec<_> = self.programs.iter().cloned().collect();
         let standalone: Vec<_> = self.workspace.standalone_programs().map(Path::to_path_buf).collect();
-        if routed.len() + standalone.len() == 1 {
-            if let Some(p) = routed.into_iter().next() {
-                let _ = self.set_active_routed(
-                    &ProjectRef { root: p.project_path, name: p.project },
-                    &p.name,
-                );
-            } else if let Some(file) = standalone.into_iter().next() {
-                let _ = self.set_active_standalone(&file);
-            }
+        if routed.len() + standalone.len() != 1 {
+            return false;
+        }
+        if let Some(p) = routed.into_iter().next() {
+            self.set_active_routed(
+                &ProjectRef { root: p.project_path, name: p.project },
+                &p.name,
+            )
+            .is_ok()
+        } else if let Some(file) = standalone.into_iter().next() {
+            self.set_active_standalone(&file).is_ok()
+        } else {
+            false
         }
     }
 
@@ -788,9 +792,7 @@ impl App {
                 match result {
                     Ok(()) => {
                         self.overlay = None;
-                        let was_active = self.active.is_some();
-                        self.maybe_auto_select();
-                        if was_active {
+                        if !self.maybe_auto_select() {
                             self.open_program_picker();
                         }
                     }
