@@ -1,11 +1,13 @@
-//! Open-anchor modal: a file/dir browser pane (top) over a recents
-//! pane (bottom). Tab toggles focus between them. Returns a path on
-//! commit; the App classifies it into a workspace Anchor (Project for
-//! `.toml` / dir-with-quod.toml, Program for `.json`) and adds it.
+//! Open modal: a file/dir browser pane (top) over a recents pane
+//! (bottom). Purely additive — `tab` switches panes, `enter` either
+//! descends into a directory or returns the chosen path. The App then
+//! classifies that path into a `Project` or `Program` and adds it to
+//! the workspace.
+//!
+//! Removal lives in the program picker, not here.
 //!
 //! The browser filters to: dirs (for navigation) + files named exactly
-//! `quod.toml` + files with the `.json` extension. No "magical"
-//! is-project highlighting — the user is selecting a file, not a dir.
+//! `quod.toml` + files with the `.json` extension.
 use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -17,12 +19,8 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragra
 
 #[derive(Debug)]
 pub enum Outcome {
-    /// User picked a path. App classifies it into an Anchor and adds it.
+    /// User picked a path. App classifies it and adds to the workspace.
     Open(PathBuf),
-    /// User asked to remove the workspace anchor at this index.
-    /// Index is into the modal's `workspace` vec — the App needs to
-    /// translate it back to an `AnchorId`.
-    RemoveWorkspace(usize),
     Cancel,
     Continue,
 }
@@ -30,24 +28,14 @@ pub enum Outcome {
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Focus {
     Files,
-    Workspace,
     Recents,
-}
-
-/// One row in the Workspace pane — an anchor currently in the workspace.
-#[derive(Debug, Clone)]
-pub struct WorkspaceEntry {
-    /// `>` for project, `-` for standalone program.
-    pub glyph: char,
-    pub display_name: String,
-    pub display_path: String,
 }
 
 #[derive(Debug, Clone)]
 pub enum Entry {
     Parent,                            // "../" — step out
     Dir { name: String },              // subdir — step in on commit
-    File { name: String },             // quod.toml or *.json — commits as Anchor
+    File { name: String },             // quod.toml or *.json — commits as Open
 }
 
 #[derive(Debug, Clone)]
@@ -60,31 +48,23 @@ pub struct RecentEntry {
 pub struct OpenModal {
     pub input: String,
     pub entries: Vec<Entry>,
-    pub workspace: Vec<WorkspaceEntry>,
     pub recents: Vec<RecentEntry>,
     pub focus: Focus,
     pub fs_cursor: usize,
-    pub workspace_cursor: usize,
     pub recents_cursor: usize,
     pub error: Option<String>,
 }
 
 impl OpenModal {
-    pub fn new(
-        initial: PathBuf,
-        workspace: Vec<WorkspaceEntry>,
-        recents: Vec<RecentEntry>,
-    ) -> Self {
+    pub fn new(initial: PathBuf, recents: Vec<RecentEntry>) -> Self {
         let input = initial.to_string_lossy().into_owned();
         let entries = scan(&initial);
         Self {
             input,
             entries,
-            workspace,
             recents,
             focus: Focus::Files,
             fs_cursor: 0,
-            workspace_cursor: 0,
             recents_cursor: 0,
             error: None,
         }
@@ -135,9 +115,6 @@ impl OpenModal {
             KeyCode::Up => {
                 match self.focus {
                     Focus::Files => self.fs_cursor = self.fs_cursor.saturating_sub(1),
-                    Focus::Workspace => {
-                        self.workspace_cursor = self.workspace_cursor.saturating_sub(1)
-                    }
                     Focus::Recents => {
                         self.recents_cursor = self.recents_cursor.saturating_sub(1)
                     }
@@ -151,11 +128,6 @@ impl OpenModal {
                             self.fs_cursor += 1;
                         }
                     }
-                    Focus::Workspace => {
-                        if self.workspace_cursor + 1 < self.workspace.len() {
-                            self.workspace_cursor += 1;
-                        }
-                    }
                     Focus::Recents => {
                         if self.recents_cursor + 1 < self.recents.len() {
                             self.recents_cursor += 1;
@@ -165,12 +137,6 @@ impl OpenModal {
                 Outcome::Continue
             }
             KeyCode::Enter => self.commit(),
-            KeyCode::Char('x') if self.focus == Focus::Workspace => {
-                if self.workspace_cursor < self.workspace.len() {
-                    return Outcome::RemoveWorkspace(self.workspace_cursor);
-                }
-                Outcome::Continue
-            }
             KeyCode::Backspace if self.focus == Focus::Files => {
                 self.input.pop();
                 self.rescan();
@@ -196,28 +162,14 @@ impl OpenModal {
         }
     }
 
-    /// Tab through the panes that have content. Skip empty panes so
+    /// Tab between Files and Recents. Skip Recents if it's empty so
     /// `tab` always lands on something useful.
-    fn cycle_focus(&mut self, forward: bool) {
-        let order = [Focus::Files, Focus::Workspace, Focus::Recents];
-        let cur = order.iter().position(|f| *f == self.focus).unwrap_or(0);
-        let n = order.len();
-        for step in 1..=n {
-            let next = if forward {
-                order[(cur + step) % n]
-            } else {
-                order[(cur + n - step) % n]
-            };
-            let has_content = match next {
-                Focus::Files => true,
-                Focus::Workspace => !self.workspace.is_empty(),
-                Focus::Recents => !self.recents.is_empty(),
-            };
-            if has_content {
-                self.focus = next;
-                return;
-            }
-        }
+    fn cycle_focus(&mut self, _forward: bool) {
+        self.focus = match self.focus {
+            Focus::Files if !self.recents.is_empty() => Focus::Recents,
+            Focus::Recents => Focus::Files,
+            Focus::Files => Focus::Files,
+        };
     }
 
     fn commit(&mut self) -> Outcome {
@@ -262,20 +214,27 @@ impl OpenModal {
                 Some(r) => Outcome::Open(r.path.clone()),
                 None => Outcome::Continue,
             },
-            // Workspace pane uses `x` (not enter) to remove. Enter is a
-            // no-op there — the anchor is already in the workspace.
-            Focus::Workspace => Outcome::Continue,
+        }
+    }
+
+    /// True when `enter` from the current cursor position would actually
+    /// commit (i.e. add the workspace). Files-pane dirs and the `..`
+    /// row don't commit — they navigate.
+    fn enter_would_open(&self) -> bool {
+        match self.focus {
+            Focus::Files => matches!(self.entries.get(self.fs_cursor), Some(Entry::File { .. })),
+            Focus::Recents => !self.recents.is_empty(),
         }
     }
 
     pub fn render(&self, frame: &mut Frame<'_>, full_area: Rect) {
-        let need_h = 14;
+        let need_h = 12;
         let need_w = 36;
         if full_area.width < need_w || full_area.height < need_h {
             return;
         }
         let w = full_area.width.saturating_sub(2).min(80);
-        let h = full_area.height.saturating_sub(2).min(28).max(need_h);
+        let h = full_area.height.saturating_sub(2).min(24).max(need_h);
         let x = full_area.x + (full_area.width - w) / 2;
         let y = full_area.y + (full_area.height - h) / 2;
         let area = Rect { x, y, width: w, height: h };
@@ -283,18 +242,17 @@ impl OpenModal {
         frame.render_widget(Clear, area);
         let block = Block::default()
             .borders(Borders::ALL)
-            .title(" workspace anchors ")
+            .title(" open ")
             .title_alignment(Alignment::Center);
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
         // Vertical layout:
         //   path (1) · sep (1) · [error (1)] · files (min 4)
-        //   · sep (1) · "Workspace" header (1) · workspace (≤ N)
         //   · sep (1) · "Recent" header (1) · recents (≤ N)
-        //   · sep (1) · footer (1)
-        let workspace_h = (self.workspace.len() as u16).clamp(1, 5);
+        //   · [sep (1) · footer (1)]
         let recents_h = (self.recents.len() as u16).clamp(1, 5);
+        let show_footer = self.enter_would_open();
         let mut constraints: Vec<Constraint> = vec![
             Constraint::Length(1),
             Constraint::Length(1),
@@ -305,12 +263,11 @@ impl OpenModal {
         constraints.push(Constraint::Min(3));
         constraints.push(Constraint::Length(1));
         constraints.push(Constraint::Length(1));
-        constraints.push(Constraint::Length(workspace_h));
-        constraints.push(Constraint::Length(1));
-        constraints.push(Constraint::Length(1));
         constraints.push(Constraint::Length(recents_h));
-        constraints.push(Constraint::Length(1));
-        constraints.push(Constraint::Length(1));
+        if show_footer {
+            constraints.push(Constraint::Length(1));
+            constraints.push(Constraint::Length(1));
+        }
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(constraints)
@@ -376,53 +333,6 @@ impl OpenModal {
         );
         idx += 1;
 
-        // Workspace header
-        frame.render_widget(
-            Paragraph::new(Span::styled("Workspace", label_style)),
-            chunks[idx],
-        );
-        idx += 1;
-
-        // Workspace anchors
-        let ws_area = chunks[idx];
-        idx += 1;
-        let ws_items: Vec<ListItem> = if self.workspace.is_empty() {
-            vec![ListItem::new(Span::styled("(empty)", dim))]
-        } else {
-            self.workspace
-                .iter()
-                .map(|w| {
-                    let avail = ws_area.width as usize;
-                    let lhs = format!("{} {}", w.glyph, w.display_name);
-                    let lhs_w = lhs.chars().count();
-                    let path_w = w.display_path.chars().count();
-                    let pad = avail.saturating_sub(lhs_w + path_w + 1);
-                    ListItem::new(Line::from(vec![
-                        Span::raw(lhs),
-                        Span::raw(" ".repeat(pad)),
-                        Span::styled(w.display_path.clone(), dim),
-                    ]))
-                })
-                .collect()
-        };
-        let mut ws_state = ListState::default();
-        if !self.workspace.is_empty() {
-            ws_state.select(Some(self.workspace_cursor.min(self.workspace.len() - 1)));
-        }
-        let ws_style = if self.focus == Focus::Workspace { focused_hl } else { unfocused_hl };
-        frame.render_stateful_widget(
-            List::new(ws_items).highlight_style(ws_style),
-            ws_area,
-            &mut ws_state,
-        );
-
-        // Sep
-        frame.render_widget(
-            Paragraph::new(Span::styled("─".repeat(inner.width as usize), dim)),
-            chunks[idx],
-        );
-        idx += 1;
-
         // Recent header
         frame.render_widget(
             Paragraph::new(Span::styled("Recent", label_style)),
@@ -459,23 +369,17 @@ impl OpenModal {
             &mut r_state,
         );
 
-        // Sep
-        frame.render_widget(
-            Paragraph::new(Span::styled("─".repeat(inner.width as usize), dim)),
-            chunks[idx],
-        );
-        idx += 1;
-
-        // Footer — `x` only meaningful when the Workspace pane is focused.
-        let mut hints: Vec<(&str, &str)> = vec![
-            ("↵", "add"),
-            ("⇥", "switch pane"),
-        ];
-        if self.focus == Focus::Workspace {
-            hints.push(("x", "remove"));
+        // Footer — only shown when `enter` would actually open. Universal
+        // nav (arrows / tab / enter / esc) is left to the user's
+        // intuition; nothing else is annotated here.
+        if show_footer {
+            frame.render_widget(
+                Paragraph::new(Span::styled("─".repeat(inner.width as usize), dim)),
+                chunks[idx],
+            );
+            idx += 1;
+            render_footer(frame, chunks[idx], &[("↵", "open")]);
         }
-        hints.push(("esc", "cancel"));
-        render_footer(frame, chunks[idx], &hints);
     }
 }
 
