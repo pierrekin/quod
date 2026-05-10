@@ -86,11 +86,11 @@ impl HelpModal {
 const CHORDS: &[(&str, &str)] = &[
     ("ctrl-o", "open program"),
     ("ctrl-p", "choose program"),
-    ("ctrl-c", "cancel"),
+    ("ctrl-c or esc", "cancel"),
     ("ctrl-q", "quit"),
     ("ctrl-x", "close tab"),
     ("ctrl-n", "switch focus"),
-    ("ctrl-[ / ctrl-]", "cycle tabs"),
-    ("ctrl-shift-[ / ctrl-shift-]", "cycle subtabs"),
+    ("ctrl-[ and ctrl-]", "cycle tabs"),
+    ("ctrl-shift-[ and ctrl-shift-]", "cycle subtabs"),
     ("?", "show help"),
 ];
