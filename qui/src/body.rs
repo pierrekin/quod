@@ -135,15 +135,12 @@ impl Body {
         self.views_cursor = 0;
     }
 
-    pub fn handle_tab(&mut self, _forward: bool) {
-        match self.focus {
-            BodyFocus::Sidebar => {
-                self.sidebar_section = match self.sidebar_section {
-                    SidebarSection::Entities => SidebarSection::Views,
-                    SidebarSection::Views => SidebarSection::Entities,
-                };
-            }
-            BodyFocus::Tab => {}
+    pub fn handle_tab(&mut self, forward: bool, entities_len: usize, views_len: usize) {
+        if self.focus != BodyFocus::Sidebar {
+            return;
+        }
+        if let Some(target) = self.next_nonempty_section(forward, entities_len, views_len) {
+            self.enter_section(target, true, entities_len, views_len);
         }
     }
 
@@ -154,35 +151,91 @@ impl Body {
         };
     }
 
-    pub fn move_up(&mut self) {
-        match self.focus {
-            BodyFocus::Sidebar => match self.sidebar_section {
-                SidebarSection::Entities => {
-                    self.entities_cursor = self.entities_cursor.saturating_sub(1)
+    pub fn move_up(&mut self, entities_len: usize, views_len: usize) {
+        if self.focus != BodyFocus::Sidebar {
+            return;
+        }
+        match self.sidebar_section {
+            SidebarSection::Entities => {
+                if self.entities_cursor > 0 {
+                    self.entities_cursor -= 1;
+                } else if let Some(prev) = self.next_nonempty_section(false, entities_len, views_len) {
+                    self.enter_section(prev, false, entities_len, views_len);
                 }
-                SidebarSection::Views => {
-                    self.views_cursor = self.views_cursor.saturating_sub(1)
+            }
+            SidebarSection::Views => {
+                if self.views_cursor > 0 {
+                    self.views_cursor -= 1;
+                } else if let Some(prev) = self.next_nonempty_section(false, entities_len, views_len) {
+                    self.enter_section(prev, false, entities_len, views_len);
                 }
-            },
-            BodyFocus::Tab => {} // per-tab nav handled by tab-specific code
+            }
         }
     }
 
     pub fn move_down(&mut self, entities_len: usize, views_len: usize) {
-        match self.focus {
-            BodyFocus::Sidebar => match self.sidebar_section {
-                SidebarSection::Entities => {
-                    if self.entities_cursor + 1 < entities_len {
-                        self.entities_cursor += 1;
-                    }
+        if self.focus != BodyFocus::Sidebar {
+            return;
+        }
+        match self.sidebar_section {
+            SidebarSection::Entities => {
+                if self.entities_cursor + 1 < entities_len {
+                    self.entities_cursor += 1;
+                } else if let Some(next) = self.next_nonempty_section(true, entities_len, views_len) {
+                    self.enter_section(next, true, entities_len, views_len);
                 }
-                SidebarSection::Views => {
-                    if self.views_cursor + 1 < views_len {
-                        self.views_cursor += 1;
-                    }
+            }
+            SidebarSection::Views => {
+                if self.views_cursor + 1 < views_len {
+                    self.views_cursor += 1;
+                } else if let Some(next) = self.next_nonempty_section(true, entities_len, views_len) {
+                    self.enter_section(next, true, entities_len, views_len);
                 }
-            },
-            BodyFocus::Tab => {}
+            }
+        }
+    }
+
+    fn next_nonempty_section(
+        &self,
+        forward: bool,
+        entities_len: usize,
+        views_len: usize,
+    ) -> Option<SidebarSection> {
+        let order = [SidebarSection::Entities, SidebarSection::Views];
+        let cur = order.iter().position(|s| *s == self.sidebar_section).unwrap();
+        let n = order.len();
+        let len_of = |s| match s {
+            SidebarSection::Entities => entities_len,
+            SidebarSection::Views => views_len,
+        };
+        for step in 1..n {
+            let idx = if forward {
+                (cur + step) % n
+            } else {
+                (cur + n - step) % n
+            };
+            if len_of(order[idx]) > 0 {
+                return Some(order[idx]);
+            }
+        }
+        None
+    }
+
+    fn enter_section(
+        &mut self,
+        target: SidebarSection,
+        at_top: bool,
+        entities_len: usize,
+        views_len: usize,
+    ) {
+        self.sidebar_section = target;
+        match target {
+            SidebarSection::Entities => {
+                self.entities_cursor = if at_top { 0 } else { entities_len.saturating_sub(1) };
+            }
+            SidebarSection::Views => {
+                self.views_cursor = if at_top { 0 } else { views_len.saturating_sub(1) };
+            }
         }
     }
 
@@ -650,13 +703,61 @@ mod tests {
     }
 
     #[test]
-    fn tab_within_sidebar_swaps_section() {
+    fn tab_swaps_section_when_both_have_items() {
         let mut body = Body::default();
-        assert_eq!(body.sidebar_section, SidebarSection::Entities);
-        body.handle_tab(true);
+        body.handle_tab(true, 3, 2);
         assert_eq!(body.sidebar_section, SidebarSection::Views);
-        body.handle_tab(false);
+        assert_eq!(body.views_cursor, 0);
+        body.handle_tab(true, 3, 2);
         assert_eq!(body.sidebar_section, SidebarSection::Entities);
+        assert_eq!(body.entities_cursor, 0);
+    }
+
+    #[test]
+    fn tab_skips_empty_section() {
+        let mut body = Body::default();
+        body.handle_tab(true, 3, 0);
+        assert_eq!(body.sidebar_section, SidebarSection::Entities);
+        body.sidebar_section = SidebarSection::Views;
+        body.handle_tab(true, 0, 0);
+        assert_eq!(body.sidebar_section, SidebarSection::Views);
+    }
+
+    #[test]
+    fn down_at_bottom_flows_into_next_section() {
+        let mut body = Body::default();
+        body.entities_cursor = 2;
+        body.move_down(3, 2);
+        assert_eq!(body.sidebar_section, SidebarSection::Views);
+        assert_eq!(body.views_cursor, 0);
+    }
+
+    #[test]
+    fn up_at_top_flows_into_previous_section() {
+        let mut body = Body::default();
+        body.sidebar_section = SidebarSection::Views;
+        body.move_up(3, 2);
+        assert_eq!(body.sidebar_section, SidebarSection::Entities);
+        assert_eq!(body.entities_cursor, 2);
+    }
+
+    #[test]
+    fn down_at_bottom_of_views_wraps_to_entities() {
+        let mut body = Body::default();
+        body.sidebar_section = SidebarSection::Views;
+        body.views_cursor = 1;
+        body.move_down(3, 2);
+        assert_eq!(body.sidebar_section, SidebarSection::Entities);
+        assert_eq!(body.entities_cursor, 0);
+    }
+
+    #[test]
+    fn down_at_bottom_with_no_other_section_stays_put() {
+        let mut body = Body::default();
+        body.entities_cursor = 2;
+        body.move_down(3, 0);
+        assert_eq!(body.sidebar_section, SidebarSection::Entities);
+        assert_eq!(body.entities_cursor, 2);
     }
 
     #[test]

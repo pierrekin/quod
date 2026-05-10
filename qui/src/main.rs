@@ -213,7 +213,10 @@ impl App {
                     Action::CycleTabPrev => self.body.cycle_tab(false),
                     Action::CycleTabNext => self.body.cycle_tab(true),
                     Action::CloseTab => self.body.close_active_tab(),
-                    Action::TabKey { forward } => self.body.handle_tab(forward),
+                    Action::TabKey { forward } => {
+                        self.body
+                            .handle_tab(forward, self.entities.len(), self.views.len());
+                    }
                     Action::Launch => {
                         self.body.launch_under_cursor(&self.entities, &self.views);
                     }
@@ -232,7 +235,7 @@ impl App {
         if let Some(view) = self.body_active_view_mut() {
             view.move_up();
         } else {
-            self.body.move_up();
+            self.body.move_up(self.entities.len(), self.views.len());
         }
     }
 
