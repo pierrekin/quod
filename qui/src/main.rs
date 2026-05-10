@@ -923,7 +923,7 @@ fn classify_key(key: crossterm::event::KeyEvent) -> Option<Action> {
         KeyCode::Char('[') if ctrl => Some(Action::CycleTabPrev),
         KeyCode::Char(']') if ctrl => Some(Action::CycleTabNext),
         KeyCode::Char('?') => Some(Action::OpenHelp),
-        KeyCode::Tab => Some(Action::TabKey),
+        KeyCode::Tab | KeyCode::BackTab => Some(Action::TabKey),
         KeyCode::Enter => Some(Action::Launch),
         KeyCode::Up | KeyCode::Char('k') if !ctrl => Some(Action::BodyUp),
         KeyCode::Down | KeyCode::Char('j') if !ctrl => Some(Action::BodyDown),
