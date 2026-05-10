@@ -143,6 +143,12 @@ impl Picker {
 
     pub fn with_active(mut self, idx: Option<usize>) -> Self {
         self.active_item = idx;
+        if let Some(i) = idx {
+            let filtered = self.filtered();
+            if let Some(pos) = filtered.iter().position(|&fi| fi == i) {
+                self.cursor = pos;
+            }
+        }
         self
     }
 
