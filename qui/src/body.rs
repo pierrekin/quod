@@ -339,7 +339,7 @@ fn render_sidebar(
                 && body.sidebar_section == SidebarSection::Entities
                 && i == body.entities_cursor;
             let row_style = if cursor_here { highlight } else if sb_focused { Style::default() } else { dim_highlight };
-            lines.push(entity_row(&cat.label, cat.count, inner.width, row_style, cursor_here));
+            lines.push(entity_row(&cat.label, cat.count, inner.width, row_style));
         }
     }
 
@@ -360,7 +360,7 @@ fn render_sidebar(
                 && body.sidebar_section == SidebarSection::Views
                 && i == body.views_cursor;
             let row_style = if cursor_here { highlight } else if sb_focused { Style::default() } else { dim_highlight };
-            lines.push(view_row(v.label(), inner.width, row_style, cursor_here));
+            lines.push(view_row(v.label(), inner.width, row_style));
         }
     }
 
@@ -381,9 +381,8 @@ fn empty_row(text: &'static str, dim: Style) -> Line<'static> {
     Line::from(vec![Span::raw("  "), Span::styled(text, dim)])
 }
 
-fn entity_row(label: &str, count: usize, width: u16, style: Style, cursor_here: bool) -> Line<'static> {
-    let glyph = if cursor_here { "› " } else { "> " };
-    let lhs = format!("{glyph}{label}");
+fn entity_row(label: &str, count: usize, width: u16, style: Style) -> Line<'static> {
+    let lhs = format!("> {label}");
     let count_s = format!("{count}");
     let pad = (width as usize).saturating_sub(lhs.chars().count() + count_s.chars().count() + 1);
     Line::from(vec![
@@ -394,9 +393,8 @@ fn entity_row(label: &str, count: usize, width: u16, style: Style, cursor_here: 
     ])
 }
 
-fn view_row(label: &str, width: u16, style: Style, cursor_here: bool) -> Line<'static> {
-    let glyph = if cursor_here { "› " } else { "> " };
-    let lhs = format!("{glyph}{label}");
+fn view_row(label: &str, width: u16, style: Style) -> Line<'static> {
+    let lhs = format!("> {label}");
     let pad = (width as usize).saturating_sub(lhs.chars().count() + 1);
     Line::from(vec![
         Span::styled(lhs, style),
