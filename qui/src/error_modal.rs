@@ -99,7 +99,7 @@ impl ErrorModal {
 
         let hints: &[(&str, &str)] = match self.severity {
             Severity::Recoverable => &[("ctrl-c", "close")],
-            Severity::Fatal => &[("ctrl-q", "quit"), ("ctrl-c", "close")],
+            Severity::Fatal => &[("ctrl-c", "close"), ("ctrl-q", "quit")],
         };
         footer::render(frame, chunks[1], hints);
     }

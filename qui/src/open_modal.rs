@@ -390,10 +390,9 @@ impl OpenModal {
             &mut r_state,
         );
 
-        // Always-on footer: `ctrl-c close` is the canonical way out;
-        // `↵ open` is prepended when enter would actually commit.
+        // Cancel on the left, action on the right.
         let hints: Vec<(&str, &str)> = if self.enter_would_open() {
-            vec![("↵", "open"), ("ctrl-c", "close")]
+            vec![("ctrl-c", "close"), ("↵", "open")]
         } else {
             vec![("ctrl-c", "close")]
         };

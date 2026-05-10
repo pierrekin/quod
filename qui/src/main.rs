@@ -638,16 +638,14 @@ impl App {
     }
 
     fn program_picker_footer(&self) -> Vec<(&'static str, &'static str)> {
-        let mut hints = vec![("ctrl-o", "open")];
         if self.workspace.anchors().is_empty() {
             // ctrl-c / esc would dead-end (the picker reopens), so
-            // ctrl-q is the genuine way out.
-            hints.push(("ctrl-q", "quit"));
+            // ctrl-q is the genuine way out — and goes to the right
+            // since it's an action, not a cancel.
+            vec![("ctrl-o", "open"), ("ctrl-q", "quit")]
         } else {
-            hints.push(("ctrl-x", "remove"));
-            hints.push(("ctrl-c", "close"));
+            vec![("ctrl-c", "close"), ("ctrl-x", "remove"), ("ctrl-o", "open")]
         }
-        hints
     }
 
     fn open_open_project_modal(&mut self, initial: Option<PathBuf>) {
