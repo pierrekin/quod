@@ -255,7 +255,7 @@ impl App {
         match kind {
             body::TabKind::View(View::CLift) => self.c_lift.as_mut(),
             body::TabKind::View(View::BinaryLift) => self.bin_lift.as_mut(),
-            body::TabKind::CategoryList { .. } => None,
+            body::TabKind::CategoryList { .. } | body::TabKind::Welcome => None,
         }
     }
 
@@ -850,7 +850,7 @@ impl App {
                 match &tab.kind {
                     body::TabKind::View(View::CLift) => self.ensure_c_lift(),
                     body::TabKind::View(View::BinaryLift) => self.ensure_bin_lift(),
-                    body::TabKind::CategoryList { .. } => {}
+                    body::TabKind::CategoryList { .. } | body::TabKind::Welcome => {}
                 }
             }
         }

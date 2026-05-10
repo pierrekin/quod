@@ -72,6 +72,9 @@ pub struct Tab {
 
 #[derive(Clone, Debug)]
 pub enum TabKind {
+    /// Seeded automatically when an active program is set. Auto-closes
+    /// the moment the user launches a real tab from the nav.
+    Welcome,
     /// `enter`-on-a-category-in-the-sidebar landed here. The body shows
     /// that category's items (the heading+summary list per 04-).
     CategoryList { category_idx: usize },
@@ -115,11 +118,17 @@ impl Default for Body {
 }
 
 impl Body {
-    /// Reset to clean-slate (no tabs, sidebar focus). Called whenever
-    /// the active program changes — per 04-, all tabs close.
+    /// Reset to clean-slate (sidebar focus, single Welcome tab). Called
+    /// whenever the active program changes — per 04-, all tabs close;
+    /// then a fresh Welcome tab is seeded so the body never renders the
+    /// "no tabs" empty state right after activation.
     pub fn reset_for_new_program(&mut self) {
         self.tabs.clear();
-        self.active_tab = None;
+        self.tabs.push(Tab {
+            label: "welcome".into(),
+            kind: TabKind::Welcome,
+        });
+        self.active_tab = Some(0);
         self.focus = BodyFocus::Sidebar;
         self.sidebar_section = SidebarSection::Entities;
         self.entities_cursor = 0;
@@ -212,7 +221,10 @@ impl Body {
     /// Open a tab, focusing existing if one matches (per 04-:
     /// "focus existing if open, else open new"). Switches focus to
     /// the body so the user can interact with the freshly-launched tab.
+    /// Drops any seeded Welcome tab — once the user opens a real tab,
+    /// the welcome message is no longer useful.
     pub fn open_tab(&mut self, tab: Tab) {
+        self.tabs.retain(|t| !matches!(t.kind, TabKind::Welcome));
         if let Some(i) = self.tabs.iter().position(|t| same_target(&t.kind, &tab.kind)) {
             self.active_tab = Some(i);
         } else {
@@ -409,15 +421,7 @@ fn render_tab_area(
     data: &mut BodyFrame<'_>,
 ) {
     if body.tabs.is_empty() {
-        let dim = Style::default().fg(Color::DarkGray);
-        frame.render_widget(
-            Paragraph::new(Line::from(vec![
-                Span::raw(" "),
-                Span::styled("(no tabs — pick something from the nav)", dim),
-            ])),
-            area,
-        );
-        return;
+        return; // body stays blank — the nav drives every other affordance
     }
 
     let chunks = Layout::default()
@@ -457,10 +461,11 @@ fn render_projection_strip(body: &Body, frame: &mut Frame<'_>, area: Rect) {
 
     // Per 04-: view tabs have no projection sub-strip; entity-launched
     // tabs have a `[details]` sub-strip (only one projection for now).
+    // Welcome is informational and shows no projections.
     let Some(idx) = body.active_tab else { return };
     let Some(tab) = body.tabs.get(idx) else { return };
     match &tab.kind {
-        TabKind::View(_) => {} // strip stays empty
+        TabKind::View(_) | TabKind::Welcome => {} // strip stays empty
         TabKind::CategoryList { .. } => {
             let spans = vec![
                 Span::raw(" "),
@@ -480,6 +485,7 @@ fn render_active_tab_body(
     let Some(idx) = body.active_tab else { return };
     let Some(tab) = body.tabs.get(idx) else { return };
     match &tab.kind {
+        TabKind::Welcome => render_welcome(frame, area),
         TabKind::CategoryList { category_idx } => {
             render_category_list(*category_idx, frame, area, data);
         }
@@ -490,6 +496,23 @@ fn render_active_tab_body(
             render_view_lift(frame, area, data.bin_lift.as_deref_mut(), BINLIFT_BANNER);
         }
     }
+}
+
+fn render_welcome(frame: &mut Frame<'_>, area: Rect) {
+    let dim = Style::default().fg(Color::DarkGray);
+    let lines = vec![
+        Line::from(""),
+        Line::from(vec![Span::raw(" "), Span::raw("Welcome to qui.")]),
+        Line::from(""),
+        Line::from(vec![
+            Span::raw(" "),
+            Span::styled(
+                "To get started, open a new tab using the navigator.",
+                dim,
+            ),
+        ]),
+    ];
+    frame.render_widget(Paragraph::new(lines), area);
 }
 
 const CLIFT_BANNER: &str =
@@ -655,14 +678,26 @@ mod tests {
     }
 
     #[test]
-    fn reset_clears_state() {
+    fn reset_seeds_a_welcome_tab() {
         let mut body = Body::default();
         body.open_tab(Tab { label: "x".into(), kind: TabKind::View(View::CLift) });
         body.entities_cursor = 5;
         body.reset_for_new_program();
-        assert!(body.tabs.is_empty());
-        assert_eq!(body.active_tab, None);
+        assert_eq!(body.tabs.len(), 1);
+        assert!(matches!(body.tabs[0].kind, TabKind::Welcome));
+        assert_eq!(body.active_tab, Some(0));
         assert_eq!(body.entities_cursor, 0);
         assert_eq!(body.focus, BodyFocus::Sidebar);
+    }
+
+    #[test]
+    fn opening_a_real_tab_drops_welcome() {
+        let mut body = Body::default();
+        body.reset_for_new_program();
+        assert!(matches!(body.tabs[0].kind, TabKind::Welcome));
+        body.open_tab(Tab { label: "fns".into(), kind: TabKind::CategoryList { category_idx: 0 } });
+        assert_eq!(body.tabs.len(), 1);
+        assert!(matches!(body.tabs[0].kind, TabKind::CategoryList { category_idx: 0 }));
+        assert_eq!(body.active_tab, Some(0));
     }
 }
