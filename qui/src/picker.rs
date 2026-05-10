@@ -110,7 +110,8 @@ pub struct Picker {
     /// Selectable when one exists.
     pub cursor: usize,
     /// Each entry is `(hotkey, label)`. Hotkeys are rendered in cyan,
-    /// labels dim. Empty list = no footer.
+    /// labels dim. Empty list = blank footer area (the row is still
+    /// reserved so the layout doesn't reflow).
     pub footer: Vec<(String, String)>,
     pub error: Option<String>,
     /// Index into `items` of the currently-active row (the program the
@@ -133,7 +134,7 @@ impl Picker {
             items: Vec::new(),
             input: String::new(),
             cursor: 0,
-            footer: vec![("↵".into(), "select".into()), ("esc".into(), "cancel".into())],
+            footer: Vec::new(),
             error: None,
             active_item: None,
         }
@@ -324,6 +325,7 @@ impl Picker {
             constraints.push(Constraint::Length(1));
         }
         constraints.push(Constraint::Min(1)); // list
+        constraints.push(Constraint::Length(1)); // footer separator
         constraints.push(Constraint::Length(1)); // footer
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -471,6 +473,12 @@ impl Picker {
         );
         frame.render_stateful_widget(list, list_area, &mut state);
 
+        idx += 1;
+        // Footer separator (full-width `─`) above the hint row.
+        frame.render_widget(
+            Paragraph::new(Span::styled("─".repeat(inner.width as usize), dim)),
+            chunks[idx],
+        );
         idx += 1;
         let key_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
         let mut footer_spans: Vec<Span> = Vec::new();

@@ -626,18 +626,13 @@ impl App {
     }
 
     fn program_picker_footer(&self) -> Vec<(String, String)> {
+        let mut hints = vec![("ctrl-o".into(), "open".into())];
+        // When the workspace is empty, esc would dead-end (the picker
+        // reopens immediately) — surface ctrl-q so the user has a way out.
         if self.workspace.anchors().is_empty() {
-            vec![
-                ("ctrl-o".into(), "add anchor".into()),
-                ("ctrl-q".into(), "quit".into()),
-            ]
-        } else {
-            vec![
-                ("↵".into(), "select".into()),
-                ("ctrl-o".into(), "add anchor".into()),
-                ("esc".into(), "cancel".into()),
-            ]
+            hints.push(("ctrl-q".into(), "quit".into()));
         }
+        hints
     }
 
     fn open_open_project_modal(&mut self, initial: Option<PathBuf>) {

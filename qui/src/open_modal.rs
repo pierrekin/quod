@@ -250,9 +250,10 @@ impl OpenModal {
         // Vertical layout:
         //   path (1) · sep (1) · [error (1)] · files (min 4)
         //   · sep (1) · "Recent" header (1) · recents (≤ N)
-        //   · [sep (1) · footer (1)]
+        //   · sep (1) · footer (1)
+        // Footer + sep are always reserved so the layout doesn't
+        // reflow when the conditional `↵ open` hint appears.
         let recents_h = (self.recents.len() as u16).clamp(1, 5);
-        let show_footer = self.enter_would_open();
         let mut constraints: Vec<Constraint> = vec![
             Constraint::Length(1),
             Constraint::Length(1),
@@ -264,10 +265,8 @@ impl OpenModal {
         constraints.push(Constraint::Length(1));
         constraints.push(Constraint::Length(1));
         constraints.push(Constraint::Length(recents_h));
-        if show_footer {
-            constraints.push(Constraint::Length(1));
-            constraints.push(Constraint::Length(1));
-        }
+        constraints.push(Constraint::Length(1));
+        constraints.push(Constraint::Length(1));
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(constraints)
@@ -369,17 +368,21 @@ impl OpenModal {
             &mut r_state,
         );
 
-        // Footer — only shown when `enter` would actually open. Universal
-        // nav (arrows / tab / enter / esc) is left to the user's
-        // intuition; nothing else is annotated here.
-        if show_footer {
-            frame.render_widget(
-                Paragraph::new(Span::styled("─".repeat(inner.width as usize), dim)),
-                chunks[idx],
-            );
-            idx += 1;
-            render_footer(frame, chunks[idx], &[("↵", "open")]);
-        }
+        // Sep + footer always render so the layout stays stable. The
+        // hint inside the footer is conditional — `↵ open` only when
+        // enter would actually open. Universal nav (arrows / tab /
+        // enter / esc) is left to the user's intuition.
+        frame.render_widget(
+            Paragraph::new(Span::styled("─".repeat(inner.width as usize), dim)),
+            chunks[idx],
+        );
+        idx += 1;
+        let hints: &[(&str, &str)] = if self.enter_would_open() {
+            &[("↵", "open")]
+        } else {
+            &[]
+        };
+        render_footer(frame, chunks[idx], hints);
     }
 }
 
