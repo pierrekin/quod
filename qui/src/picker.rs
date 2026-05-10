@@ -467,7 +467,6 @@ impl Picker {
         }
         let list = List::new(items).highlight_style(
             Style::default()
-                .fg(Color::Black)
                 .bg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         );
