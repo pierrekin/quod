@@ -135,8 +135,7 @@ impl Body {
         self.views_cursor = 0;
     }
 
-    /// `tab` — local-context cycle within the focused thing.
-    pub fn handle_tab(&mut self) {
+    pub fn handle_tab(&mut self, _forward: bool) {
         match self.focus {
             BodyFocus::Sidebar => {
                 self.sidebar_section = match self.sidebar_section {
@@ -144,11 +143,7 @@ impl Body {
                     SidebarSection::Views => SidebarSection::Entities,
                 };
             }
-            BodyFocus::Tab => {
-                // Per 04-: tab inside the body is per-tab contextual.
-                // No tabs implement context-sensitive tab yet, so this
-                // is a no-op.
-            }
+            BodyFocus::Tab => {}
         }
     }
 
@@ -658,9 +653,9 @@ mod tests {
     fn tab_within_sidebar_swaps_section() {
         let mut body = Body::default();
         assert_eq!(body.sidebar_section, SidebarSection::Entities);
-        body.handle_tab();
+        body.handle_tab(true);
         assert_eq!(body.sidebar_section, SidebarSection::Views);
-        body.handle_tab();
+        body.handle_tab(false);
         assert_eq!(body.sidebar_section, SidebarSection::Entities);
     }
 

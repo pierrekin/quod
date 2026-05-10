@@ -213,7 +213,7 @@ impl App {
                     Action::CycleTabPrev => self.body.cycle_tab(false),
                     Action::CycleTabNext => self.body.cycle_tab(true),
                     Action::CloseTab => self.body.close_active_tab(),
-                    Action::TabKey => self.body.handle_tab(),
+                    Action::TabKey { forward } => self.body.handle_tab(forward),
                     Action::Launch => {
                         self.body.launch_under_cursor(&self.entities, &self.views);
                     }
@@ -891,8 +891,7 @@ enum Action {
     CycleTabNext,
     CycleProjPrev,
     CycleProjNext,
-    /// `tab` key — local-context (e.g., toggle sidebar section).
-    TabKey,
+    TabKey { forward: bool },
     /// `enter` — launch the highlighted sidebar entry as a tab.
     Launch,
     BodyUp,
@@ -923,7 +922,8 @@ fn classify_key(key: crossterm::event::KeyEvent) -> Option<Action> {
         KeyCode::Char('[') if ctrl => Some(Action::CycleTabPrev),
         KeyCode::Char(']') if ctrl => Some(Action::CycleTabNext),
         KeyCode::Char('?') => Some(Action::OpenHelp),
-        KeyCode::Tab | KeyCode::BackTab => Some(Action::TabKey),
+        KeyCode::Tab => Some(Action::TabKey { forward: true }),
+        KeyCode::BackTab => Some(Action::TabKey { forward: false }),
         KeyCode::Enter => Some(Action::Launch),
         KeyCode::Up | KeyCode::Char('k') if !ctrl => Some(Action::BodyUp),
         KeyCode::Down | KeyCode::Char('j') if !ctrl => Some(Action::BodyDown),
