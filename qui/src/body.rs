@@ -159,14 +159,14 @@ impl Body {
             SidebarSection::Entities => {
                 if self.entities_cursor > 0 {
                     self.entities_cursor -= 1;
-                } else if let Some(prev) = self.next_nonempty_section(false, entities_len, views_len) {
+                } else if let Some(prev) = self.adjacent_nonempty_section(false, entities_len, views_len) {
                     self.enter_section(prev, false, entities_len, views_len);
                 }
             }
             SidebarSection::Views => {
                 if self.views_cursor > 0 {
                     self.views_cursor -= 1;
-                } else if let Some(prev) = self.next_nonempty_section(false, entities_len, views_len) {
+                } else if let Some(prev) = self.adjacent_nonempty_section(false, entities_len, views_len) {
                     self.enter_section(prev, false, entities_len, views_len);
                 }
             }
@@ -181,14 +181,14 @@ impl Body {
             SidebarSection::Entities => {
                 if self.entities_cursor + 1 < entities_len {
                     self.entities_cursor += 1;
-                } else if let Some(next) = self.next_nonempty_section(true, entities_len, views_len) {
+                } else if let Some(next) = self.adjacent_nonempty_section(true, entities_len, views_len) {
                     self.enter_section(next, true, entities_len, views_len);
                 }
             }
             SidebarSection::Views => {
                 if self.views_cursor + 1 < views_len {
                     self.views_cursor += 1;
-                } else if let Some(next) = self.next_nonempty_section(true, entities_len, views_len) {
+                } else if let Some(next) = self.adjacent_nonempty_section(true, entities_len, views_len) {
                     self.enter_section(next, true, entities_len, views_len);
                 }
             }
@@ -216,6 +216,34 @@ impl Body {
             };
             if len_of(order[idx]) > 0 {
                 return Some(order[idx]);
+            }
+        }
+        None
+    }
+
+    fn adjacent_nonempty_section(
+        &self,
+        forward: bool,
+        entities_len: usize,
+        views_len: usize,
+    ) -> Option<SidebarSection> {
+        let order = [SidebarSection::Entities, SidebarSection::Views];
+        let cur = order.iter().position(|s| *s == self.sidebar_section).unwrap();
+        let len_of = |s| match s {
+            SidebarSection::Entities => entities_len,
+            SidebarSection::Views => views_len,
+        };
+        if forward {
+            for i in (cur + 1)..order.len() {
+                if len_of(order[i]) > 0 {
+                    return Some(order[i]);
+                }
+            }
+        } else {
+            for i in (0..cur).rev() {
+                if len_of(order[i]) > 0 {
+                    return Some(order[i]);
+                }
             }
         }
         None
@@ -742,11 +770,21 @@ mod tests {
     }
 
     #[test]
-    fn down_at_bottom_of_views_wraps_to_entities() {
+    fn down_at_overall_end_is_a_noop() {
         let mut body = Body::default();
         body.sidebar_section = SidebarSection::Views;
         body.views_cursor = 1;
         body.move_down(3, 2);
+        assert_eq!(body.sidebar_section, SidebarSection::Views);
+        assert_eq!(body.views_cursor, 1);
+    }
+
+    #[test]
+    fn up_at_overall_start_is_a_noop() {
+        let mut body = Body::default();
+        body.sidebar_section = SidebarSection::Entities;
+        body.entities_cursor = 0;
+        body.move_up(3, 2);
         assert_eq!(body.sidebar_section, SidebarSection::Entities);
         assert_eq!(body.entities_cursor, 0);
     }
