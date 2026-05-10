@@ -312,11 +312,7 @@ impl Picker {
                 self.snap_cursor_to_selectable(0, true);
                 Outcome::Continue
             }
-            // `x` removes the owning entity when the filter is empty (so
-            // typing `x` mid-search still narrows results).
-            KeyCode::Char('x')
-                if !key.modifiers.contains(KeyModifiers::CONTROL) && self.input.is_empty() =>
-            {
+            KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 let f = self.filtered();
                 if let Some(&idx) = f.get(self.cursor) {
                     if matches!(

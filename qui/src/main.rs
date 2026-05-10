@@ -639,12 +639,12 @@ impl App {
 
     fn program_picker_footer(&self) -> Vec<(&'static str, &'static str)> {
         let mut hints = vec![("ctrl-o", "open")];
-        // When the workspace is empty, ctrl-c / esc would dead-end (the
-        // picker reopens immediately) — surface ctrl-q as the way out.
-        // Otherwise ctrl-c closes back to the active program.
         if self.workspace.anchors().is_empty() {
+            // ctrl-c / esc would dead-end (the picker reopens), so
+            // ctrl-q is the genuine way out.
             hints.push(("ctrl-q", "quit"));
         } else {
+            hints.push(("ctrl-x", "remove"));
             hints.push(("ctrl-c", "close"));
         }
         hints

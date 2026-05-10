@@ -85,7 +85,6 @@ impl HelpModal {
 const CHORDS: &[(&str, &str)] = &[
     ("ctrl-o", "open program"),
     ("ctrl-p", "choose program"),
-    ("x", "remove from picker (when filter is empty)"),
     ("ctrl-c or esc", "cancel"),
     ("ctrl-q", "quit"),
     ("ctrl-x", "close tab"),
