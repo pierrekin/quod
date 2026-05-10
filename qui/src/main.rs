@@ -788,7 +788,11 @@ impl App {
                 match result {
                     Ok(()) => {
                         self.overlay = None;
+                        let was_active = self.active.is_some();
                         self.maybe_auto_select();
+                        if was_active {
+                            self.open_program_picker();
+                        }
                     }
                     Err(e) => {
                         if let Some(Overlay::OpenProject(m)) = self.overlay.as_mut() {
